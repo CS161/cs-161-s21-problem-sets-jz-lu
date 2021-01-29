@@ -7,21 +7,21 @@ Answers to written questions
 ----------------------------
 ### Part A
 1. `kalloc` allocates memory up to 1 `PAGESIZE = 4096 bytes`.
-2. [CHECK IN OH] Experimentally determined to be `ptr = 0xffff800000001000`; this is 1 page up from the start of high canonical memory, where the physical memory map is allocated (which is consistent with the boot process of Chickadee where the physical memory map is the first allocation by direct linear translation to high canonical memory). In `kernel.hh` the function `init_physical_ranges()` reserves the zero page and then sets the permissions of the lower canonical and upper canonical regions, so by the direct linear mapping of the physical memory table the first allocation begins 1 page up since that is the first allocatable page. 
+2. Experimentally determined to be `ptr = 0xffff800000001000`; this is 1 page up from the start of high canonical memory, where the physical memory map is allocated (which is consistent with the boot process of Chickadee where the physical memory map is the first allocation by direct linear translation to high canonical memory). In `kernel.hh` the function `init_physical_ranges()` reserves the zero page and then sets the permissions of the lower canonical and upper canonical regions, so by the direct linear mapping of the physical memory table the first allocation begins 1 page up since that is the first allocatable page. 
 3. The max is `0xffff8000001ff000`, after which `kalloc()` returns `nullptr`. We should expect this since this is an offset 1 page size smaller than `MEMSIZE_PHYSICAL = 0x200000`.
 4. The address types are high canonical, as they are of the form `0xffff8000xxxxxxxx`. The line `ptr = pa2kptr<void*>(next_free_pa)` in `kalloc()` calls a function that returns `pa2ka(pa)`, which by the documentation returns the high canonical address of the PA.
-5. [CHECK IN OH] We could change `MEMSIZE_PHYSICAL = 0x200000` to say `300000`, i.e. `#define MEMSIZE_PHYSICAL 0x300000`. Then the max `kalloc()` goes becomes ``.
-6. [CHECK IN OH--DO WE KEEP THE LOOP IN THE CODE?] We switch to the following:
+5. We could change `MEMSIZE_PHYSICAL = 0x200000` to say `300000`, i.e. `#define MEMSIZE_PHYSICAL 0x300000`, or equivalently in `k-init.cc` change the same constant in `physical_ranges.set(0, MEMSIZE_PHYSICAL, mem_available)`. Then the max `kalloc()` goes to just short of `0x300000`, due to some reserved pages and 300000 being the `MEMSIZE_VIRTUAL`.
+6. We switch to the following:
 ```
 while (next_free_pa < physical_ranges.limit() && 
         physical_ranges.type(next_free_pa) != mem_available) {
         next_free_pa += PAGESIZE;    
-    }
+}
 
-    if (next_free_pa < physical_ranges.limit()) {
-        ptr = pa2kptr<void*>(next_free_pa);
-        next_free_pa += PAGESIZE;
-    }
+if (next_free_pa < physical_ranges.limit()) {
+    ptr = pa2kptr<void*>(next_free_pa);
+    next_free_pa += PAGESIZE;
+}
 ```
 7. `find()` is a linear time search that walks through the pages starting from address 0 until one has been found. On the other hand, `type()` calls `find()`, and because our loop must call `type()` at every step (otherwise, there is no way to know whether the current page is generically available), it is a quadratic time search. Moreover, in the original loop using `find()`, a failure to find a range that is not of the right type will cause the program to jump to the next range instead of the next page, which makes the search much more efficient since there are at most `maxsize = 16` range blocks, skipping on average many pages which we know are of the same type.
 
@@ -29,7 +29,17 @@ while (next_free_pa < physical_ranges.limit() &&
 
 
 ### Part B
-1. 
+1. Line `86` in `memusage::refresh()`, which is `mark(pa, f_kernel)`.
+2. Line `96` which is `mark(ka2pa(p), f_kernel | f_process(pid))` where `p` is the address (once converted) of the `proc`.
+3. A user/unprivileged process should never interact with the physical pages since its addresses are all virtual addresses that the kernel gives it; therefore it needs to know whether a virtual page is accessible or not to it. The kernel on the other hand is at the interface of physical pages and needs to know whether a physical page is restricted just for it, or if it can be mapped into virtual memory by a pagetable for unprivileged use. If `ptiter` marked pages as user-accessible, it could pose a security concern since a process could, for lower virtual addresses, obtain access to an actual physical page that it should not.
+4. It should be the type `mem_available = 1` since it is a loop over process memory allocation, and these processes (which are not of the kernel) should only have access to the unprivileged memory blocks.
+5. Switching to `it += PAGESIZE` does not have a very noticeable difference in the rate of memory allocations on QEMU UI, although it is very slightly slower. To explain this, we logged the jumps in `.next()`, which by the documentation moves page by page skipping large non-present regions. A typical pattern of physical addresses followed something like
+```
+49152, 53248, 77824, 81920, 86016, 90112, 94208, 98304, 102400, 106496, 110592, 114688, 118784, 122880, 126976, 131072
+```
+We observe that most of the jumps are in fact just one page (a diff of 4096 in the decimal address). Thus it is not surprising that changing it to a fixed 1-page jump does not make a significant difference in the allocation speed. The exception to this nearly 1-page jumps is the jump from `643072, 647168, 651264, 1466368, 1470464, 1474560, 1478656`, but since this is the only major jump it does not cause a considerable difference.
+6. For `NCPU = X` the number of missed pages is `X+1`, so there is 1 page missed for every CPU Qemu uses, plus 1. `X` pages are allocated in `cpustate::init_idle_task()` in `k-cpu.cc`. The purpose is to have an "idle task" process (and a process needs an allocation) that does nothing, to be run when the CPU is just waiting for an interrupt. 1 page is allocated by `memviewer::refresh`itself at the beginning, when it calls `kalloc()` at `v_ = reinterpret_cast<unsigned*>(kalloc(PAGESIZE))` to store the flags/states of each of the physical pages. Both of these are allocations made by the kernel but not for kernel text, which are currently not tracked by the marker (which tracks kernel text pages and user process pages).
+7. [CHECK THE FAILED ONE IN OH] Done. We marked, as kernel memory, each of the `proc* idle_task_` addresses (translated to pa) stored in the `cpustate cpus[MAXCPU]` array in `k-cpu.cc`, and marked the address of the `v_` flag array in `refresh()` immediately after its allocation.
 
 
 Grading notes

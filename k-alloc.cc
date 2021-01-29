@@ -27,7 +27,7 @@ void init_kalloc() {
 //    The handout code does not free memory and allocates memory in units
 //    of pages.
 void* kalloc(size_t sz) {
-    log_printf("kalloc() called!\n");
+    log_backtrace();
     if (sz == 0 || sz > PAGESIZE) {
         return nullptr;
     }
@@ -35,15 +35,18 @@ void* kalloc(size_t sz) {
     auto irqs = page_lock.lock();
     void* ptr = nullptr;
 
-    // Improved allocation loop
-    while (next_free_pa < physical_ranges.limit() && 
-        physical_ranges.type(next_free_pa) != mem_available) {
-        next_free_pa += PAGESIZE;    
-    }
-
-    if (next_free_pa < physical_ranges.limit()) {
-        ptr = pa2kptr<void*>(next_free_pa);
-        next_free_pa += PAGESIZE;
+    auto range = physical_ranges.find(next_free_pa);
+    while (range != physical_ranges.end()) {
+        if (range->type() == mem_available) {
+            // use this page
+            ptr = pa2kptr<void*>(next_free_pa);
+            next_free_pa += PAGESIZE;
+            break;
+        } else {
+            // move to next range
+            next_free_pa = range->last();
+            ++range;
+        }
     }
 
     page_lock.unlock(irqs);
@@ -55,9 +58,8 @@ void* kalloc(size_t sz) {
         memset(ptr, 0xCC, PAGESIZE);
     }
     else {
-        log_printf("FAILED to find available page.\n");
+        log_printf("[kalloc] FAILED to find available page.\n");
     }
-    log_printf("NEW kalloc() ptr: %p\n", ptr);
     return ptr;
 }
 

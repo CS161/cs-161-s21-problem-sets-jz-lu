@@ -68,11 +68,16 @@ class memusage {
 
 void memusage::refresh() {
     if (!v_) {
-        v_ = reinterpret_cast<unsigned*>(kalloc(PAGESIZE));
+        // Kernel allocates a page to hold the flags of the pages.
+        v_ = reinterpret_cast<unsigned*>(kalloc(PAGESIZE)); // TODO MARK THIS!
         assert(v_ != nullptr);
     }
-
     memset(v_, 0, (maxpa / PAGESIZE) * sizeof(*v_));
+    mark(ka2pa(v_), f_kernel);
+
+    for (auto i = 0; i < ncpu; ++i) {
+        mark(ka2pa(cpus[i].idle_task_), f_kernel);
+    }
 
     // mark kernel ranges of physical memory
     // We handle reserved ranges of physical memory separately.
@@ -107,6 +112,7 @@ void memusage::refresh() {
                         mark(it.pa(), f_user | f_process(pid));
                         it.next();
                     } else {
+                        // it += PAGESIZE;
                         it.next_range();
                     }
                 }
