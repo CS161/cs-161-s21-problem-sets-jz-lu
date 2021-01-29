@@ -207,6 +207,7 @@ void init_constructors() {
 memrangeset<16> physical_ranges(0x100000000UL);
 
 void init_physical_ranges() {
+    log_printf("Initializing physical ranges\n");
     // [0, MEMSIZE_PHYSICAL) starts out available
     physical_ranges.set(0, MEMSIZE_PHYSICAL, mem_available);
     // 0 page is reserved (because nullptr)
@@ -218,10 +219,12 @@ void init_physical_ranges() {
                         mem_console);
     // kernel text and data is owned by the kernel
     extern unsigned char _low_data_start[], _low_data_end[];
+    log_printf("ktext2pa(_low_data_start): %d, ktext2pa(_low_data_end): %d\n", ktext2pa(_low_data_start), ktext2pa(_low_data_end));
     physical_ranges.set(round_down(ktext2pa(_low_data_start), PAGESIZE),
                         round_up(ktext2pa(_low_data_end), PAGESIZE),
                         mem_kernel);
     extern unsigned char _kernel_start[], _kernel_end[];
+    log_printf("ktext2pa(_kernel_start): %d, ktext2pa(_kernel_end)%d\n", ktext2pa(_kernel_start), ktext2pa(_kernel_end));
     physical_ranges.set(round_down(ktext2pa(_kernel_start), PAGESIZE),
                         round_up(ktext2pa(_kernel_end), PAGESIZE),
                         mem_kernel);

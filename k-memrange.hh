@@ -27,7 +27,7 @@ class memrangeset {
     // initialize range mapping [0, `limit`) to type 0
     inline memrangeset(uintptr_t limit);
 
-    // return `limit`
+    // return `limit`, i.e. address of the end
     inline uintptr_t limit() const;
     // return number of ranges
     inline unsigned size() const;

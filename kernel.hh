@@ -211,7 +211,7 @@ extern memrangeset<16> physical_ranges;
 #define IRQ_SPURIOUS            31
 
 #define KTEXT_BASE              0xFFFFFFFF80000000UL
-#define HIGHMEM_BASE            0xFFFF800000000000UL
+#define HIGHMEM_BASE            0xFFFF800000000000UL // High canonical memory start
 
 inline uint64_t pa2ktext(uint64_t pa) {
     assert(pa < -KTEXT_BASE);
