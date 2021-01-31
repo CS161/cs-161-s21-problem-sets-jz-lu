@@ -126,7 +126,6 @@ void cpustate::schedule(proc* yielding_from) {
 //    has nothing better to do.
 
 void idle() {
-    log_backtrace();
     sti();
     while (true) {
         asm volatile("hlt");

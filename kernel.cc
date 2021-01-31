@@ -60,6 +60,9 @@ void boot_process_start(pid_t pid, const char* name) {
     p->init_user(pid, ld.pagetable_);
     p->regs_->reg_rip = ld.entry_rip_;
 
+    log_printf("Hello from boot_start()\n");
+    log_backtrace();
+
     void* stkpg = kalloc(PAGESIZE);
     assert(stkpg);
     vmiter(p, MEMSIZE_VIRTUAL - PAGESIZE).map(stkpg, PTE_PWU);
