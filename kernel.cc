@@ -232,6 +232,18 @@ uintptr_t proc::syscall(regstate* regs) {
         return bufcache::get().sync(drop);
     }
 
+    case SYSCALL_MAP_CONSOLE: {
+        // Get the virtual address to be mapped to, stored in %rdi.
+        uintptr_t addr = regs->reg_rdi;
+
+        // Assert that the addr is in low-canonical memory and that the addr is page aligned.
+        if (addr > VA_LOWMAX || addr & 0xFFF) {
+            return E_INVAL;
+        }
+        vmiter(this, addr).map(CONSOLE_ADDR, PTE_PWU); // Map the given addr to the console addr
+        return 0;
+    }
+
     default:
         // no such system call
         log_printf("%d: no such system call %u\n", id_, regs->reg_rax);
@@ -240,15 +252,121 @@ uintptr_t proc::syscall(regstate* regs) {
     }
 }
 
+// proc::copy_memory(child)
+//     Copy all user memory to a child process.
+int proc::copy_memory(proc* child) {
+    proc* parent = this;
 
-// proc::syscall_fork(regs)
-//    Handle fork system call.
+    //log_printf("itp_va:%lu , itc_va: %lu\n", itp.va(), itc.va());
 
-int proc::syscall_fork(regstate* regs) {
-    (void) regs;
-    return E_NOSYS;
+    assert(ptable_lock.is_locked());
+    
+    if (child) {
+        auto irqs = parent->lock_pagetable_read();
+        auto irqs_child = child->lock_pagetable_read();
+
+        if (parent->pagetable_ && parent->pagetable_ != early_pagetable) {
+            for (vmiter itp(parent); itp.va() < MEMSIZE_VIRTUAL;) {
+                if (itp.pa() == CONSOLE_ADDR) {
+                    vmiter itc(child, itp.va());
+                    int try_map_code = itc.try_map(itp.pa(), itp.perm());
+                    if (try_map_code == -1) {
+                        log_printf("Try_map failed from parent: %i\n", parent->id_);
+                        parent->unlock_pagetable_read(irqs);
+                        child->unlock_pagetable_read(irqs_child);
+                        return -1;
+                    }
+                    itp.next();
+                } else if (itp.user()) {
+                    void* npg = kalloc(PAGESIZE);
+                    if (!npg) {
+                        log_printf("kalloc allocation error from parent: pid = %d\n", parent->id_);
+                        parent->unlock_pagetable_read(irqs);
+                        child->unlock_pagetable_read(irqs_child);
+                        return -1;
+                    }
+                    vmiter itc(child, itp.va());
+                    int try_map_code = itc.try_map(npg, itp.perm());
+                    if (try_map_code == -1) {
+                        log_printf("Try_map failed from parent: pid= %d\n", parent->id_);
+                        parent->unlock_pagetable_read(irqs);
+                        child->unlock_pagetable_read(irqs_child);
+                        return -1;
+                    }
+                    memcpy((void*) npg, (void*) itp.va(), PAGESIZE);
+                    itp.next();
+                } else {
+                    itp.next_range();
+                }
+            }
+        }
+        parent->unlock_pagetable_read(irqs);
+        child->unlock_pagetable_read(irqs_child);
+    }
+    return 0;
 }
 
+
+// proc::syscall_fork(child)
+//    Fork a child process
+int proc::syscall_fork(regstate* regs) {
+    pid_t pid = 0;
+    {
+    spinlock_guard guard(ptable_lock);
+
+    for (pid_t i = 1; i < NPROC; i++) {
+        if (!ptable[i]) {
+            pid = i;
+            break;
+        }
+    }
+
+    // no open pid was found
+    if (!pid) {
+        log_printf("No open processes, caller PID: %i\n", this->id_);
+        return -1;
+    } else {
+        log_printf("Successfully found a free PID = %d to fork from parent PID = %d\n", pid, this->id_);
+    }
+
+    proc* child = knew<proc>(); // allocate new process
+    if (!child) {
+        log_printf("ERROR: no available memory remaining for child process alloc.\n");
+        return -1;
+    }
+    x86_64_pagetable* child_pt = kalloc_pagetable();
+    if (!child_pt) {
+        log_printf("ERROR: no available memory remaining for child process alloc.\n");
+        return -1;
+    }
+
+    child->init_user(pid, child_pt);
+    log_printf("Child initialized with early pagetable and set to runnable\n");
+
+    int flag = this->copy_memory(child);
+    if (flag != 0) {
+        log_printf("Copying Memory During Fork FAILED, caller: %i\n", this->id_);
+        return -1;
+    } else {
+        log_printf("Memory successfully copied from parent to child!\n");
+    }
+
+    // Copy over parent's registers.
+    memcpy(child->regs_, regs, sizeof(regstate)); 
+    log_printf("Copied parent registers to child\n");
+
+    // add to process table (requires lock in case another CPU is already
+    // running processes)
+    assert(!ptable[pid]);
+    ptable[pid] = child;
+    
+    child->regs_->reg_rax = 0; // making sure child returns 0
+
+    cpus[pid % ncpu].enqueue(child); // enqueueing on a cpu
+    }
+
+    return pid;
+}
 
 // proc::syscall_read(regs), proc::syscall_write(regs),
 // proc::syscall_readdiskfile(regs)

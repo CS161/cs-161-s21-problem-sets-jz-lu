@@ -1,5 +1,5 @@
 #include "u-lib.hh"
-#define ALLOC_SLOWDOWN 8
+#define ALLOC_SLOWDOWN 24
 
 extern uint8_t end[];
 
@@ -8,6 +8,10 @@ uint8_t* stack_bottom;
 
 void process_main() {
     sys_kdisplay(KDISPLAY_MEMVIEWER);
+    sys_map_console(console); // Map the console to the addr iin lib.hh
+    for (int i = 0; i < CONSOLE_ROWS * CONSOLE_COLUMNS; ++i) {
+        console[i] = '$' | 0x8A00;
+    }
 
     // Fork three new copies. (But ignore failures.)
     (void) sys_fork();
@@ -39,7 +43,7 @@ void process_main() {
         }
         sys_yield();
         if (rand() < RAND_MAX / 32) {
-            // sys_pause();
+            sys_pause();
         }
     }
 

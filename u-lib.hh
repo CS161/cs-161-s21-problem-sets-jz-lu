@@ -79,6 +79,12 @@ inline pid_t sys_getpid() {
     return make_syscall(SYSCALL_GETPID);
 }
 
+// sys_map_console
+//    Maps the console at a user-specified virtual address.
+inline int sys_map_console(void* addr) {
+    return make_syscall(SYSCALL_MAP_CONSOLE, reinterpret_cast<uintptr_t>(addr));
+}
+
 // sys_yield
 //    Yield control of the CPU to the kernel. The kernel will pick another
 //    process to run, if possible.

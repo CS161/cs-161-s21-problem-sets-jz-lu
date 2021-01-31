@@ -27,10 +27,10 @@ void init_kalloc() {
 //    The handout code does not free memory and allocates memory in units
 //    of pages.
 void* kalloc(size_t sz) {
-    log_backtrace();
     if (sz == 0 || sz > PAGESIZE) {
         return nullptr;
     }
+    static double te = 0;
 
     auto irqs = page_lock.lock();
     void* ptr = nullptr;

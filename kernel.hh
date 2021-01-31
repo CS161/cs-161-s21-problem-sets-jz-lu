@@ -63,6 +63,9 @@ struct __attribute__((aligned(4096))) proc {
 
     inline bool resumable() const;
 
+    // Copies all of the user memory from parent to child.
+    int copy_memory(proc* child);
+    // Makes an exact copy of the process
     int syscall_fork(regstate* regs);
 
     uintptr_t syscall_read(regstate* reg);
