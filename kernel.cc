@@ -214,6 +214,9 @@ uintptr_t proc::syscall(regstate* regs) {
 
     case SYSCALL_FORK:
         return syscall_fork(regs);
+    
+    case SYSCALL_NASTY:
+        return syscall_nasty(10000);
 
     case SYSCALL_READ:
         return syscall_read(regs);
@@ -255,9 +258,9 @@ uintptr_t proc::syscall(regstate* regs) {
     }
 }
 
-// proc::copy_memory(child)
+// proc::copy_memory_(child)
 //     Copy all user memory to a child process.
-int proc::copy_memory(proc* child) {
+int proc::copy_memory_(proc* child) {
     proc* parent = this;
 
     //log_printf("itp_va:%lu , itc_va: %lu\n", itp.va(), itc.va());
@@ -311,7 +314,7 @@ int proc::copy_memory(proc* child) {
 
 
 // proc::syscall_fork(child)
-//    Fork a child process
+//    Fork a child process.
 int proc::syscall_fork(regstate* regs) {
     pid_t pid = 0;
     {
@@ -346,7 +349,7 @@ int proc::syscall_fork(regstate* regs) {
     child->init_user(pid, child_pt);
     log_printf("Child initialized with early pagetable and set to runnable\n");
 
-    int flag = this->copy_memory(child);
+    int flag = this->copy_memory_(child);
     if (flag != 0) {
         log_printf("Copying Memory During Fork FAILED, caller: %i\n", this->id_);
         return -1;
@@ -369,6 +372,19 @@ int proc::syscall_fork(regstate* regs) {
     }
 
     return pid;
+}
+
+
+// proc::syscall_nasty()
+//    Nasty recursive allocation to corrupt the stack.
+__attribute__((optimize("O0"))) int proc::syscall_nasty(int c) {
+    volatile long j  = 100; // random local var
+    (void) j;
+    if (c <= 0) {
+        return 0;
+    } else {
+        return syscall_nasty(c - 1);
+    }
 }
 
 // proc::syscall_read(regs), proc::syscall_write(regs),

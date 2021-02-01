@@ -99,6 +99,10 @@ inline void sys_pause() {
     make_syscall(SYSCALL_PAUSE);
 }
 
+inline void sys_nasty() {
+    make_syscall(SYSCALL_NASTY);
+}
+
 // sys_kdisplay(display_type)
 //    Set the display type (one of the KDISPLAY constants).
 inline int sys_kdisplay(int display_type) {

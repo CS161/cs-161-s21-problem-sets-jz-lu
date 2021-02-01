@@ -8,8 +8,11 @@ spinlock ptable_lock;           // protects `ptable`
 
 // proc::proc()
 //    The constructor initializes the `proc` to empty.
-
 proc::proc() {
+    // Initialize the canary.
+    canary_ptr = reinterpret_cast<long*>(
+            reinterpret_cast<uintptr_t>(this) + PROCSTACK_SIZE - sizeof(long));
+    *canary_ptr = CANARY_EV;
 }
 
 

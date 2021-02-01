@@ -63,10 +63,11 @@ struct __attribute__((aligned(4096))) proc {
 
     inline bool resumable() const;
 
-    // Copies all of the user memory from parent to child.
-    int copy_memory(proc* child);
-    // Makes an exact copy of the process
+    // Make an exact copy of the process.
     int syscall_fork(regstate* regs);
+
+    // A nasty allocation syscall that corrupts the kernel stack via resursive local variable
+    __attribute__((optimize("O0"))) int syscall_nasty(int c);
 
     uintptr_t syscall_read(regstate* reg);
     uintptr_t syscall_write(regstate* reg);
@@ -77,6 +78,12 @@ struct __attribute__((aligned(4096))) proc {
 
  private:
     static int load_segment(const elf_program& ph, proc_loader& ld);
+
+    // Copies all of the user memory from parent to child.
+    int copy_memory_(proc* child);
+
+    // Pointer to the canary, which lives at the top of the proc stack.
+    long *canary_ptr = nullptr;
 };
 
 #define NPROC 16
@@ -204,6 +211,8 @@ enum memtype_t {
 };
 extern memrangeset<16> physical_ranges;
 
+// Kernel data structure constants
+#define CANARY_EV 238475235 // To be compared with canary; detects kernel stack corruption
 
 // Hardware interrupt numbers
 #define INT_IRQ                 32U

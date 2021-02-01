@@ -273,6 +273,7 @@ struct bitset_view {
 // Add new system calls here.
 // Your numbers should be >=128 to avoid conflicts.
 #define SYSCALL_MAP_CONSOLE 128
+#define SYSCALL_NASTY 129 // Nasty recursive alloc to corrupt kernel stack
 
 // System call error return values
 
