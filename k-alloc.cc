@@ -27,7 +27,7 @@ static uint64_t largest_fitting_ord(uint64_t num, int sz=1) {
 //    Initialize stuff needed by kalloc. Called from init_hardware,
 //    after physical_ranges is initialized.
 void init_kalloc() {
-
+    return; // TODO REMOVE
     auto range = physical_ranges.begin();
 
     while (range != physical_ranges.end()) {

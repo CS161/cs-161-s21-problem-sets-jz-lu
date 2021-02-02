@@ -15,6 +15,7 @@ struct proc_loader;
 struct elf_program;
 #define PROC_RUNNABLE 1
 
+#define CANARY_EV 894753471348 // Expected canary value
 
 // kernel.hh
 //
@@ -81,6 +82,8 @@ struct __attribute__((aligned(4096))) proc {
 
     // Copies all of the user memory from parent to child.
     int copy_memory_(proc* child);
+
+    uint64_t canary = CANARY_EV;
 };
 
 #define NPROC 16

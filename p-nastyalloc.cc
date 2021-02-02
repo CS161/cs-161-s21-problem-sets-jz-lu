@@ -1,5 +1,5 @@
 #include "u-lib.hh"
-#define ALLOC_SLOWDOWN 8
+#define ALLOC_SLOWDOWN 24
 
 extern uint8_t end[];
 

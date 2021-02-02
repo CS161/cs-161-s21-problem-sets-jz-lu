@@ -31,8 +31,9 @@ if (next_free_pa < physical_ranges.limit()) {
 1. Line `86` in `memusage::refresh()`, which is `mark(pa, f_kernel)`.
 2. Line `96` which is `mark(ka2pa(p), f_kernel | f_process(pid))` where `p` is the address (once converted) of the `proc`.
 3. A user/unprivileged process should never interact with the physical pages since its addresses are all virtual addresses that the kernel gives it; therefore it needs to know whether a virtual page is accessible or not to it. The kernel on the other hand is at the interface of physical pages and needs to know whether a physical page is restricted just for it, or if it can be mapped into virtual memory by a pagetable for unprivileged use. If `ptiter` marked pages as user-accessible, it could pose a security concern since a process could, for lower virtual addresses, obtain access to an actual physical page that it should not.
-4. It should be the type `mem_available = 1` since it is a loop over process memory allocation, and these processes (which are not of the kernel) should only have access to the unprivileged memory blocks.
-5. Switching to `it += PAGESIZE` does not have a very noticeable difference in the rate of memory allocations on QEMU UI, although it is very slightly slower. To explain this, we logged the jumps in `.next()`, which by the documentation moves page by page skipping large non-present regions. A typical pattern of physical addresses followed something like
+4. It should be the type `mem_available = 1` since it is a loop over process memory (low canonical) allocation, and these processes (which are not of the kernel) should only have access to the unprivileged memory blocks. THe high canonical memory was initialized when the process was initialized, and the only reserved page in low canonical is the zero page, which was filtered out in `if (p) ...`.
+5. Switching to `it += PAGESIZE`, which overloads `+=` in iterator context to increment the VA pointed to by `it` by `PAGESIZE`, does not have a very noticeable difference in the rate of memory allocations on QEMU UI (it might be marginally slower but we couldn't tell). To explain this, we logged the jumps in `.next()`, which by the documentation moves page by page skipping large non-present regions. 
+A typical pattern of physical addresses followed something like
 ```
 49152, 53248, 77824, 81920, 86016, 90112, 94208, 98304, 102400, 106496, 110592, 114688, 118784, 122880, 126976, 131072
 ```
@@ -44,32 +45,47 @@ We observe that most of the jumps are in fact just one page (a diff of 4096 in t
 ### Part C
 The following are the 7 entry points.
 1. Jumps to `kernel_start()` in line 35, `jmp _Z12kernel_startPKc`, of `k-exception.S`. Purpose: initialize hardware and boot processes upon startup. Called upon boot. The assembly allocates a stack size by moving the stack pointer before jump.
-2. Calls `proc::exception(regstate*)` in line 143, `call _ZN4proc9exceptionEP8regstate` of `k-exception.S`. Purpose: exception handler for kernel that identifies the exception and updates the state of the kernel. Called by `k-exception.S` assembly when a processor raises an exception.
+2. Calls `proc::exception(regstate*)` in line 143, `call _ZN4proc9exceptionEP8regstate` of `k-exception.S`. Purpose: exception handler for kernel that identifies the exception and updates the state of the kernel. Called by `k-exception.S` assembly when a processor raises an exception. The stack is the kernel task stack which is jumped to before calling.
 3. Calls `cpustate::init_ap()` in `k-init.cc`, allocating a new CPU stack beforehand via the following.
 ```
 leaq CPUSTACK_SIZE(%rdi), %rsp
 // call `cpus[my_CPU_number].init_ap()`.
 // This two-stage jump switches to high virtual addresses.
 movabsq $_ZN8cpustate7init_apEv, %rbx
-jmp *%rbx // ENTRY PT CANDIDATE
+jmp *%rbx // ENTRY PT
 ```
 This is done once per CPU to initialize the CPU state.
 4. Calls `proc::syscall(regstate*)` in `kernel.cc` in line 228 `call _ZN4proc7syscallEP8regstate`. Purpose: handles system calls by classifying the call and calling the functions necessary from there. Called whenever a user process raises a syscall.
-5. Calls `cpustate::schedule()` in via `jmp _ZN8cpustate8scheduleEP4proc`. Purpose: called to run the next process during things like a yield.
-6. `boot` in `bootentry.S`. Called while switching CPU out of compatibility mode in `boot.cc` during bootup. The jump is static, in the line `ljmp    $SEGSEL_BOOT_CODE, $boot`.
-7. `idle()` in `k-cpu.cc`. Called when there are no processes left to run, or when there are more CPUs asked for than `MAXCPU`, which `k-exception.S` handles by `jge ap_entry_failed` where `ap_entry_failed` is the direct imbedding of the `idle()` function (which is just an assembly inline) of doing `hlt` (halt) forever.
+5. Calls `cpustate::schedule()` in via `jmp _ZN8cpustate8scheduleEP4proc`. Purpose: called to run the next process during things like a yield. A proc stack is allocated at the beginning of the entry prior to the call.
+6. `boot` in `bootentry.S`. Called while switching CPU out of compatibility mode in `boot.cc` during bootup. The jump is static, in the line `ljmp    $SEGSEL_BOOT_CODE, $boot`. The stack is set up at the very beginning in `boot_start`.
+7. `idle()` in `k-cpu.cc`. Called when there are no processes left to run, or when there are more CPUs asked for than `MAXCPU`, which `k-exception.S` handles by `jge ap_entry_failed` where `ap_entry_failed` is the imbedding of the `idle()` function (which is just an assembly inline) of doing `hlt` and then `jmp` forever. The allocation of the stack is done in `init_kernel()` by adding a `PROCSTACK_SIZE` to `%rsp`. That is called from `init_idle_task()`, called in `schedule()` the first time a CPU is initialized.
 
 ### Part D
-Nothing to write here.
+Note that we used dollar signs to decorate our console.
 
 ### Part E
 Nothing to write here.
 
 ### Part F
-Nothing to write here.
+Our nasty alloc recursively allocates a lot of local memory (100 longs or so) upon each call. The canary is asserted after most system calls are made (except for things like `getpid` which we assert beforehand). It is not perfect in catching overflow, but it does detect our nasty alloc.
+
+**Grading note**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.
 
 ### Part G
-Nothing to write here.
+Some high-level notes on the design of our buddy allocator. Our struct of information is as follows:
+```
+struct bapg {
+    bool free = false; // whether the bapg is free or not
+    bool available = false; // if mem_available is set
+    bool returned = false; // if the address of this page has been returned in kalloc()
+    uint64_t ord; // order of the block
+    uint64_t r_ord; // order of the root block of the current block
+    uintptr_t r_addr; // address of the root block of the current block
+};
+
+bapg pgmap[MEMSIZE_PHYSICAL/PAGESIZE]
+```
+The root block is the original block that has no buddy. To intialize, we walk through each range in `physical_ranges`. We iteratively compute the largest block of size `2**ord` that fits in the range, and set the relevant 
 
 Grading notes
 -------------

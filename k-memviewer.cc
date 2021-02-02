@@ -112,7 +112,6 @@ void memusage::refresh() {
                         mark(it.pa(), f_user | f_process(pid));
                         it.next();
                     } else {
-                        // it += PAGESIZE;
                         it.next_range();
                     }
                 }

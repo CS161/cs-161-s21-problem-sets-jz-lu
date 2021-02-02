@@ -32,7 +32,7 @@ kernel_entry:
         jmp 2f
 1:      movq $0, %rdi
 2:      // call kernel_start()
-        jmp _Z12kernel_startPKc // ENTRY PT
+        jmp _Z12kernel_startPKc
 
 
 
@@ -140,7 +140,7 @@ exception_entry_finish:
         movq %gs:(8), %rdi
         // the second argument, `regstate`, is the current `%rsp`
         movq %rsp, %rsi
-        call _ZN4proc9exceptionEP8regstate  // ENTRY PT
+        call _ZN4proc9exceptionEP8regstate
 
 restore_and_iret:
         testb $1, 140(%rsp)            // `reg_swapgs & 1`
@@ -225,7 +225,7 @@ syscall_entry:
 
         movq %gs:(8), %rdi
         movq %rsp, %rsi
-        call _ZN4proc7syscallEP8regstate // ENTRY PT
+        call _ZN4proc7syscallEP8regstate
 
         // When `proc::syscall` returns, `%rax` holds the return value.
         // Preserve that, plus all callee-saved registers.
@@ -246,7 +246,7 @@ syscall_entry:
 
 
 panic_nonrunnable:
-        call _ZN4proc17panic_nonrunnableEv // ENTRY PT CANDIDATE
+        call _ZN4proc17panic_nonrunnableEv
 
 
 // proc::yield()
@@ -290,7 +290,7 @@ _ZN4proc14yield_noreturnEv:
         leaq CPUSTACK_SIZE(%rdi), %rsp
 
         // jump to scheduler
-        jmp _ZN8cpustate8scheduleEP4proc // ENTRY PT
+        jmp _ZN8cpustate8scheduleEP4proc
 
 
 
@@ -342,7 +342,7 @@ resume_yieldstate_fail:
 1:      xorl %ecx, %ecx
         xorl %esi, %esi
         movq $k_exception_str, %rdi
-        call _Z11assert_failPKciS0_S0_ // ENTRY PT CANDIDATE
+        call _Z11assert_failPKciS0_S0_
 1:      jmp 1b
 
 
@@ -483,7 +483,7 @@ ap_rest:
         // call `cpus[my_CPU_number].init_ap()`.
         // This two-stage jump switches to high virtual addresses.
         movabsq $_ZN8cpustate7init_apEv, %rbx
-        jmp *%rbx // ENTRY PT
+        jmp *%rbx
 
 ap_entry_failed:
         movb $0, ap_entry_lock
