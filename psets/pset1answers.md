@@ -56,8 +56,20 @@ jmp *%rbx // ENTRY PT CANDIDATE
 This is done once per CPU to initialize the CPU state.
 4. Calls `proc::syscall(regstate*)` in `kernel.cc` in line 228 `call _ZN4proc7syscallEP8regstate`. Purpose: handles system calls by classifying the call and calling the functions necessary from there. Called whenever a user process raises a syscall.
 5. Calls `cpustate::schedule()` in via `jmp _ZN8cpustate8scheduleEP4proc`. Purpose: called to run the next process during things like a yield.
-6. `boot` in `bootentry.S`. Called while switching CPU out of compatibility mode in `boot.cc` during bootup. As per instructed by `bootentry.S`, we stopped reading at the documentation ending.
+6. `boot` in `bootentry.S`. Called while switching CPU out of compatibility mode in `boot.cc` during bootup. The jump is static, in the line `ljmp    $SEGSEL_BOOT_CODE, $boot`.
 7. `idle()` in `k-cpu.cc`. Called when there are no processes left to run, or when there are more CPUs asked for than `MAXCPU`, which `k-exception.S` handles by `jge ap_entry_failed` where `ap_entry_failed` is the direct imbedding of the `idle()` function (which is just an assembly inline) of doing `hlt` (halt) forever.
+
+### Part D
+Nothing to write here.
+
+### Part E
+Nothing to write here.
+
+### Part F
+Nothing to write here.
+
+### Part G
+Nothing to write here.
 
 Grading notes
 -------------

@@ -81,9 +81,6 @@ struct __attribute__((aligned(4096))) proc {
 
     // Copies all of the user memory from parent to child.
     int copy_memory_(proc* child);
-
-    // Pointer to the canary, which lives at the top of the proc stack.
-    long *canary_ptr = nullptr;
 };
 
 #define NPROC 16
@@ -158,6 +155,11 @@ extern int ncpu;
 inline cpustate* this_cpu();
 
 
+// Buddy allocator orders.
+#define MIN_ORDER 12
+#define MAX_ORDER 21
+
+
 // yieldstate: callee-saved registers that must be preserved across
 // proc::yield()
 
@@ -211,8 +213,6 @@ enum memtype_t {
 };
 extern memrangeset<16> physical_ranges;
 
-// Kernel data structure constants
-#define CANARY_EV 238475235 // To be compared with canary; detects kernel stack corruption
 
 // Hardware interrupt numbers
 #define INT_IRQ                 32U

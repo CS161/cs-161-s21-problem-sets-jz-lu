@@ -4,12 +4,59 @@
 static spinlock page_lock;
 static uintptr_t next_free_pa;
 
+bapg pg_map[MEMSIZE_PHYSICAL/PAGESIZE];
+
+// largest_fitting_ord(num, sz)
+//  returns largest power of 2 that fits inside of the given number
+// TODO change sz to a static
+static uint64_t largest_fitting_ord(uint64_t num, int sz=1) {
+    if (num == 1) {
+        return sz - 1;
+    }
+    else if (num == 0) {
+        return 0;
+    }
+    else {
+        return largest_fitting_ord(num >> 1, ++sz);
+    }
+}
+
+
 
 // init_kalloc
-//    Initialize stuff needed by `kalloc`. Called from `init_hardware`,
-//    after `physical_ranges` is initialized.
+//    Initialize stuff needed by kalloc. Called from init_hardware,
+//    after physical_ranges is initialized.
 void init_kalloc() {
-    // do nothing for now
+
+    auto range = physical_ranges.begin();
+
+    while (range != physical_ranges.end()) {
+        if (range->type() == mem_available) {
+
+            uintptr_t curr_addr = range->first();
+            uint64_t remaining_size = range->last() - curr_addr;
+
+            while (remaining_size != 0) {
+                unsigned int ord = largest_fitting_ord(remaining_size);
+                assert(ord >= MIN_ORDER && ord <= MAX_ORDER);
+                uint64_t current_size = 1 << ord;
+
+                for (uint64_t i = curr_addr / PAGESIZE;  
+                    i < (curr_addr + current_size)/PAGESIZE;
+                    i++) {
+
+                    pg_map[i].available = true;
+                    pg_map[i].free = true;
+                    pg_map[i].ord = ord;
+                    pg_map[i].r_ord = ord;
+                    pg_map[i].r_addr = curr_addr; // change this
+                }
+                curr_addr += current_size;
+                remaining_size -= current_size;
+            }
+        }
+        ++range;
+    }
 }
 
 

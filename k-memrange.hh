@@ -3,6 +3,15 @@
 #include "types.h"
 template <unsigned maxsize> class memrangeset;
 
+// struct encoding metadata for each page under the buddy allocator system.
+struct bapg {
+    bool free = false; // whether the bapg is free or not
+    uint64_t ord; // order of the block
+    uint64_t r_ord; // order of the root block of the current block
+    bool available = false; // if mem_available is set
+    uintptr_t r_addr; // address of the root block of the current block
+};
+
 // `memrangeset` stores type information for a range of memory addresses.
 // Chickadee uses it to remember which physical addresses are reserved or
 // occupied by the kernel.
