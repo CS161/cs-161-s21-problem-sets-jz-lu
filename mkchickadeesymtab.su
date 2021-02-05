@@ -1,0 +1,87 @@
+stl_algobase.h:198:5:constexpr const _Tp& std::min(const _Tp&, const _Tp&) [with _Tp = long unsigned int]	16	static
+mkchickadeesymtab.cc:57:6:void elf_info::grow(size_t)	64	static
+mkchickadeesymtab.cc:77:6:bool elf_info::validate()	112	static
+mkchickadeesymtab.cc:185:13:const char* elf_info::shstrtab() const	32	static
+mkchickadeesymtab.cc:190:13:const char* elf_info::section_display_name(unsigned int) const	48	static
+mkchickadeesymtab.cc:196:10:unsigned int elf_info::find_section(const char*) const	48	static
+mkchickadeesymtab.cc:207:10:uint64_t elf_info::first_offset() const	64	static
+mkchickadeesymtab.cc:218:13:elf_symbol* elf_info::symtab() const	48	static
+mkchickadeesymtab.cc:231:20:bool symbol_less(const elf_symbol&, const elf_symbol&)	16	static
+mkchickadeesymtab.cc:243:6:void elf_info::sort_symtab()	64	dynamic,bounded
+mkchickadeesymtab.cc:263:13:elf_symbol* elf_info::find_symbol(const char*, elf_symbol*) const	64	static
+mkchickadeesymtab.cc:281:6:void elf_info::shift_sections(size_t, ptrdiff_t)	80	static
+mkchickadeesymtab.cc:331:13:void usage()	16	static
+mkchickadeesymtab.cc:336:17:unsigned int rewrite_symtabref(elf_info&, const char*, uint64_t&, size_t, size_t)	208	dynamic,bounded
+mkchickadeesymtab.cc:27:8:elf_info::elf_info()	16	static
+mkchickadeesymtab.cc:390:5:int main(int, char**)	416	static
+stl_algobase.h:222:5:constexpr const _Tp& std::max(const _Tp&, const _Tp&) [with _Tp = long unsigned int]	16	static
+move.h:74:5:constexpr _Tp&& std::forward(typename std::remove_reference<_Tp>::type&) [with _Tp = int]	16	static
+stl_algo.h:5096:5:void std::stable_sort(_RAIter, _RAIter, _Compare) [with _RAIter = elf_symbol*; _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	48	static
+predefined_ops.h:149:5:constexpr __gnu_cxx::__ops::_Iter_comp_iter<_Compare> __gnu_cxx::__ops::__iter_comp_iter(_Compare) [with _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	48	static
+stl_algo.h:5025:5:void std::__stable_sort(_RandomAccessIterator, _RandomAccessIterator, _Compare) [with _RandomAccessIterator = elf_symbol*; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	96	static
+move.h:99:5:constexpr typename std::remove_reference<_Tp>::type&& std::move(_Tp&&) [with _Tp = bool (*&)(const elf_symbol&, const elf_symbol&)]	16	static
+predefined_ops.h:135:7:constexpr __gnu_cxx::__ops::_Iter_comp_iter<_Compare>::_Iter_comp_iter(_Compare) [with _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	32	static
+stl_iterator_base_funcs.h:138:5:constexpr typename std::iterator_traits<_Iterator>::difference_type std::distance(_InputIterator, _InputIterator) [with _InputIterator = elf_symbol*]	32	static
+stl_tempbuf.h:243:5:std::_Temporary_buffer<_ForwardIterator, _Tp>::_Temporary_buffer(_ForwardIterator, std::_Temporary_buffer<_ForwardIterator, _Tp>::size_type) [with _ForwardIterator = elf_symbol*; _Tp = elf_symbol]	80	static
+stl_tempbuf.h:165:7:std::_Temporary_buffer<_ForwardIterator, _Tp>::~_Temporary_buffer() [with _ForwardIterator = elf_symbol*; _Tp = elf_symbol]	32	static
+stl_tempbuf.h:151:7:std::_Temporary_buffer<_ForwardIterator, _Tp>::value_type* std::_Temporary_buffer<_ForwardIterator, _Tp>::begin() [with _ForwardIterator = elf_symbol*; _Tp = elf_symbol]	16	static
+stl_algo.h:2755:5:void std::__inplace_stable_sort(_RandomAccessIterator, _RandomAccessIterator, _Compare) [with _RandomAccessIterator = elf_symbol*; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	64	static
+stl_tempbuf.h:141:7:std::_Temporary_buffer<_ForwardIterator, _Tp>::size_type std::_Temporary_buffer<_ForwardIterator, _Tp>::size() const [with _ForwardIterator = elf_symbol*; _Tp = elf_symbol]	16	static
+stl_algo.h:2726:5:void std::__stable_sort_adaptive(_RandomAccessIterator, _RandomAccessIterator, _Pointer, _Distance, _Compare) [with _RandomAccessIterator = elf_symbol*; _Pointer = elf_symbol*; _Distance = long int; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	96	dynamic,bounded
+stl_iterator_base_types.h:205:5:constexpr typename std::iterator_traits<_Iterator>::iterator_category std::__iterator_category(const _Iter&) [with _Iter = elf_symbol*]	16	static
+stl_iterator_base_funcs.h:98:5:constexpr typename std::iterator_traits<_Iterator>::difference_type std::__distance(_RandomAccessIterator, _RandomAccessIterator, std::random_access_iterator_tag) [with _RandomAccessIterator = elf_symbol*]	16	static
+stl_tempbuf.h:85:5:std::pair<_Tp*, long int> std::get_temporary_buffer(std::ptrdiff_t) [with _Tp = elf_symbol]	96	static
+stl_tempbuf.h:231:5:void std::__uninitialized_construct_buf(_Pointer, _Pointer, _ForwardIterator) [with _Pointer = elf_symbol*; _ForwardIterator = elf_symbol*]	48	static
+stl_tempbuf.h:112:5:void std::return_temporary_buffer(_Tp*) [with _Tp = elf_symbol]	32	static
+stl_construct.h:127:5:void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = elf_symbol*]	32	static
+stl_algo.h:1839:5:void std::__insertion_sort(_RandomAccessIterator, _RandomAccessIterator, _Compare) [with _RandomAccessIterator = elf_symbol*; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	96	static
+predefined_ops.h:142:9:constexpr bool __gnu_cxx::__ops::_Iter_comp_iter<_Compare>::operator()(_Iterator1, _Iterator2) [with _Iterator1 = elf_symbol*; _Iterator2 = elf_symbol*; _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	48	static
+stl_algo.h:2471:5:void std::__merge_without_buffer(_BidirectionalIterator, _BidirectionalIterator, _BidirectionalIterator, _Distance, _Distance, _Compare) [with _BidirectionalIterator = elf_symbol*; _Distance = long int; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	112	static
+stl_algo.h:2699:5:void std::__merge_sort_with_buffer(_RandomAccessIterator, _RandomAccessIterator, _Pointer, _Compare) [with _RandomAccessIterator = elf_symbol*; _Pointer = elf_symbol*; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	80	static
+stl_algo.h:2410:5:void std::__merge_adaptive(_BidirectionalIterator, _BidirectionalIterator, _BidirectionalIterator, _Distance, _Distance, _Pointer, _Distance, _Compare) [with _BidirectionalIterator = elf_symbol*; _Distance = long int; _Pointer = elf_symbol*; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	144	dynamic,bounded
+stl_pair.h:341:12:constexpr std::pair<_T1, _T2>::pair(_U1&&, _U2&&) [with _U1 = elf_symbol*&; _U2 = long int&; typename std::enable_if<(std::_PCC<true, _T1, _T2>::_MoveConstructiblePair<_U1, _U2>() && std::_PCC<true, _T1, _T2>::_ImplicitlyMoveConvertiblePair<_U1, _U2>()), bool>::type <anonymous> = true; _T1 = elf_symbol*; _T2 = long int]	48	static
+stl_pair.h:341:12:constexpr std::pair<_T1, _T2>::pair(_U1&&, _U2&&) [with _U1 = elf_symbol*; _U2 = int; typename std::enable_if<(std::_PCC<true, _T1, _T2>::_MoveConstructiblePair<_U1, _U2>() && std::_PCC<true, _T1, _T2>::_ImplicitlyMoveConvertiblePair<_U1, _U2>()), bool>::type <anonymous> = true; _T1 = elf_symbol*; _T2 = long int]	48	static
+stl_tempbuf.h:216:9:static void std::__uninitialized_construct_buf_dispatch<true>::__ucr(_Pointer, _Pointer, _ForwardIterator) [with _Pointer = elf_symbol*; _ForwardIterator = elf_symbol*]	16	static
+stl_construct.h:117:9:static void std::_Destroy_aux<true>::__destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = elf_symbol*]	16	static
+move.h:99:5:constexpr typename std::remove_reference<_Tp>::type&& std::move(_Tp&&) [with _Tp = elf_symbol&]	16	static
+stl_algobase.h:676:5:_BI2 std::move_backward(_BI1, _BI1, _BI2) [with _BI1 = elf_symbol*; _BI2 = elf_symbol*]	64	static
+predefined_ops.h:225:5:__gnu_cxx::__ops::_Val_comp_iter<_Compare> __gnu_cxx::__ops::__val_comp_iter(__gnu_cxx::__ops::_Iter_comp_iter<_Compare>) [with _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	48	static
+stl_algo.h:1820:5:void std::__unguarded_linear_insert(_RandomAccessIterator, _Compare) [with _RandomAccessIterator = elf_symbol*; _Compare = __gnu_cxx::__ops::_Val_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	80	static
+stl_algobase.h:123:5:void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = elf_symbol*; _ForwardIterator2 = elf_symbol*]	32	static
+stl_iterator_base_funcs.h:202:5:constexpr void std::advance(_InputIterator&, _Distance) [with _InputIterator = elf_symbol*; _Distance = long int]	48	static
+predefined_ops.h:187:5:__gnu_cxx::__ops::_Iter_comp_val<_Compare> __gnu_cxx::__ops::__iter_comp_val(__gnu_cxx::__ops::_Iter_comp_iter<_Compare>) [with _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	48	static
+stl_algobase.h:966:5:_ForwardIterator std::__lower_bound(_ForwardIterator, _ForwardIterator, const _Tp&, _Compare) [with _ForwardIterator = elf_symbol*; _Tp = elf_symbol; _Compare = __gnu_cxx::__ops::_Iter_comp_val<bool (*)(const elf_symbol&, const elf_symbol&)>]	80	static
+stl_algo.h:2038:5:_ForwardIterator std::__upper_bound(_ForwardIterator, _ForwardIterator, const _Tp&, _Compare) [with _ForwardIterator = elf_symbol*; _Tp = elf_symbol; _Compare = __gnu_cxx::__ops::_Val_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	80	static
+stl_algo.h:1434:5:_FIter std::_V2::rotate(_FIter, _FIter, _FIter) [with _FIter = elf_symbol*]	48	static
+stl_algo.h:2683:5:void std::__chunk_insertion_sort(_RandomAccessIterator, _RandomAccessIterator, _Distance, _Compare) [with _RandomAccessIterator = elf_symbol*; _Distance = long int; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	48	static
+stl_algo.h:2659:5:void std::__merge_sort_loop(_RandomAccessIterator1, _RandomAccessIterator1, _RandomAccessIterator2, _Distance, _Compare) [with _RandomAccessIterator1 = elf_symbol*; _RandomAccessIterator2 = elf_symbol*; _Distance = long int; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	96	static
+stl_algobase.h:497:5:_OI std::move(_II, _II, _OI) [with _II = elf_symbol*; _OI = elf_symbol*]	64	static
+stl_algo.h:2303:5:void std::__move_merge_adaptive(_InputIterator1, _InputIterator1, _InputIterator2, _InputIterator2, _OutputIterator, _Compare) [with _InputIterator1 = elf_symbol*; _InputIterator2 = elf_symbol*; _OutputIterator = elf_symbol*; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	64	static
+stl_algo.h:2329:5:void std::__move_merge_adaptive_backward(_BidirectionalIterator1, _BidirectionalIterator1, _BidirectionalIterator2, _BidirectionalIterator2, _BidirectionalIterator3, _Compare) [with _BidirectionalIterator1 = elf_symbol*; _BidirectionalIterator2 = elf_symbol*; _BidirectionalIterator3 = elf_symbol*; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	64	static
+stl_algo.h:2372:5:_BidirectionalIterator1 std::__rotate_adaptive(_BidirectionalIterator1, _BidirectionalIterator1, _BidirectionalIterator1, _Distance, _Distance, _BidirectionalIterator2, _Distance) [with _BidirectionalIterator1 = elf_symbol*; _BidirectionalIterator2 = elf_symbol*; _Distance = long int]	80	static
+move.h:74:5:constexpr _Tp&& std::forward(typename std::remove_reference<_Tp>::type&) [with _Tp = elf_symbol*&]	16	static
+move.h:74:5:constexpr _Tp&& std::forward(typename std::remove_reference<_Tp>::type&) [with _Tp = long int&]	16	static
+move.h:74:5:constexpr _Tp&& std::forward(typename std::remove_reference<_Tp>::type&) [with _Tp = elf_symbol*]	16	static
+cpp_type_traits.h:428:5:_Iterator std::__miter_base(_Iterator) [with _Iterator = elf_symbol*]	16	static
+stl_algobase.h:613:5:_BI2 std::__copy_move_backward_a2(_BI1, _BI1, _BI2) [with bool _IsMove = true; _BI1 = elf_symbol*; _BI2 = elf_symbol*]	64	static
+move.h:99:5:constexpr typename std::remove_reference<_Tp>::type&& std::move(_Tp&&) [with _Tp = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>&]	16	static
+predefined_ops.h:207:7:__gnu_cxx::__ops::_Val_comp_iter<_Compare>::_Val_comp_iter(__gnu_cxx::__ops::_Iter_comp_iter<_Compare>&&) [with _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	32	static
+predefined_ops.h:214:2:bool __gnu_cxx::__ops::_Val_comp_iter<_Compare>::operator()(_Value&, _Iterator) [with _Value = elf_symbol; _Iterator = elf_symbol*; _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	48	static
+move.h:182:5:typename std::enable_if<std::__and_<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> >::value>::type std::swap(_Tp&, _Tp&) [with _Tp = elf_symbol]	64	static
+stl_iterator_base_funcs.h:174:5:constexpr void std::__advance(_RandomAccessIterator&, _Distance, std::random_access_iterator_tag) [with _RandomAccessIterator = elf_symbol*; _Distance = long int]	16	static
+predefined_ops.h:169:7:__gnu_cxx::__ops::_Iter_comp_val<_Compare>::_Iter_comp_val(__gnu_cxx::__ops::_Iter_comp_iter<_Compare>&&) [with _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	32	static
+predefined_ops.h:176:2:bool __gnu_cxx::__ops::_Iter_comp_val<_Compare>::operator()(_Iterator, _Value&) [with _Iterator = elf_symbol*; _Value = const elf_symbol; _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	48	static
+predefined_ops.h:214:2:bool __gnu_cxx::__ops::_Val_comp_iter<_Compare>::operator()(_Value&, _Iterator) [with _Value = const elf_symbol; _Iterator = elf_symbol*; _Compare = bool (*)(const elf_symbol&, const elf_symbol&)]	48	static
+stl_algo.h:1328:5:_RandomAccessIterator std::_V2::__rotate(_RandomAccessIterator, _RandomAccessIterator, _RandomAccessIterator, std::random_access_iterator_tag) [with _RandomAccessIterator = elf_symbol*]	144	static
+stl_algo.h:2633:5:_OutputIterator std::__move_merge(_InputIterator, _InputIterator, _InputIterator, _InputIterator, _OutputIterator, _Compare) [with _InputIterator = elf_symbol*; _OutputIterator = elf_symbol*; _Compare = __gnu_cxx::__ops::_Iter_comp_iter<bool (*)(const elf_symbol&, const elf_symbol&)>]	64	static
+stl_algobase.h:198:5:constexpr const _Tp& std::min(const _Tp&, const _Tp&) [with _Tp = long int]	16	static
+stl_algobase.h:438:5:_OI std::__copy_move_a2(_II, _II, _OI) [with bool _IsMove = true; _II = elf_symbol*; _OI = elf_symbol*]	64	static
+stl_algobase.h:280:5:_Iterator std::__niter_base(_Iterator) [with _Iterator = elf_symbol*]	16	static
+stl_algobase.h:595:5:_BI2 std::__copy_move_backward_a(_BI1, _BI1, _BI2) [with bool _IsMove = true; _BI1 = elf_symbol*; _BI2 = elf_symbol*]	64	static
+stl_algobase.h:295:5:_Iterator std::__niter_wrap(const _Iterator&, _Iterator) [with _Iterator = elf_symbol*]	16	static
+stl_algobase.h:169:5:_ForwardIterator2 std::swap_ranges(_ForwardIterator1, _ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = elf_symbol*; _ForwardIterator2 = elf_symbol*]	48	static
+move.h:99:5:constexpr typename std::remove_reference<_Tp>::type&& std::move(_Tp&&) [with _Tp = long int&]	16	static
+move.h:182:5:typename std::enable_if<std::__and_<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> >::value>::type std::swap(_Tp&, _Tp&) [with _Tp = long int]	48	static
+stl_algobase.h:393:5:_OI std::__copy_move_a(_II, _II, _OI) [with bool _IsMove = true; _II = elf_symbol*; _OI = elf_symbol*]	64	static
+stl_algobase.h:577:2:static _Tp* std::__copy_move_backward<_IsMove, true, std::random_access_iterator_tag>::__copy_move_b(const _Tp*, const _Tp*, _Tp*) [with _Tp = elf_symbol; bool _IsMove = true]	64	static
+stl_algobase.h:375:2:static _Tp* std::__copy_move<_IsMove, true, std::random_access_iterator_tag>::__copy_m(const _Tp*, const _Tp*, _Tp*) [with _Tp = elf_symbol; bool _IsMove = true]	64	static

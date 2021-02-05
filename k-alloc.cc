@@ -97,48 +97,8 @@ void init_kalloc() {
 //    The handout code does not free memory and allocates memory in units
 //    of pages.
 void* kalloc(size_t sz) {
-
-    // Old kalloc() stuff
-    {
-    /*
-    if (sz == 0 || sz > PAGESIZE) {
-        return nullptr;
-    }
-
-    auto irqs = page_lock.lock();
-    void* ptr = nullptr;
-
-    // skip over reserved and kernel memory
-    auto range = physical_ranges.find(next_free_pa);
-    while (range != physical_ranges.end()) {
-        if (range->type() == mem_available) {
-            // use this page
-            ptr = pa2kptr<void*>(next_free_pa);
-            next_free_pa += PAGESIZE;
-            break;
-        } else {
-            // move to next range
-            next_free_pa = range->last();
-            ++range;
-        }
-    }
-
-
-    page_lock.unlock(irqs);
-
-    if (ptr) {
-        // tell sanitizers the allocated page is accessible
-        asan_mark_memory(ka2pa(ptr), PAGESIZE, false);
-        // initialize to int3
-        memset(ptr, 0xCC, PAGESIZE);
-    }
-    return ptr;
-    */ 
-    // IN PROGRESS CODE (BUDDY ALLOCATOR)
-    }
-
     if (sz == 0 || sz > (1 << MAX_ORDER)) {
-        log_printf("You dumb shit you asked for invalid memory\n");
+        log_printf("Invalid memory request\n");
         return nullptr;
     }
 
@@ -147,6 +107,8 @@ void* kalloc(size_t sz) {
     uint64_t ord = order(sz);
     log_printf("[kalloc] NEW request of size 0x%x, ord %lu\n", sz, ord);
     ord = ord >= MIN_ORDER ? ord : MIN_ORDER; // min alloc is 1 page
+    assert(ord <= MAX_ORDER, 
+        "Error: attempted memory allocation of order larger than maximum\n");
     log_printf("[kalloc] Actual ord given: %lu\n", ord);
     bapg* blk = nullptr; // New block pointer
 
@@ -192,7 +154,7 @@ void* kalloc(size_t sz) {
     }
 
     if (!blk) {
-        log_printf("[kalloc] Error: insufficient memory blocks available for requested size %lu\n", sz);
+        log_printf("[kalloc] Error: insufficient memory blocks available for requested size 0x%x\n", sz);
         page_lock.unlock(irqs);
         return nullptr;
     }
@@ -201,6 +163,7 @@ void* kalloc(size_t sz) {
     // of the page in physical memory! So the index is just the offset in physical memory
     // in units of PAGESIZE's.
     uint64_t addr = (blk - pgmap)*PAGESIZE;
+    log_printf("[kalloc] ALLOCATED pa = 0x%x\n", addr);
     ptr = pa2kptr<void*>(addr);
     blk->returned = true;
 
@@ -219,16 +182,77 @@ void* kalloc(size_t sz) {
     return ptr;
 }
 
+// buddy_to_the_left(addr)
+//    Returns a yes (1) or no (0) of whether the (physical) addr block's memory has buddy on left.
+//    Assumes as a promise that there is a buddy, either to right or left (in physical mem).
+static bool buddy_to_the_left(bapg* blk) {
+    uint64_t addr = (blk - pgmap) * PAGESIZE;
+
+    // Normalize the addr so that the root block (ol' grandpa) of blk sits at tnorm-address 0.
+    // (tnorm means translation-normalized).
+    uint64_t tnorm_addr = addr - blk->r_addr;
+
+    // Mask everything but the bit of the given order, if it is a right buddy (i.e. its buddy
+    // is on the left) then the mask will fail to zero out the normed addr, 
+    // otherwise it zeroes it out and the buddy is not on the left (i.e. right).
+    return tnorm_addr & (1 << blk->ord);
+}
 
 // kfree(ptr)
 //    Free a pointer previously returned by `kalloc`. Does nothing if
 //    `ptr == nullptr`.
 void kfree(void* ptr) {
+    if (!ptr) { // Do nothing
+        return;
+    }
+
+    uint64_t addr = reinterpret_cast<uint64_t>(ptr);
+    assert(addr & 0xfff == 0); // assert page-aligned pointer
+    bapg *blk = &(pgmap[addr / PAGESIZE]);
+    log_printf("[kfree] kfree called to free %p corr. to pa = 0x%x\n", ptr, addr);
+
+    assert(blk->returned, 
+        "Error: attempted free on pointer not returned by kalloc()\n"); // kalloc gave this addr it away in the first place
+    assert(!blk->free, 
+        "Error: attempted free on already freed block\n"); // it's not already free
+    blk->returned = false;
+    blk->free = true;
+
+    // Iteratively search for free buddies to combine with until we cannot anymore, 
+    // then push to the relevant free list.
+    while (true) {
+        if (blk->ord == blk->r_ord) { // No buddies left (base case)
+            free_blocks[blk->ord - MIN_ORDER].push_back(blk);
+            log_printf("[kfree] NO BUDDIES left; root order reached. Freeing immediately\n");
+            break;
+        } else { // We have a buddy, hooray! Let's check if it's free.
+            uint64_t buddy_addr = buddy_to_the_left(blk) ?
+                addr - (1 << blk->ord) /* left bud */ : addr + (1 << blk->ord) /* right bud */;
+            bapg *buddy_blk = &(pgmap[buddy_addr / PAGESIZE]);
+            log_printf("[kfree] FOUND BUDDY at pa = 0x%x (for blk at pa = 0x%x). Is it free?", buddy_addr, addr);
+            if (buddy_blk->free) {
+                assert(!buddy_blk->returned, "WTF you did something rly bad\n");
+                buddy_blk->ord++;
+                blk->ord++;
+                if (buddy_addr < addr) { // If buddy is on the left then update the block for next iter
+                    blk = buddy_blk;
+                    addr = buddy_addr;
+                }
+                log_printf("Yes!\n [kfree] Adjoining block to %s buddy, updating new pa to 0x%x", 
+                    buddy_addr < addr ? "left" : "right", addr);
+            } else { // Darn! The buddy isn't free. Guess we'll just free what we have.
+                log_printf("No (sad) \n[kfree] FREED block of order %lu at pa = 0x%x\n", 
+                    blk->ord, PAGESIZE*(blk-pgmap));
+                free_blocks[blk->ord - MIN_ORDER].push_back(blk);
+                break;
+            }
+        }
+    }
+
     if (ptr) {
         // tell sanitizers the freed page is inaccessible
         asan_mark_memory(ka2pa(ptr), PAGESIZE, true);
     }
-    log_printf("kfree not implemented yet\n");
 }
 
 

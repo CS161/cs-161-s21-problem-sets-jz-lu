@@ -1,0 +1,330 @@
+uintn-identity.h:39:1:__uint32_t __uint32_identity(__uint32_t)	16	static
+uintn-identity.h:45:1:__uint64_t __uint64_identity(__uint64_t)	16	static
+cbyteswap.hh:39:28:static uint32_t sized_to_from_le<4>::to_le(uint32_t)	24	static
+cbyteswap.hh:40:28:static uint32_t sized_to_from_le<4>::from_le(uint32_t)	24	static
+cbyteswap.hh:43:28:static uint64_t sized_to_from_le<8>::to_le(uint64_t)	24	static
+predefined_ops.h:69:3:__gnu_cxx::__ops::_Iter_less_val __gnu_cxx::__ops::__iter_less_val()	16	static
+new:173:33:void* operator new(std::size_t, void*)	16	static
+limits:1274:7:static constexpr long unsigned int std::numeric_limits<long unsigned int>::max()	16	static
+stl_vector.h:125:14:std::_Vector_base<unsigned int, std::allocator<unsigned int> >::_Vector_impl::~_Vector_impl()	32	static
+stl_algobase.h:198:5:constexpr const _Tp& std::min(const _Tp&, const _Tp&) [with _Tp = long unsigned int]	16	static
+stl_vector.h:125:14:std::_Vector_base<chkfs::dirent, std::allocator<chkfs::dirent> >::_Vector_impl::~_Vector_impl()	32	static
+stl_vector.h:285:7:std::_Vector_base<_Tp, _Alloc>::_Vector_base() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+stl_vector.h:484:7:std::vector<_Tp, _Alloc>::vector() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+stl_vector.h:125:14:std::_Vector_base<chkfs::extent, std::allocator<chkfs::extent> >::_Vector_impl::~_Vector_impl()	32	static
+stl_vector.h:285:7:std::_Vector_base<_Tp, _Alloc>::_Vector_base() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	32	static
+stl_vector.h:484:7:std::vector<_Tp, _Alloc>::vector() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	32	static
+mkchickadeefs.cc:41:13:void mark_free(blocknum_t)	16	static
+mkchickadeefs.cc:45:13:void mark_allocated(blocknum_t)	16	static
+mkchickadeefs.cc:51:7:FILE* fopencheck(const char*)	48	static
+mkchickadeefs.cc:59:6:void fclosecheck(FILE*)	32	static
+mkchickadeefs.cc:66:13:void add_boot_sector(const char*)	48	static
+mkchickadeefs.cc:81:13:void advance_blockno(const char*)	32	static
+mkchickadeefs.cc:89:22:chkfs::inode* get_inode(chkfs::inum_t)	32	static
+mkchickadeefs.cc:96:1:chkfs::inum_t add_inode(chkfs::inum_t, unsigned int, size_t, unsigned int, blocknum_t, const char*)	112	static
+mkchickadeefs.cc:154:13:void add_file(const char*, const char*)	240	static
+mkchickadeefs.cc:204:13:void parse_uint32(const char*, uint32_t*, int)	80	static
+mkchickadeefs.cc:231:39:void help()	16	static
+mkchickadeefs.cc:247:5:int main(int, char**)	4480	static
+mkchickadeefs.cc:472:13:void shuffle_indirect(unsigned char*, blocknum_t*)	64	static
+mkchickadeefs.cc:479:13:void shuffle_inode(chkfs::inode*, blocknum_t*)	64	static
+random.h:5281:14:std::discrete_distribution<int>::param_type::~param_type()	32	static
+random.h:5271:11:std::discrete_distribution<int>::~discrete_distribution()	32	static
+mkchickadeefs.cc:489:13:void shuffle_blocks()	256	static
+allocator.h:153:7:std::allocator< <template-parameter-1-1> >::~allocator() [with _Tp = unsigned int]	32	static
+stl_vector.h:330:7:std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	32	static
+stl_vector.h:675:7:std::vector<_Tp, _Alloc>::~vector() [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	32	static
+stl_algobase.h:222:5:constexpr const _Tp& std::max(const _Tp&, const _Tp&) [with _Tp = long unsigned int]	16	static
+stl_vector.h:128:2:std::_Vector_base<_Tp, _Alloc>::_Vector_impl::_Vector_impl() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+allocator.h:153:7:std::allocator< <template-parameter-1-1> >::~allocator() [with _Tp = chkfs::dirent]	32	static
+stl_vector.h:330:7:std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+stl_vector.h:128:2:std::_Vector_base<_Tp, _Alloc>::_Vector_impl::_Vector_impl() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	32	static
+allocator.h:153:7:std::allocator< <template-parameter-1-1> >::~allocator() [with _Tp = chkfs::extent]	32	static
+stl_vector.h:330:7:std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	32	static
+random.h:271:7:std::linear_congruential_engine<_UIntType, __a, __c, __m>::linear_congruential_engine() [with _UIntType = long unsigned int; _UIntType __a = 16807; _UIntType __c = 0; _UIntType __m = 2147483647]	32	static
+random.h:5281:14:std::discrete_distribution<unsigned int>::param_type::~param_type()	32	static
+random.h:5338:7:std::discrete_distribution<_IntType>::discrete_distribution(std::initializer_list<double>) [with _IntType = unsigned int]	48	static
+cbyteswap.hh:48:10:T to_le(T) [with T = unsigned int]	32	static
+cbyteswap.hh:48:10:T to_le(T) [with T = long unsigned int]	32	static
+random.h:5407:2:std::discrete_distribution<_IntType>::result_type std::discrete_distribution<_IntType>::operator()(_UniformRandomNumberGenerator&) [with _UniformRandomNumberGenerator = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>; _IntType = unsigned int]	32	static
+stl_algobase.h:198:5:constexpr const _Tp& std::min(const _Tp&, const _Tp&) [with _Tp = unsigned int]	16	static
+stl_vector.h:1200:7:void std::vector<_Tp, _Alloc>::push_back(std::vector<_Tp, _Alloc>::value_type&&) [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	32	static
+move.h:99:5:constexpr typename std::remove_reference<_Tp>::type&& std::move(_Tp&&) [with _Tp = chkfs::dirent&]	16	static
+stl_vector.h:1200:7:void std::vector<_Tp, _Alloc>::push_back(std::vector<_Tp, _Alloc>::value_type&&) [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+cbyteswap.hh:48:10:T to_le(T) [with T = int]	32	static
+stl_vector.h:915:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::size() const [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	16	static
+stl_vector.h:1184:7:void std::vector<_Tp, _Alloc>::push_back(const value_type&) [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+stl_vector.h:1165:7:_Tp* std::vector<_Tp, _Alloc>::data() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+cbyteswap.hh:52:10:T from_le(T) [with T = unsigned int]	32	static
+allocator.h:138:7:std::allocator< <template-parameter-1-1> >::allocator() [with _Tp = unsigned int]	32	static
+stl_vector.h:507:7:std::vector<_Tp, _Alloc>::vector(std::vector<_Tp, _Alloc>::size_type, const allocator_type&) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	64	static
+stl_vector.h:808:7:std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::begin() [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	48	static
+stl_vector.h:826:7:std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::end() [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	48	static
+stl_numeric.h:87:5:void std::iota(_ForwardIterator, _ForwardIterator, _Tp) [with _ForwardIterator = __gnu_cxx::__normal_iterator<unsigned int*, std::vector<unsigned int> >; _Tp = unsigned int]	64	static
+stl_vector.h:808:7:std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::begin() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	48	static
+stl_iterator.h:859:7:__gnu_cxx::__normal_iterator<_Iterator, _Container> __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator+(__gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type) const [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	64	static
+stl_vector.h:826:7:std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::end() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	48	static
+random.h:323:7:static constexpr std::linear_congruential_engine<_UIntType, __a, __c, __m>::result_type std::linear_congruential_engine<_UIntType, __a, __c, __m>::min() [with _UIntType = long unsigned int; _UIntType __a = 16807; _UIntType __c = 0; _UIntType __m = 2147483647]	16	static
+stl_algo.h:3786:5:void std::shuffle(_RAIter, _RAIter, _UGenerator&&) [with _RAIter = __gnu_cxx::__normal_iterator<chkfs::extent*, std::vector<chkfs::extent> >; _UGenerator = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>&]	144	static
+random.h:5338:7:std::discrete_distribution<_IntType>::discrete_distribution(std::initializer_list<double>) [with _IntType = int]	48	static
+stl_vector.h:675:7:std::vector<_Tp, _Alloc>::~vector() [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+stl_iterator.h:907:5:bool __gnu_cxx::operator!=(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	48	static
+stl_iterator.h:827:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>& __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator++() [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	16	static
+random.h:5407:2:std::discrete_distribution<_IntType>::result_type std::discrete_distribution<_IntType>::operator()(_UniformRandomNumberGenerator&) [with _UniformRandomNumberGenerator = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>; _IntType = int]	32	static
+stl_vector.h:1040:7:std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::operator[](std::vector<_Tp, _Alloc>::size_type) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	16	static
+stl_iterator.h:823:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::pointer __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator->() const [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	16	static
+stl_vector.h:1165:7:_Tp* std::vector<_Tp, _Alloc>::data() [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	32	static
+stl_vector.h:94:2:std::_Vector_base<_Tp, _Alloc>::_Vector_impl_data::_Vector_impl_data() [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	16	static
+new_allocator.h:89:7:__gnu_cxx::new_allocator<_Tp>::~new_allocator() [with _Tp = unsigned int]	16	static
+stl_vector.h:347:7:void std::_Vector_base<_Tp, _Alloc>::_M_deallocate(std::_Vector_base<_Tp, _Alloc>::pointer, std::size_t) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	48	static
+stl_vector.h:273:7:std::_Vector_base<_Tp, _Alloc>::_Tp_alloc_type& std::_Vector_base<_Tp, _Alloc>::_M_get_Tp_allocator() [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	16	static
+stl_construct.h:203:5:void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = unsigned int*; _Tp = unsigned int]	48	static
+move.h:74:5:constexpr _Tp&& std::forward(typename std::remove_reference<_Tp>::type&) [with _Tp = long unsigned int]	16	static
+allocator.h:138:7:std::allocator< <template-parameter-1-1> >::allocator() [with _Tp = chkfs::dirent]	32	static
+stl_vector.h:94:2:std::_Vector_base<_Tp, _Alloc>::_Vector_impl_data::_Vector_impl_data() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	16	static
+new_allocator.h:89:7:__gnu_cxx::new_allocator<_Tp>::~new_allocator() [with _Tp = chkfs::dirent]	16	static
+stl_vector.h:347:7:void std::_Vector_base<_Tp, _Alloc>::_M_deallocate(std::_Vector_base<_Tp, _Alloc>::pointer, std::size_t) [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	48	static
+allocator.h:138:7:std::allocator< <template-parameter-1-1> >::allocator() [with _Tp = chkfs::extent]	32	static
+stl_vector.h:94:2:std::_Vector_base<_Tp, _Alloc>::_Vector_impl_data::_Vector_impl_data() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	16	static
+new_allocator.h:89:7:__gnu_cxx::new_allocator<_Tp>::~new_allocator() [with _Tp = chkfs::extent]	16	static
+stl_vector.h:347:7:void std::_Vector_base<_Tp, _Alloc>::_M_deallocate(std::_Vector_base<_Tp, _Alloc>::pointer, std::size_t) [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	48	static
+random.h:282:7:std::linear_congruential_engine<_UIntType, __a, __c, __m>::linear_congruential_engine(std::linear_congruential_engine<_UIntType, __a, __c, __m>::result_type) [with _UIntType = long unsigned int; _UIntType __a = 16807; _UIntType __c = 0; _UIntType __m = 2147483647]	32	static
+stl_vector.h:125:14:std::_Vector_base<double, std::allocator<double> >::_Vector_impl::~_Vector_impl()	32	static
+stl_vector.h:285:7:std::_Vector_base<_Tp, _Alloc>::_Vector_base() [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+stl_vector.h:484:7:std::vector<_Tp, _Alloc>::vector() [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+random.h:5296:2:std::discrete_distribution<_IntType>::param_type::param_type(std::initializer_list<double>) [with _IntType = unsigned int]	80	static
+random.tcc:2694:7:std::discrete_distribution<_IntType>::result_type std::discrete_distribution<_IntType>::operator()(_UniformRandomNumberGenerator&, const std::discrete_distribution<_IntType>::param_type&) [with _UniformRandomNumberGenerator = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>; _IntType = unsigned int]	112	static
+move.h:99:5:constexpr typename std::remove_reference<_Tp>::type&& std::move(_Tp&&) [with _Tp = chkfs::extent&]	16	static
+vector.tcc:109:7:) [with _Args = {chkfs::extent}; _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	48	static
+vector.tcc:109:7:) [with _Args = {chkfs::dirent}; _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	48	static
+alloc_traits.h:482:2:) [with _Up = chkfs::dirent; _Args = {const chkfs::dirent&}; _Tp = chkfs::dirent]	48	static
+stl_vector.h:826:7:std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::end() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	48	static
+vector.tcc:426:7:) [with _Args = {const chkfs::dirent&}; _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	128	static
+stl_vector.h:1840:2:_Up* std::vector<_Tp, _Alloc>::_M_data_ptr(_Up*) const [with _Up = chkfs::dirent; _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	16	static
+new_allocator.h:80:7:__gnu_cxx::new_allocator<_Tp>::new_allocator() [with _Tp = unsigned int]	16	static
+stl_vector.h:1764:7:static std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::_S_check_init_len(std::vector<_Tp, _Alloc>::size_type, const allocator_type&) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	64	static
+stl_vector.h:300:7:std::_Vector_base<_Tp, _Alloc>::_Vector_base(std::size_t, const allocator_type&) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	64	static
+stl_vector.h:1600:7:void std::vector<_Tp, _Alloc>::_M_default_initialize(std::vector<_Tp, _Alloc>::size_type) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	32	static
+stl_iterator.h:806:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::__normal_iterator(const _Iterator&) [with _Iterator = unsigned int*; _Container = std::vector<unsigned int>]	16	static
+stl_iterator.h:907:5:bool __gnu_cxx::operator!=(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = unsigned int*; _Container = std::vector<unsigned int>]	48	static
+stl_iterator.h:827:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>& __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator++() [with _Iterator = unsigned int*; _Container = std::vector<unsigned int>]	16	static
+stl_iterator.h:819:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::reference __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator*() const [with _Iterator = unsigned int*; _Container = std::vector<unsigned int>]	16	static
+stl_iterator.h:806:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::__normal_iterator(const _Iterator&) [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	16	static
+stl_iterator.h:893:5:bool __gnu_cxx::operator==(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	48	static
+stl_iterator.h:989:5:typename __gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type __gnu_cxx::operator-(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	48	static
+uniform_int_dist.h:112:7:std::uniform_int_distribution<_IntType>::uniform_int_distribution(_IntType, _IntType) [with _IntType = long unsigned int]	48	static
+stl_iterator.h:834:7:__gnu_cxx::__normal_iterator<_Iterator, _Container> __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator++(int) [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	64	static
+uniform_int_dist.h:172:2:std::uniform_int_distribution<_IntType>::result_type std::uniform_int_distribution<_IntType>::operator()(_UniformRandomNumberGenerator&) [with _UniformRandomNumberGenerator = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>; _IntType = long unsigned int]	32	static
+stl_algobase.h:123:5:void std::iter_swap(_ForwardIterator1, _ForwardIterator2) [with _ForwardIterator1 = __gnu_cxx::__normal_iterator<chkfs::extent*, std::vector<chkfs::extent> >; _ForwardIterator2 = __gnu_cxx::__normal_iterator<chkfs::extent*, std::vector<chkfs::extent> >]	48	static
+stl_algo.h:3763:5:std::pair<_FIter, _FIter> std::__gen_two_uniform_ints(_IntType, _IntType, _UniformRandomBitGenerator&&) [with _IntType = long unsigned int; _UniformRandomBitGenerator = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>&]	96	static
+uniform_int_dist.h:106:7:std::uniform_int_distribution<_IntType>::uniform_int_distribution() [with _IntType = long unsigned int]	32	static
+uniform_int_dist.h:74:2:std::uniform_int_distribution<_IntType>::param_type::param_type(_IntType, _IntType) [with _IntType = long unsigned int]	16	static
+uniform_int_dist.h:225:7:std::uniform_int_distribution<_IntType>::result_type std::uniform_int_distribution<_IntType>::operator()(_UniformRandomNumberGenerator&, const std::uniform_int_distribution<_IntType>::param_type&) [with _UniformRandomNumberGenerator = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>; _IntType = long unsigned int]	176	static
+random.h:5296:2:std::discrete_distribution<_IntType>::param_type::param_type(std::initializer_list<double>) [with _IntType = int]	80	static
+stl_vector.h:330:7:std::_Vector_base<_Tp, _Alloc>::~_Vector_base() [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+stl_vector.h:273:7:std::_Vector_base<_Tp, _Alloc>::_Tp_alloc_type& std::_Vector_base<_Tp, _Alloc>::_M_get_Tp_allocator() [with _Tp = double; _Alloc = std::allocator<double>]	16	static
+stl_construct.h:203:5:void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = double*; _Tp = double]	48	static
+stl_iterator.h:871:7:const _Iterator& __gnu_cxx::__normal_iterator<_Iterator, _Container>::base() const [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	16	static
+random.tcc:2694:7:std::discrete_distribution<_IntType>::result_type std::discrete_distribution<_IntType>::operator()(_UniformRandomNumberGenerator&, const std::discrete_distribution<_IntType>::param_type&) [with _UniformRandomNumberGenerator = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>; _IntType = int]	112	static
+stl_vector.h:1840:2:_Up* std::vector<_Tp, _Alloc>::_M_data_ptr(_Up*) const [with _Up = unsigned int; _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	16	static
+alloc_traits.h:469:7:static void std::allocator_traits<std::allocator<_Tp1> >::deallocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::pointer, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = unsigned int]	48	static
+stl_construct.h:127:5:void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = unsigned int*]	32	static
+new_allocator.h:80:7:__gnu_cxx::new_allocator<_Tp>::new_allocator() [with _Tp = chkfs::dirent]	16	static
+alloc_traits.h:469:7:static void std::allocator_traits<std::allocator<_Tp1> >::deallocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::pointer, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = chkfs::dirent]	48	static
+new_allocator.h:80:7:__gnu_cxx::new_allocator<_Tp>::new_allocator() [with _Tp = chkfs::extent]	16	static
+alloc_traits.h:469:7:static void std::allocator_traits<std::allocator<_Tp1> >::deallocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::pointer, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = chkfs::extent]	48	static
+random.tcc:116:5:void std::linear_congruential_engine<_UIntType, __a, __c, __m>::seed(std::linear_congruential_engine<_UIntType, __a, __c, __m>::result_type) [with _UIntType = long unsigned int; _UIntType __a = 16807; _UIntType __c = 0; _UIntType __m = 2147483647]	32	static
+initializer_list:75:7:constexpr const _E* std::initializer_list<_E>::begin() const [with _E = double]	16	static
+initializer_list:79:7:constexpr const _E* std::initializer_list<_E>::end() const [with _E = double]	48	static
+allocator.h:138:7:std::allocator< <template-parameter-1-1> >::allocator() [with _Tp = double]	32	static
+allocator.h:153:7:std::allocator< <template-parameter-1-1> >::~allocator() [with _Tp = double]	32	static
+stl_vector.h:650:2:std::vector<_Tp, _Alloc>::vector(_InputIterator, _InputIterator, const allocator_type&) [with _InputIterator = const double*; <template-parameter-2-2> = void; _Tp = double; _Alloc = std::allocator<double>]	80	static
+stl_vector.h:128:2:std::_Vector_base<_Tp, _Alloc>::_Vector_impl::_Vector_impl() [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+random.tcc:2653:5:void std::discrete_distribution<_IntType>::param_type::_M_initialize() [with _IntType = unsigned int]	64	static
+stl_vector.h:1004:7:bool std::vector<_Tp, _Alloc>::empty() const [with _Tp = double; _Alloc = std::allocator<double>]	64	static
+random.h:160:2:std::__detail::_Adaptor<_Engine, _DInputType>::_Adaptor(_Engine&) [with _Engine = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>; _DInputType = double]	16	static
+random.h:177:2:_DInputType std::__detail::_Adaptor<_Engine, _DInputType>::operator()() [with _Engine = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>; _DInputType = double]	32	static
+stl_vector.h:817:7:std::vector<_Tp, _Alloc>::const_iterator std::vector<_Tp, _Alloc>::begin() const [with _Tp = double; _Alloc = std::allocator<double>]	64	static
+stl_vector.h:835:7:std::vector<_Tp, _Alloc>::const_iterator std::vector<_Tp, _Alloc>::end() const [with _Tp = double; _Alloc = std::allocator<double>]	64	static
+stl_algobase.h:1004:5:_ForwardIterator std::lower_bound(_ForwardIterator, _ForwardIterator, const _Tp&) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const double*, std::vector<double> >; _Tp = double]	48	static
+stl_iterator.h:989:5:typename __gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type __gnu_cxx::operator-(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = const double*; _Container = std::vector<double>]	48	static
+move.h:74:5:constexpr _Tp&& std::forward(typename std::remove_reference<_Tp>::type&) [with _Tp = chkfs::extent]	16	static
+alloc_traits.h:482:2:) [with _Up = chkfs::extent; _Args = {chkfs::extent}; _Tp = chkfs::extent]	48	static
+vector.tcc:426:7:) [with _Args = {chkfs::extent}; _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	128	static
+stl_vector.h:1140:7:std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::back() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	64	static
+move.h:74:5:constexpr _Tp&& std::forward(typename std::remove_reference<_Tp>::type&) [with _Tp = chkfs::dirent]	16	static
+alloc_traits.h:482:2:) [with _Up = chkfs::dirent; _Args = {chkfs::dirent}; _Tp = chkfs::dirent]	48	static
+vector.tcc:426:7:) [with _Args = {chkfs::dirent}; _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	128	static
+stl_vector.h:1140:7:std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::back() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	64	static
+move.h:74:5:constexpr _Tp&& std::forward(typename std::remove_reference<_Tp>::type&) [with _Tp = const chkfs::dirent&]	16	static
+new_allocator.h:144:2:) [with _Up = chkfs::dirent; _Args = {const chkfs::dirent&}; _Tp = chkfs::dirent]	64	static
+stl_iterator.h:806:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::__normal_iterator(const _Iterator&) [with _Iterator = chkfs::dirent*; _Container = std::vector<chkfs::dirent>]	16	static
+stl_vector.h:1753:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::_M_check_len(std::vector<_Tp, _Alloc>::size_type, const char*) const [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	96	static
+stl_vector.h:808:7:std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::begin() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	48	static
+stl_iterator.h:989:5:typename __gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type __gnu_cxx::operator-(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = chkfs::dirent*; _Container = std::vector<chkfs::dirent>]	48	static
+stl_vector.h:340:7:std::_Vector_base<_Tp, _Alloc>::pointer std::_Vector_base<_Tp, _Alloc>::_M_allocate(std::size_t) [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+stl_vector.h:462:7:static std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_S_relocate(std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::_Tp_alloc_type&) [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	64	static
+stl_iterator.h:871:7:const _Iterator& __gnu_cxx::__normal_iterator<_Iterator, _Container>::base() const [with _Iterator = chkfs::dirent*; _Container = std::vector<chkfs::dirent>]	16	static
+stl_vector.h:273:7:std::_Vector_base<_Tp, _Alloc>::_Tp_alloc_type& std::_Vector_base<_Tp, _Alloc>::_M_get_Tp_allocator() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	16	static
+stl_construct.h:203:5:void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = chkfs::dirent*; _Tp = chkfs::dirent]	48	static
+stl_vector.h:1773:7:static std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::_S_max_size(const _Tp_alloc_type&) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	64	static
+allocator.h:141:7:std::allocator< <template-parameter-1-1> >::allocator(const std::allocator< <template-parameter-1-1> >&) [with _Tp = unsigned int]	32	static
+stl_vector.h:133:2:std::_Vector_base<_Tp, _Alloc>::_Vector_impl::_Vector_impl(const _Tp_alloc_type&) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	32	static
+stl_vector.h:356:7:void std::_Vector_base<_Tp, _Alloc>::_M_create_storage(std::size_t) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	32	static
+stl_uninitialized.h:661:5:_ForwardIterator std::__uninitialized_default_n_a(_ForwardIterator, _Size, std::allocator<_Tp>&) [with _ForwardIterator = unsigned int*; _Size = long unsigned int; _Tp = unsigned int]	48	static
+stl_iterator.h:871:7:const _Iterator& __gnu_cxx::__normal_iterator<_Iterator, _Container>::base() const [with _Iterator = unsigned int*; _Container = std::vector<unsigned int>]	16	static
+stl_iterator.h:819:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::reference __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator*() const [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	16	static
+move.h:182:5:typename std::enable_if<std::__and_<std::__not_<std::__is_tuple_like<_Tp> >, std::is_move_constructible<_Tp>, std::is_move_assignable<_Tp> >::value>::type std::swap(_Tp&, _Tp&) [with _Tp = chkfs::extent]	48	static
+stl_pair.h:524:5:constexpr std::pair<typename std::__decay_and_strip<_Tp>::__type, typename std::__decay_and_strip<_T2>::__type> std::make_pair(_T1&&, _T2&&) [with _T1 = long unsigned int; _T2 = long unsigned int]	80	static
+uniform_int_dist.h:86:2:std::uniform_int_distribution<_IntType>::result_type std::uniform_int_distribution<_IntType>::param_type::b() const [with _IntType = long unsigned int]	16	static
+uniform_int_dist.h:82:2:std::uniform_int_distribution<_IntType>::result_type std::uniform_int_distribution<_IntType>::param_type::a() const [with _IntType = long unsigned int]	16	static
+random.h:347:7:std::linear_congruential_engine<_UIntType, __a, __c, __m>::result_type std::linear_congruential_engine<_UIntType, __a, __c, __m>::operator()() [with _UIntType = long unsigned int; _UIntType __a = 16807; _UIntType __c = 0; _UIntType __m = 2147483647]	32	static
+random.tcc:2653:5:void std::discrete_distribution<_IntType>::param_type::_M_initialize() [with _IntType = int]	64	static
+stl_vector.h:347:7:void std::_Vector_base<_Tp, _Alloc>::_M_deallocate(std::_Vector_base<_Tp, _Alloc>::pointer, std::size_t) [with _Tp = double; _Alloc = std::allocator<double>]	48	static
+stl_construct.h:127:5:void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = double*]	32	static
+new_allocator.h:119:7:void __gnu_cxx::new_allocator<_Tp>::deallocate(__gnu_cxx::new_allocator<_Tp>::pointer, __gnu_cxx::new_allocator<_Tp>::size_type) [with _Tp = unsigned int]	48	static
+stl_construct.h:117:9:static void std::_Destroy_aux<true>::__destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = unsigned int*]	16	static
+new_allocator.h:119:7:void __gnu_cxx::new_allocator<_Tp>::deallocate(__gnu_cxx::new_allocator<_Tp>::pointer, __gnu_cxx::new_allocator<_Tp>::size_type) [with _Tp = chkfs::dirent]	48	static
+new_allocator.h:119:7:void __gnu_cxx::new_allocator<_Tp>::deallocate(__gnu_cxx::new_allocator<_Tp>::pointer, __gnu_cxx::new_allocator<_Tp>::size_type) [with _Tp = chkfs::extent]	48	static
+random.h:146:7:_Tp std::__detail::__mod(_Tp) [with _Tp = long unsigned int; _Tp __m = 2147483647; _Tp __a = 1; _Tp __c = 0]	32	static
+initializer_list:71:7:constexpr std::initializer_list<_E>::size_type std::initializer_list<_E>::size() const [with _E = double]	16	static
+new_allocator.h:80:7:__gnu_cxx::new_allocator<_Tp>::new_allocator() [with _Tp = double]	16	static
+new_allocator.h:89:7:__gnu_cxx::new_allocator<_Tp>::~new_allocator() [with _Tp = double]	16	static
+stl_vector.h:290:7:std::_Vector_base<_Tp, _Alloc>::_Vector_base(const allocator_type&) [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+stl_iterator_base_types.h:205:5:constexpr typename std::iterator_traits<_Iterator>::iterator_category std::__iterator_category(const _Iter&) [with _Iter = const double*]	16	static
+stl_iterator_base_funcs.h:138:5:constexpr typename std::iterator_traits<_Iterator>::difference_type std::distance(_InputIterator, _InputIterator) [with _InputIterator = const double*]	32	static
+stl_vector.h:1574:2:void std::vector<_Tp, _Alloc>::_M_range_initialize(_ForwardIterator, _ForwardIterator, std::forward_iterator_tag) [with _ForwardIterator = const double*; _Tp = double; _Alloc = std::allocator<double>]	80	static
+stl_vector.h:94:2:std::_Vector_base<_Tp, _Alloc>::_Vector_impl_data::_Vector_impl_data() [with _Tp = double; _Alloc = std::allocator<double>]	16	static
+stl_vector.h:915:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::size() const [with _Tp = double; _Alloc = std::allocator<double>]	16	static
+stl_vector.h:1495:7:void std::vector<_Tp, _Alloc>::clear() [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+stl_vector.h:808:7:std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::begin() [with _Tp = double; _Alloc = std::allocator<double>]	48	static
+stl_vector.h:826:7:std::vector<_Tp, _Alloc>::iterator std::vector<_Tp, _Alloc>::end() [with _Tp = double; _Alloc = std::allocator<double>]	48	static
+stl_numeric.h:132:5:_Tp std::accumulate(_InputIterator, _InputIterator, _Tp) [with _InputIterator = __gnu_cxx::__normal_iterator<double*, std::vector<double> >; _Tp = double]	48	static
+random.tcc:84:7:_OutputIterator std::__detail::__normalize(_InputIterator, _InputIterator, _OutputIterator, const _Tp&) [with _InputIterator = __gnu_cxx::__normal_iterator<double*, std::vector<double> >; _OutputIterator = __gnu_cxx::__normal_iterator<double*, std::vector<double> >; _Tp = double]	64	static
+vector.tcc:66:5:void std::vector<_Tp, _Alloc>::reserve(std::vector<_Tp, _Alloc>::size_type) [with _Tp = double; _Alloc = std::allocator<double>]	48	static
+stl_iterator.h:556:5:std::back_insert_iterator<_Container> std::back_inserter(_Container&) [with _Container = std::vector<double>]	48	static
+stl_numeric.h:250:5:_OutputIterator std::partial_sum(_InputIterator, _InputIterator, _OutputIterator) [with _InputIterator = __gnu_cxx::__normal_iterator<double*, std::vector<double> >; _OutputIterator = std::back_insert_iterator<std::vector<double> >]	64	static
+stl_vector.h:1040:7:std::vector<_Tp, _Alloc>::reference std::vector<_Tp, _Alloc>::operator[](std::vector<_Tp, _Alloc>::size_type) [with _Tp = double; _Alloc = std::allocator<double>]	16	static
+stl_iterator.h:893:5:bool __gnu_cxx::operator==(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = const double*; _Container = std::vector<double>]	48	static
+random.tcc:3316:5:_RealType std::generate_canonical(_UniformRandomNumberGenerator&) [with _RealType = double; long unsigned int __bits = 53; _UniformRandomNumberGenerator = std::linear_congruential_engine<long unsigned int, 16807, 0, 2147483647>]	128	static
+stl_iterator.h:806:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::__normal_iterator(const _Iterator&) [with _Iterator = const double*; _Container = std::vector<double>]	16	static
+stl_iterator_base_funcs.h:138:5:constexpr typename std::iterator_traits<_Iterator>::difference_type std::distance(_InputIterator, _InputIterator) [with _InputIterator = __gnu_cxx::__normal_iterator<const double*, std::vector<double> >]	32	static
+stl_algobase.h:966:5:_ForwardIterator std::__lower_bound(_ForwardIterator, _ForwardIterator, const _Tp&, _Compare) [with _ForwardIterator = __gnu_cxx::__normal_iterator<const double*, std::vector<double> >; _Tp = double; _Compare = __gnu_cxx::__ops::_Iter_less_val]	80	static
+stl_iterator.h:871:7:const _Iterator& __gnu_cxx::__normal_iterator<_Iterator, _Container>::base() const [with _Iterator = const double*; _Container = std::vector<double>]	16	static
+new_allocator.h:144:2:) [with _Up = chkfs::extent; _Args = {chkfs::extent}; _Tp = chkfs::extent]	64	static
+stl_vector.h:1753:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::_M_check_len(std::vector<_Tp, _Alloc>::size_type, const char*) const [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	96	static
+stl_vector.h:340:7:std::_Vector_base<_Tp, _Alloc>::pointer std::_Vector_base<_Tp, _Alloc>::_M_allocate(std::size_t) [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	32	static
+stl_vector.h:462:7:static std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_S_relocate(std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::_Tp_alloc_type&) [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	64	static
+stl_vector.h:273:7:std::_Vector_base<_Tp, _Alloc>::_Tp_alloc_type& std::_Vector_base<_Tp, _Alloc>::_M_get_Tp_allocator() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	16	static
+stl_construct.h:203:5:void std::_Destroy(_ForwardIterator, _ForwardIterator, std::allocator<_T2>&) [with _ForwardIterator = chkfs::extent*; _Tp = chkfs::extent]	48	static
+stl_iterator.h:867:7:__gnu_cxx::__normal_iterator<_Iterator, _Container> __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator-(__gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type) const [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	64	static
+new_allocator.h:144:2:) [with _Up = chkfs::dirent; _Args = {chkfs::dirent}; _Tp = chkfs::dirent]	64	static
+stl_iterator.h:867:7:__gnu_cxx::__normal_iterator<_Iterator, _Container> __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator-(__gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type) const [with _Iterator = chkfs::dirent*; _Container = std::vector<chkfs::dirent>]	64	static
+stl_iterator.h:819:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::reference __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator*() const [with _Iterator = chkfs::dirent*; _Container = std::vector<chkfs::dirent>]	16	static
+stl_vector.h:920:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::max_size() const [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+alloc_traits.h:443:7:static _Tp* std::allocator_traits<std::allocator<_Tp1> >::allocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = chkfs::dirent]	32	static
+stl_vector.h:450:7:static std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_S_do_relocate(std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::_Tp_alloc_type&, std::true_type) [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	48	static
+stl_construct.h:127:5:void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = chkfs::dirent*]	32	static
+alloc_traits.h:505:7:static std::allocator_traits<std::allocator<_Tp1> >::size_type std::allocator_traits<std::allocator<_Tp1> >::max_size(const allocator_type&) [with _Tp = unsigned int]	32	static
+new_allocator.h:83:7:__gnu_cxx::new_allocator<_Tp>::new_allocator(const __gnu_cxx::new_allocator<_Tp>&) [with _Tp = unsigned int]	16	static
+stl_vector.h:340:7:std::_Vector_base<_Tp, _Alloc>::pointer std::_Vector_base<_Tp, _Alloc>::_M_allocate(std::size_t) [with _Tp = unsigned int; _Alloc = std::allocator<unsigned int>]	32	static
+stl_uninitialized.h:592:5:_ForwardIterator std::__uninitialized_default_n(_ForwardIterator, _Size) [with _ForwardIterator = unsigned int*; _Size = long unsigned int]	48	static
+stl_pair.h:341:12:constexpr std::pair<_T1, _T2>::pair(_U1&&, _U2&&) [with _U1 = long unsigned int; _U2 = long unsigned int; typename std::enable_if<(std::_PCC<true, _T1, _T2>::_MoveConstructiblePair<_U1, _U2>() && std::_PCC<true, _T1, _T2>::_ImplicitlyMoveConvertiblePair<_U1, _U2>()), bool>::type <anonymous> = true; _T1 = long unsigned int; _T2 = long unsigned int]	48	static
+random.h:146:7:_Tp std::__detail::__mod(_Tp) [with _Tp = long unsigned int; _Tp __m = 2147483647; _Tp __a = 16807; _Tp __c = 0]	32	static
+alloc_traits.h:469:7:static void std::allocator_traits<std::allocator<_Tp1> >::deallocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::pointer, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = double]	48	static
+stl_construct.h:117:9:static void std::_Destroy_aux<true>::__destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = double*]	16	static
+random.h:135:2:static _Tp std::__detail::_Mod<_Tp, __m, __a, __c, true, __s>::__calc(_Tp) [with _Tp = long unsigned int; _Tp __m = 2147483647; _Tp __a = 1; _Tp __c = 0; bool __s = true]	16	static
+stl_vector.h:133:2:std::_Vector_base<_Tp, _Alloc>::_Vector_impl::_Vector_impl(const _Tp_alloc_type&) [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+stl_iterator_base_funcs.h:98:5:constexpr typename std::iterator_traits<_Iterator>::difference_type std::__distance(_RandomAccessIterator, _RandomAccessIterator, std::random_access_iterator_tag) [with _RandomAccessIterator = const double*]	16	static
+stl_vector.h:1764:7:static std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::_S_check_init_len(std::vector<_Tp, _Alloc>::size_type, const allocator_type&) [with _Tp = double; _Alloc = std::allocator<double>]	64	static
+stl_vector.h:340:7:std::_Vector_base<_Tp, _Alloc>::pointer std::_Vector_base<_Tp, _Alloc>::_M_allocate(std::size_t) [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+stl_uninitialized.h:305:5:_ForwardIterator std::__uninitialized_copy_a(_InputIterator, _InputIterator, _ForwardIterator, std::allocator<_Tp>&) [with _InputIterator = const double*; _ForwardIterator = double*; _Tp = double]	48	static
+stl_vector.h:1789:7:void std::vector<_Tp, _Alloc>::_M_erase_at_end(std::vector<_Tp, _Alloc>::pointer) [with _Tp = double; _Alloc = std::allocator<double>]	48	static
+stl_iterator.h:806:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::__normal_iterator(const _Iterator&) [with _Iterator = double*; _Container = std::vector<double>]	16	static
+stl_iterator.h:907:5:bool __gnu_cxx::operator!=(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = double*; _Container = std::vector<double>]	48	static
+stl_iterator.h:827:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>& __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator++() [with _Iterator = double*; _Container = std::vector<double>]	16	static
+stl_iterator.h:819:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::reference __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator*() const [with _Iterator = double*; _Container = std::vector<double>]	16	static
+stl_vector.h:920:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::max_size() const [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+stl_vector.h:995:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::capacity() const [with _Tp = double; _Alloc = std::allocator<double>]	16	static
+stl_vector.h:462:7:static std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_S_relocate(std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::_Tp_alloc_type&) [with _Tp = double; _Alloc = std::allocator<double>]	64	static
+stl_iterator.h:490:7:std::back_insert_iterator<_Container>::back_insert_iterator(_Container&) [with _Container = std::vector<double>]	32	static
+stl_iterator.h:893:5:bool __gnu_cxx::operator==(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = double*; _Container = std::vector<double>]	48	static
+stl_iterator.h:529:7:std::back_insert_iterator<_Container>& std::back_insert_iterator<_Container>::operator*() [with _Container = std::vector<double>]	16	static
+stl_iterator.h:513:7:std::back_insert_iterator<_Container>& std::back_insert_iterator<_Container>::operator=(const typename _Container::value_type&) [with _Container = std::vector<double>]	32	static
+stl_iterator.h:534:7:std::back_insert_iterator<_Container>& std::back_insert_iterator<_Container>::operator++() [with _Container = std::vector<double>]	16	static
+stl_iterator_base_types.h:205:5:constexpr typename std::iterator_traits<_Iterator>::iterator_category std::__iterator_category(const _Iter&) [with _Iter = __gnu_cxx::__normal_iterator<const double*, std::vector<double> >]	16	static
+stl_iterator_base_funcs.h:98:5:constexpr typename std::iterator_traits<_Iterator>::difference_type std::__distance(_RandomAccessIterator, _RandomAccessIterator, std::random_access_iterator_tag) [with _RandomAccessIterator = __gnu_cxx::__normal_iterator<const double*, std::vector<double> >]	32	static
+stl_iterator_base_funcs.h:202:5:constexpr void std::advance(_InputIterator&, _Distance) [with _InputIterator = __gnu_cxx::__normal_iterator<const double*, std::vector<double> >; _Distance = long int]	48	static
+predefined_ops.h:64:7:bool __gnu_cxx::__ops::_Iter_less_val::operator()(_Iterator, _Value&) const [with _Iterator = __gnu_cxx::__normal_iterator<const double*, std::vector<double> >; _Value = const double]	48	static
+stl_iterator.h:827:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>& __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator++() [with _Iterator = const double*; _Container = std::vector<double>]	16	static
+stl_vector.h:920:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::max_size() const [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	32	static
+stl_vector.h:915:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::size() const [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	16	static
+alloc_traits.h:443:7:static _Tp* std::allocator_traits<std::allocator<_Tp1> >::allocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = chkfs::extent]	32	static
+stl_vector.h:450:7:static std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_S_do_relocate(std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::_Tp_alloc_type&, std::true_type) [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	48	static
+stl_construct.h:127:5:void std::_Destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = chkfs::extent*]	32	static
+stl_vector.h:1773:7:static std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::_S_max_size(const _Tp_alloc_type&) [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	64	static
+stl_vector.h:277:7:const _Tp_alloc_type& std::_Vector_base<_Tp, _Alloc>::_M_get_Tp_allocator() const [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	16	static
+new_allocator.h:102:7:_Tp* __gnu_cxx::new_allocator<_Tp>::allocate(__gnu_cxx::new_allocator<_Tp>::size_type, const void*) [with _Tp = chkfs::dirent]	48	static
+stl_uninitialized.h:958:5:_ForwardIterator std::__relocate_a(_InputIterator, _InputIterator, _ForwardIterator, _Allocator&) [with _InputIterator = chkfs::dirent*; _ForwardIterator = chkfs::dirent*; _Allocator = std::allocator<chkfs::dirent>]	64	static
+stl_construct.h:117:9:static void std::_Destroy_aux<true>::__destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = chkfs::dirent*]	16	static
+new_allocator.h:132:7:__gnu_cxx::new_allocator<_Tp>::size_type __gnu_cxx::new_allocator<_Tp>::max_size() const [with _Tp = unsigned int]	16	static
+alloc_traits.h:443:7:static _Tp* std::allocator_traits<std::allocator<_Tp1> >::allocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = unsigned int]	32	static
+stl_uninitialized.h:561:9:static _ForwardIterator std::__uninitialized_default_n_1<true>::__uninit_default_n(_ForwardIterator, _Size) [with _ForwardIterator = unsigned int*; _Size = long unsigned int]	48	static
+random.h:135:2:static _Tp std::__detail::_Mod<_Tp, __m, __a, __c, true, __s>::__calc(_Tp) [with _Tp = long unsigned int; _Tp __m = 2147483647; _Tp __a = 16807; _Tp __c = 0; bool __s = true]	16	static
+new_allocator.h:119:7:void __gnu_cxx::new_allocator<_Tp>::deallocate(__gnu_cxx::new_allocator<_Tp>::pointer, __gnu_cxx::new_allocator<_Tp>::size_type) [with _Tp = double]	48	static
+allocator.h:141:7:std::allocator< <template-parameter-1-1> >::allocator(const std::allocator< <template-parameter-1-1> >&) [with _Tp = double]	32	static
+stl_vector.h:1773:7:static std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::_S_max_size(const _Tp_alloc_type&) [with _Tp = double; _Alloc = std::allocator<double>]	64	static
+alloc_traits.h:443:7:static _Tp* std::allocator_traits<std::allocator<_Tp1> >::allocate(std::allocator_traits<std::allocator<_Tp1> >::allocator_type&, std::allocator_traits<std::allocator<_Tp1> >::size_type) [with _Tp = double]	32	static
+stl_uninitialized.h:115:5:_ForwardIterator std::uninitialized_copy(_InputIterator, _InputIterator, _ForwardIterator) [with _InputIterator = const double*; _ForwardIterator = double*]	64	static
+stl_iterator.h:871:7:const _Iterator& __gnu_cxx::__normal_iterator<_Iterator, _Container>::base() const [with _Iterator = double*; _Container = std::vector<double>]	16	static
+stl_vector.h:277:7:const _Tp_alloc_type& std::_Vector_base<_Tp, _Alloc>::_M_get_Tp_allocator() const [with _Tp = double; _Alloc = std::allocator<double>]	16	static
+stl_vector.h:450:7:static std::vector<_Tp, _Alloc>::pointer std::vector<_Tp, _Alloc>::_S_do_relocate(std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::pointer, std::vector<_Tp, _Alloc>::_Tp_alloc_type&, std::true_type) [with _Tp = double; _Alloc = std::allocator<double>]	48	static
+move.h:47:5:constexpr _Tp* std::__addressof(_Tp&) [with _Tp = std::vector<double>]	16	static
+stl_vector.h:1184:7:void std::vector<_Tp, _Alloc>::push_back(const value_type&) [with _Tp = double; _Alloc = std::allocator<double>]	32	static
+stl_iterator_base_funcs.h:174:5:constexpr void std::__advance(_RandomAccessIterator&, _Distance, std::random_access_iterator_tag) [with _RandomAccessIterator = __gnu_cxx::__normal_iterator<const double*, std::vector<double> >; _Distance = long int]	32	static
+stl_iterator.h:819:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::reference __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator*() const [with _Iterator = const double*; _Container = std::vector<double>]	16	static
+stl_vector.h:1773:7:static std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::_S_max_size(const _Tp_alloc_type&) [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	64	static
+stl_vector.h:277:7:const _Tp_alloc_type& std::_Vector_base<_Tp, _Alloc>::_M_get_Tp_allocator() const [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	16	static
+new_allocator.h:102:7:_Tp* __gnu_cxx::new_allocator<_Tp>::allocate(__gnu_cxx::new_allocator<_Tp>::size_type, const void*) [with _Tp = chkfs::extent]	48	static
+stl_uninitialized.h:958:5:_ForwardIterator std::__relocate_a(_InputIterator, _InputIterator, _ForwardIterator, _Allocator&) [with _InputIterator = chkfs::extent*; _ForwardIterator = chkfs::extent*; _Allocator = std::allocator<chkfs::extent>]	64	static
+stl_construct.h:117:9:static void std::_Destroy_aux<true>::__destroy(_ForwardIterator, _ForwardIterator) [with _ForwardIterator = chkfs::extent*]	16	static
+alloc_traits.h:505:7:static std::allocator_traits<std::allocator<_Tp1> >::size_type std::allocator_traits<std::allocator<_Tp1> >::max_size(const allocator_type&) [with _Tp = chkfs::dirent]	32	static
+new_allocator.h:132:7:__gnu_cxx::new_allocator<_Tp>::size_type __gnu_cxx::new_allocator<_Tp>::max_size() const [with _Tp = chkfs::dirent]	16	static
+stl_algobase.h:280:5:_Iterator std::__niter_base(_Iterator) [with _Iterator = chkfs::dirent*]	16	static
+stl_uninitialized.h:924:5:std::__enable_if_t<std::__is_bitwise_relocatable<_Tp>::value, _Tp*> std::__relocate_a_1(_Tp*, _Tp*, _Tp*, std::allocator<_T2>&) [with _Tp = chkfs::dirent; _Up = chkfs::dirent]	64	static
+new_allocator.h:102:7:_Tp* __gnu_cxx::new_allocator<_Tp>::allocate(__gnu_cxx::new_allocator<_Tp>::size_type, const void*) [with _Tp = unsigned int]	48	static
+stl_algobase.h:802:5:_OI std::fill_n(_OI, _Size, const _Tp&) [with _OI = unsigned int*; _Size = long unsigned int; _Tp = unsigned int]	48	static
+new_allocator.h:83:7:__gnu_cxx::new_allocator<_Tp>::new_allocator(const __gnu_cxx::new_allocator<_Tp>&) [with _Tp = double]	16	static
+alloc_traits.h:505:7:static std::allocator_traits<std::allocator<_Tp1> >::size_type std::allocator_traits<std::allocator<_Tp1> >::max_size(const allocator_type&) [with _Tp = double]	32	static
+new_allocator.h:102:7:_Tp* __gnu_cxx::new_allocator<_Tp>::allocate(__gnu_cxx::new_allocator<_Tp>::size_type, const void*) [with _Tp = double]	48	static
+stl_uninitialized.h:99:9:static _ForwardIterator std::__uninitialized_copy<true>::__uninit_copy(_InputIterator, _InputIterator, _ForwardIterator) [with _InputIterator = const double*; _ForwardIterator = double*]	48	static
+stl_uninitialized.h:958:5:_ForwardIterator std::__relocate_a(_InputIterator, _InputIterator, _ForwardIterator, _Allocator&) [with _InputIterator = double*; _ForwardIterator = double*; _Allocator = std::allocator<double>]	64	static
+alloc_traits.h:482:2:) [with _Up = double; _Args = {const double&}; _Tp = double]	48	static
+vector.tcc:426:7:) [with _Args = {const double&}; _Tp = double; _Alloc = std::allocator<double>]	128	static
+stl_iterator.h:855:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>& __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator+=(__gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type) [with _Iterator = const double*; _Container = std::vector<double>]	16	static
+alloc_traits.h:505:7:static std::allocator_traits<std::allocator<_Tp1> >::size_type std::allocator_traits<std::allocator<_Tp1> >::max_size(const allocator_type&) [with _Tp = chkfs::extent]	32	static
+new_allocator.h:132:7:__gnu_cxx::new_allocator<_Tp>::size_type __gnu_cxx::new_allocator<_Tp>::max_size() const [with _Tp = chkfs::extent]	16	static
+stl_algobase.h:280:5:_Iterator std::__niter_base(_Iterator) [with _Iterator = chkfs::extent*]	16	static
+stl_uninitialized.h:924:5:std::__enable_if_t<std::__is_bitwise_relocatable<_Tp>::value, _Tp*> std::__relocate_a_1(_Tp*, _Tp*, _Tp*, std::allocator<_T2>&) [with _Tp = chkfs::extent; _Up = chkfs::extent]	64	static
+stl_algobase.h:280:5:_Iterator std::__niter_base(_Iterator) [with _Iterator = unsigned int*]	16	static
+stl_algobase.h:767:5:typename __gnu_cxx::__enable_if<std::__is_scalar<_Tp>::__value, _OutputIterator>::__type std::__fill_n_a(_OutputIterator, _Size, const _Tp&) [with _OutputIterator = unsigned int*; _Size = long unsigned int; _Tp = unsigned int]	16	static
+stl_algobase.h:295:5:_Iterator std::__niter_wrap(const _Iterator&, _Iterator) [with _Iterator = unsigned int*]	16	static
+new_allocator.h:132:7:__gnu_cxx::new_allocator<_Tp>::size_type __gnu_cxx::new_allocator<_Tp>::max_size() const [with _Tp = double]	16	static
+stl_algobase.h:465:5:_OI std::copy(_II, _II, _OI) [with _II = const double*; _OI = double*]	64	static
+stl_algobase.h:280:5:_Iterator std::__niter_base(_Iterator) [with _Iterator = double*]	16	static
+stl_uninitialized.h:924:5:std::__enable_if_t<std::__is_bitwise_relocatable<_Tp>::value, _Tp*> std::__relocate_a_1(_Tp*, _Tp*, _Tp*, std::allocator<_T2>&) [with _Tp = double; _Up = double]	64	static
+move.h:74:5:constexpr _Tp&& std::forward(typename std::remove_reference<_Tp>::type&) [with _Tp = const double&]	16	static
+new_allocator.h:144:2:) [with _Up = double; _Args = {const double&}; _Tp = double]	48	static
+stl_vector.h:1753:7:std::vector<_Tp, _Alloc>::size_type std::vector<_Tp, _Alloc>::_M_check_len(std::vector<_Tp, _Alloc>::size_type, const char*) const [with _Tp = double; _Alloc = std::allocator<double>]	96	static
+stl_iterator.h:989:5:typename __gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type __gnu_cxx::operator-(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = double*; _Container = std::vector<double>]	48	static
+cpp_type_traits.h:428:5:_Iterator std::__miter_base(_Iterator) [with _Iterator = const double*]	16	static
+stl_algobase.h:438:5:_OI std::__copy_move_a2(_II, _II, _OI) [with bool _IsMove = false; _II = const double*; _OI = double*]	64	static
+stl_algobase.h:280:5:_Iterator std::__niter_base(_Iterator) [with _Iterator = const double*]	16	static
+stl_algobase.h:393:5:_OI std::__copy_move_a(_II, _II, _OI) [with bool _IsMove = false; _II = const double*; _OI = double*]	64	static
+stl_algobase.h:295:5:_Iterator std::__niter_wrap(const _Iterator&, _Iterator) [with _Iterator = double*]	16	static
+stl_algobase.h:375:2:static _Tp* std::__copy_move<_IsMove, true, std::random_access_iterator_tag>::__copy_m(const _Tp*, const _Tp*, _Tp*) [with _Tp = double; bool _IsMove = false]	64	static
+random.h:5271:11:std::discrete_distribution<unsigned int>::~discrete_distribution()	32	static
+mkchickadeefs.cc:543:34:void __static_initialization_and_destruction_0(int, int)	128	static
+stl_vector.h:675:7:std::vector<_Tp, _Alloc>::~vector() [with _Tp = chkfs::dirent; _Alloc = std::allocator<chkfs::dirent>]	32	static
+stl_vector.h:675:7:std::vector<_Tp, _Alloc>::~vector() [with _Tp = chkfs::extent; _Alloc = std::allocator<chkfs::extent>]	32	static
+mkchickadeefs.cc:543:34:cc)	16	static
