@@ -312,6 +312,12 @@ inline T read_unaligned(const uint8_t* ptr, T (U::* member)) {
     return a;
 }
 
+// order(sz)
+//    Returns order of a block, i.e. ceil(log(sz))
+//   If set_min is set to true then return the minimum of the order of sz and MIN_ORDER
+uint64_t order(uint64_t sz, bool set_min=false);
+// CHANGEMADE
+
 
 // kalloc(sz)
 //    Allocate and return a pointer to at least `sz` contiguous bytes

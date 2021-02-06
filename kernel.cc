@@ -211,6 +211,35 @@ uintptr_t proc::syscall(regstate* regs) {
         return 0;
     }
 
+    case SYSCALL_VARALLOC: { // Variable allocations for buddy allocator
+        uintptr_t addr = regs->reg_rdi; // USER VIRTUAL ADDR
+        uint64_t sz = regs->reg_rsi;
+        if (addr >= VA_LOWEND || addr & 0xFFF) {
+            return -1;
+        }
+        void* ptr = kalloc(sz); // KERNEL VIRTUAL ADDR
+        if (!ptr) return -1;
+        for (uintptr_t off = 0; 
+            off < (1 << order(sz, true)); addr += PAGESIZE, off += PAGESIZE) {
+            if (vmiter(this, addr).try_map(ka2pa(ptr), PTE_PWU) < 0) {
+                return -1;
+            } // If there is no contiguous block available then it won't allocate anything.
+        }
+        assert(this->canary == CANARY_EV, 
+            "Kernel task stack overflow, detected change in canary\n"); // canary checker
+        return 0;
+    } // CHANGEMADE
+
+    case SYSCALL_FREE: { // Free dat mem (without exiting like a n00b)
+        // Use vmiter to get the physical address to pass into kfree
+        vmiter it(this, reinterpret_cast<void*>(regs->reg_rdi));
+        kfree(pa2kptr(it.pa()));
+        if (ptr) {
+            
+        }
+        return 0;
+    } // CHANGEMADE
+
     case SYSCALL_PAUSE: {
         sti();
         for (uintptr_t delay = 0; delay < 1000000; ++delay) {

@@ -26,18 +26,25 @@ static uint64_t largest_fitting_ord(uint64_t num, int sz=1) {
 
 // order(sz)
 //   Equivalently ceiling(log_2(sz))
-static uint64_t order(uint64_t sz) {
+//   If set_min is set to true then return the minimum of the order of sz and MIN_ORDER.
+uint64_t order(uint64_t sz, bool set_min=false) {
     uint64_t y = sz - 1;
     uint64_t ord = 0;
     while (sz >>= 1) ord++;
 
     // If it is a power of 2 don't add 1.
     if (!(y & (y+1))) {
+        if (set_min) {
+            return ord >= MIN_ORDER ? ord : MIN_ORDER;
+        }
         return ord;
     } else { // Otherwise add 1 for ceiling.
-        return ord;
+        if (set_min) {
+            return ord + 1 >= MIN_ORDER ? ord + 1 : MIN_ORDER;
+        }
+        return ord + 1;
     }
-}
+} // CHANGEMADE
 
 
 // init_kalloc()
@@ -206,7 +213,7 @@ void kfree(void* ptr) {
         return;
     }
 
-    uint64_t addr = reinterpret_cast<uint64_t>(ptr);
+    uint64_t addr = kptr2pa(ptr);
     assert(addr & 0xfff == 0); // assert page-aligned pointer
     bapg *blk = &(pgmap[addr / PAGESIZE]);
     log_printf("[kfree] kfree called to free %p corr. to pa = 0x%x\n", ptr, addr);

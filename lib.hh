@@ -274,6 +274,8 @@ struct bitset_view {
 // Your numbers should be >=128 to avoid conflicts.
 #define SYSCALL_MAP_CONSOLE 128
 #define SYSCALL_NASTY 129 // Nasty recursive alloc to corrupt kernel stack
+#define SYSCALL_VARALLOC 130 // Variable allocations for buddy allocation tests
+#define SYSCALL_FREE 131 // Free memory a ptr points to
 
 // System call error return values
 
