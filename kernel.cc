@@ -245,6 +245,9 @@ uintptr_t proc::syscall(regstate* regs) {
         return 0;
     }
 
+    case SYSCALL_TESTKALLOC: 
+        return syscall_testkalloc(regs);
+
     case SYSCALL_PAUSE: {
         sti();
         for (uintptr_t delay = 0; delay < 1000000; ++delay) {
@@ -258,11 +261,12 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_FORK:
         return syscall_fork(regs);
     
-    case SYSCALL_NASTY:
-        syscall_nasty(100);
+    case SYSCALL_NASTY: {
+        long n =  syscall_nasty(regs);
         assert(this->canary == CANARY_EV, 
             "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return 0;
+        return n % 10;
+    }
 
     case SYSCALL_READ:
         return syscall_read(regs);
@@ -427,16 +431,39 @@ int proc::syscall_fork(regstate* regs) {
 
 
 // proc::syscall_nasty()
-//    Nasty recursive allocation to corrupt the stack.
-__attribute__((optimize("O0"))) int proc::syscall_nasty(int c) {
-    volatile long j  = 100; // some local var
-    (void) j;
-    if (c <= 0) {
-        return 0;
-    } else {
-        return syscall_nasty(c - 1);
+//    Nasty large array allocation to corrupt the stack.
+int proc::syscall_nasty(regstate* regs) {
+    int sz = regs->reg_rdi;
+    long arr[sz] = {0};
+    for (int i = 0; i < sz; ++i) {
+        arr[i] = i;
     }
+    long sum = 0;
+    for (int i = 0; i < sz; ++i) {
+        sum += 2 * arr[i];
+    }
+    return sum;
 }
+
+// proc::syscall_testkalloc() 
+//    Test cases for buddy allocator
+int proc::syscall_testkalloc(regstate* regs) {
+    int tcase = regs->reg_rdi;
+    switch (tcase) {
+        case 0: {
+            // Allocate a bunch of pages in succession, then free them.
+
+            break;
+        }
+            
+        default: {
+            log_printf("Test case number %d not implemented\n", tcase);
+            break;
+        }
+    }
+    return 0;
+}
+
 
 // proc::syscall_read(regs), proc::syscall_write(regs),
 // proc::syscall_readdiskfile(regs)

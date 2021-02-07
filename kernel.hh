@@ -68,7 +68,10 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_fork(regstate* regs);
 
     // A nasty allocation syscall that corrupts the kernel stack via resursive local variable
-    __attribute__((optimize("O0"))) int syscall_nasty(int c);
+    int syscall_nasty(regstate* regs);
+
+    // Test the kalloc under buddy allocator framework
+    int syscall_testkalloc(regstate* regs);
 
     uintptr_t syscall_read(regstate* reg);
     uintptr_t syscall_write(regstate* reg);

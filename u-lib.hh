@@ -99,8 +99,14 @@ inline void sys_pause() {
     make_syscall(SYSCALL_PAUSE);
 }
 
-inline void sys_nasty() {
-    make_syscall(SYSCALL_NASTY);
+inline void sys_nasty(long sz) {
+    make_syscall(SYSCALL_NASTY, sz);
+}
+
+// sys_testkalloc(tcase)
+//    Runs a test case for buddy allocator.
+inline int sys_testkalloc(long tcase) {
+    return make_syscall(SYSCALL_TESTKALLOC, tcase);
 }
 
 // sys_kdisplay(display_type)

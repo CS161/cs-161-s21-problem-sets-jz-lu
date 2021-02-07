@@ -23,7 +23,7 @@ void process_main() {
         // Add code to this loop to call your new, nasty system call
         // with some probability!
         if (rand(0, ALLOC_SLOWDOWN - 1) < p) {
-            sys_nasty();
+            sys_nasty(1100);
         }
 
         if (rand(0, ALLOC_SLOWDOWN - 1) < p) {

@@ -58,16 +58,16 @@ This is done once per CPU to initialize the CPU state.
 4. Calls `proc::syscall(regstate*)` in `kernel.cc` in line 228 `call _ZN4proc7syscallEP8regstate`. Purpose: handles system calls by classifying the call and calling the functions necessary from there. Called whenever a user process raises a syscall.
 5. Calls `cpustate::schedule()` in via `jmp _ZN8cpustate8scheduleEP4proc`. Purpose: called to run the next process during things like a yield. A proc stack is allocated at the beginning of the entry prior to the call.
 6. `boot` in `bootentry.S`. Called while switching CPU out of compatibility mode in `boot.cc` during bootup. The jump is static, in the line `ljmp    $SEGSEL_BOOT_CODE, $boot`. The stack is set up at the very beginning in `boot_start`.
-7. `idle()` in `k-cpu.cc`. Called when there are no processes left to run, or when there are more CPUs asked for than `MAXCPU`, which `k-exception.S` handles by `jge ap_entry_failed` where `ap_entry_failed` is the imbedding of the `idle()` function (which is just an assembly inline) of doing `hlt` and then `jmp` forever. The allocation of the stack is done in `init_kernel()` by adding a `PROCSTACK_SIZE` to `%rsp`. That is called from `init_idle_task()`, called in `schedule()` the first time a CPU is initialized.
+7. `idle()` in `k-cpu.cc`. Called when there are no processes left to run, or when there are more CPUs asked for than `MAXCPU`, which `k-exception.S` handles by `jge ap_entry_failed` where `ap_entry_failed` is the imbedding of the `idle()` function (which is just an assembly inline) of doing `hlt` and then `jmp` forever. The allocation of the stack is done in `init_kernel()` by adding a `PROCSTACK_SIZE` to `%rsp`. That is called from `init_idle_task()`, called in `schedule()` the first time a CPU is initialized. Idling occurs in `resume()` when appropriate.
 
 ### Part D
-Note that we used dollar signs to decorate our console.
+Note that we used green dollar signs to decorate our console.
 
 ### Part E
 Nothing to write here.
 
 ### Part F
-Our nasty alloc recursively allocates a lot of local memory (100 longs or so) upon each call. The canary is asserted after most system calls are made (except for things like `getpid` which we assert beforehand). It is not perfect in catching overflow, but it does detect our nasty alloc.
+Our nasty alloc recursively allocates a lot of local memory in an array. The canary is asserted after most system calls are made (except for things like `getpid` which we assert beforehand). It is not perfect in catching overflow, but it does detect our nasty alloc.
 
 **Grading note**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.
 
