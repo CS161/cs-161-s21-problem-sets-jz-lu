@@ -60,9 +60,6 @@ void boot_process_start(pid_t pid, const char* name) {
     p->init_user(pid, ld.pagetable_);
     p->regs_->reg_rip = ld.entry_rip_;
 
-    log_printf("Hello from boot_start()\n");
-    log_backtrace();
-
     void* stkpg = kalloc(PAGESIZE);
     assert(stkpg);
     vmiter(p, MEMSIZE_VIRTUAL - PAGESIZE).map(stkpg, PTE_PWU);
@@ -198,6 +195,7 @@ uintptr_t proc::syscall(regstate* regs) {
         return 0;
 
     case SYSCALL_PAGE_ALLOC: {
+        log_printf("[SYSCALL_PAGE_ALLOC] NEW page allocation. Transferring to [kalloc]\n");
         uintptr_t addr = regs->reg_rdi;
         if (addr >= VA_LOWEND || addr & 0xFFF) {
             return -1;
@@ -214,14 +212,16 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_VARALLOC: { // Variable allocations for buddy allocator
         uintptr_t addr = regs->reg_rdi; // USER VIRTUAL ADDR
         uint64_t sz = regs->reg_rsi;
+        log_printf("[SYSCALL_VARALLOC] NEW request for alloc at UVA 0x%x of size 0x%x\n", addr, sz);
         if (addr >= VA_LOWEND || addr & 0xFFF) {
             return -1;
         }
         void* ptr = kalloc(sz); // KERNEL VIRTUAL ADDR
         if (!ptr) return -1;
         vmiter it(this, addr);
-        for (uintptr_t off = 0; 
-            off < (1 << order(sz, true)); off += PAGESIZE, it += PAGESIZE) {
+        log_printf("[SYSCALL_VARALLOC] MAPPING successful alloc\n");
+        for (uint64_t off = 0; 
+            off < (1UL << order(sz, true)); off += PAGESIZE, it += PAGESIZE) {
             if (it.try_map(ka2pa(ptr), PTE_PWU) < 0) {
                 return -1;
             } // If there is no contiguous block available then it won't allocate anything.
@@ -229,18 +229,21 @@ uintptr_t proc::syscall(regstate* regs) {
         assert(this->canary == CANARY_EV, 
             "Kernel task stack overflow, detected change in canary\n"); // canary checker
         return 0;
-    } // CHANGEMADE
+    }
 
     case SYSCALL_FREE: { // Free dat mem (without exiting like a n00b)
         // Use vmiter to get the physical address to pass into kfree
         vmiter it(this, regs->reg_rdi); // %rdi holds UVA
-        for (uint64_t off = 0; off < 1 << blk_order(it.pa()); off += PAGESIZE, it += PAGESIZE) {
+        log_printf("[SYSCALL_FREE] NEW free request for alloc at UVA 0x%x, PA 0x%x\n", 
+            regs->reg_rdi, it.pa() /* , 1UL << blk_order(it.pa()) */);
+        uint64_t blk_sz = 1UL << blk_order(it.pa());
+        for (uint64_t off = 0; off < blk_sz; off += PAGESIZE, it += PAGESIZE) {
             it.kfree_page();
         }
         assert(this->canary == CANARY_EV, 
             "Kernel task stack overflow, detected change in canary\n"); // canary checker
         return 0;
-    } // CHANGEMADE
+    }
 
     case SYSCALL_PAUSE: {
         sti();

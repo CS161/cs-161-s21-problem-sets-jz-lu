@@ -129,15 +129,15 @@ inline int sys_page_alloc(void* addr) {
 //    Allocate sz bytes of memory at address `addr`. `Addr` must be page-aligned
 //    (i.e., a multiple of PAGESIZE == 4096). Return 0 on success, E_NOMEM on
 //    out of memory, and E_INVAL on invalid `addr`.
-inline int sys_varalloc(void* addr, uint64_t sz) {
-    return make_syscall(SYSCALL_PAGE_ALLOC, reinterpret_cast<uintptr_t>(addr), sz);
-} // CHANGEMADE
+inline int sys_varalloc(void* va, uint64_t sz) {
+    return make_syscall(SYSCALL_VARALLOC, reinterpret_cast<uintptr_t>(va), sz);
+}
 
 // sys_free(addr)
 //    Free memory under buddy allocation system.
-inline int sys_free(void* addr) {
-    return make_syscall(SYSCALL_FREE, reinterpret_cast<uintptr_t>(addr));
-} // CHANGEMADE
+inline int sys_free(void* va) {
+    return make_syscall(SYSCALL_FREE, reinterpret_cast<uintptr_t>(va));
+}
 
 // sys_fork()
 //    Fork the current process. On success, return the child's process ID to
