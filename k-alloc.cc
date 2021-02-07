@@ -46,6 +46,12 @@ uint64_t order(uint64_t sz, bool set_min=false) {
     }
 } // CHANGEMADE
 
+// blk_order(pa)
+//    Returns order of block at pa.
+uint64_t blk_order(uint64_t pa) {
+    assert(pa & 0xfff == 0, "[blk_order] Error: pa not page-aligned.\n");
+    return pgmap[pa/PAGESIZE].ord;
+} // CHANGEMADE
 
 // init_kalloc()
 //    Initialize stuff needed by kalloc. Called from init_hardware,

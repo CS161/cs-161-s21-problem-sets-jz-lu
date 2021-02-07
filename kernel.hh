@@ -318,6 +318,11 @@ inline T read_unaligned(const uint8_t* ptr, T (U::* member)) {
 uint64_t order(uint64_t sz, bool set_min=false);
 // CHANGEMADE
 
+// blk_order
+//    Returns order of a blk with the given pa.
+uint64_t blk_order(uint64_t pa);
+// CHANGEMADE
+
 
 // kalloc(sz)
 //    Allocate and return a pointer to at least `sz` contiguous bytes
