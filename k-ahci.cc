@@ -347,6 +347,7 @@ ahcistate* ahcistate::find(int addr, int port) {
         for (; port < 32; ++port) {
             if ((dr->port_mask & (1U << port))
                 && dr->p[port].sstatus) {
+                    log_printf("AHCISTATE SIZE: 0x%x\n", sizeof(ahcistate));
                 return knew<ahcistate>(addr, port, dr);
             }
         }

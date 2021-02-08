@@ -112,7 +112,7 @@ void init_kalloc() {
 //    of pages.
 void* kalloc(size_t sz) {
     if (sz == 0 || sz > (1 << MAX_ORDER)) {
-        log_printf("Invalid memory request\n");
+        log_printf("[kalloc] Invalid memory request\n");
         return nullptr;
     }
 
@@ -121,8 +121,16 @@ void* kalloc(size_t sz) {
     uint64_t ord = order(sz);
     log_printf("[kalloc] NEW request of size 0x%x, ord %lu\n", sz, ord);
     ord = ord >= MIN_ORDER ? ord : MIN_ORDER; // min alloc is 1 page
-    assert(ord <= MAX_ORDER, 
-        "Error: attempted memory allocation of order larger than maximum\n");
+
+    if (ord == 14) {
+        log_printf("Gotcha you sneaky lil allocation now REVEAL UR SECRETS!\n");
+        log_backtrace();
+    }
+
+    if (ord > MAX_ORDER) {
+        log_printf("Error: attempted memory allocation of order larger than maximum\n");
+        return nullptr;
+    }
     log_printf("[kalloc] Actual ord given: %lu\n", ord);
     bapg* blk = nullptr; // New block pointer
 

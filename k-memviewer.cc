@@ -1,5 +1,6 @@
 #include "kernel.hh"
 #include "k-vmiter.hh"
+#include "k-ahci.hh"
 
 // k-memviewer.cc
 //
@@ -74,6 +75,11 @@ void memusage::refresh() {
     }
     memset(v_, 0, (maxpa / PAGESIZE) * sizeof(*v_));
     mark(ka2pa(v_), f_kernel);
+
+    // Mark the ahcistate for the SATADISK allocated in kernel_start()
+    for (uint64_t pg = 0; pg < order(sizeof(ahcistate)); ++pg) {
+        mark(ka2pa(sata_disk) + pg*PAGESIZE, f_kernel);
+    }
 
     for (auto i = 0; i < ncpu; ++i) {
         mark(ka2pa(cpus[i].idle_task_), f_kernel);

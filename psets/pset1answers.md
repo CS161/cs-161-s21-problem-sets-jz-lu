@@ -69,8 +69,6 @@ Nothing to write here.
 ### Part F
 Our nasty alloc recursively allocates a lot of local memory in an array. The canary is asserted after most system calls are made (except for things like `getpid` which we assert beforehand). It is not perfect in catching overflow, but it does detect our nasty alloc.
 
-**Grading note**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.
-
 ### Part G
 Some high-level notes on the design of our buddy allocator. Our struct of information is as follows:
 ```
@@ -85,7 +83,10 @@ struct bapg {
 
 bapg pgmap[MEMSIZE_PHYSICAL/PAGESIZE]
 ```
-The root block is the original block that has no buddy. To intialize, we walk through each range in `physical_ranges`. We iteratively compute the largest block of size `2**ord` that fits in the range, and set the relevant 
+The root block is the original block that has no buddy. To intialize, we walk through each range in `physical_ranges`. We iteratively compute the largest block of size `2**ord` that fits in the range, and set the relevant metadata. Allocating is done by walking through the lowest-order nonempty free list and breaking down blocks if needed, and freeing is done by computing buddy address, checking if free, and if so adjoining the blocks and repeating until no free buiddy is found, at which time the block is pushed onto the relevant free list.
+
+*Note*: the buddy allocator revealed an additional 4 pages of memory being allocated by the kernel that are not marked. A backtrace showed that an allocation in `ahcistate::find()` was made in `kernel_start()`, which has initially been returned a `nullptr` by the driver `kalloc`ator due to allocation being larger than a page. We marked these in `memviewer::refresh()` so again no pages are left unmarked.
 
 Grading notes
 -------------
+**Part F**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.

@@ -13,6 +13,7 @@ elf_symtabref symtab = {
 
 // sata_disk: pointer to the first SATA disk found
 ahcistate* sata_disk;
+// BUDDY ALLOCATOR MOD: this guy needs to be marked now!
 
 
 // init_hardware
