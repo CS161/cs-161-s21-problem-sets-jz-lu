@@ -105,6 +105,14 @@ The root block is the original block that has no buddy. To intialize, we walk th
 
 *Note*: the buddy allocator revealed an additional 4 pages of memory being allocated by the kernel that are not marked. A backtrace showed that an allocation in `ahcistate::find()` was made in `kernel_start()`, which has initially been returned a `nullptr` by the driver `kalloc`ator due to allocation being larger than a page. We marked these in `memviewer::refresh()` so again no pages are left unmarked.
 
+#### Buddy allocator test cases
+Our test cases all involve some form of deterministic or random allocation and free, followed by checking that the metadata is set properly (i.e. all invariants are consistent) via assert statements.
+1. Simple allocation: allocate a couple pages, then free them.
+2. Random allocations of multiples of `PAGESIZE`.
+3. Random allocations of random sizes (not necessarily a multiple of anything).
+4. Edge cases
+Checking on invariants is done in `check_kalloc()` and `check_kfree()`. These are called if the `BALLOC_PARANOIA` constant in `kernel.hh` is turned on.
+
 Grading notes
 -------------
 **Part F**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.

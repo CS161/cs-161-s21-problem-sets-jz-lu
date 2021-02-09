@@ -160,6 +160,9 @@ extern int ncpu;
 
 inline cpustate* this_cpu();
 
+// Debugging and testing flags
+const uint64_t BALLOC_PARANOIA = 1; // Buddy allocator flag
+
 
 // Buddy allocator orders.
 #define MIN_ORDER 12
