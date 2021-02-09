@@ -70,14 +70,14 @@ class memusage {
 void memusage::refresh() {
     if (!v_) {
         // Kernel allocates a page to hold the flags of the pages.
-        v_ = reinterpret_cast<unsigned*>(kalloc(PAGESIZE)); // TODO MARK THIS!
+        v_ = reinterpret_cast<unsigned*>(kalloc(PAGESIZE));
         assert(v_ != nullptr);
     }
     memset(v_, 0, (maxpa / PAGESIZE) * sizeof(*v_));
     mark(ka2pa(v_), f_kernel);
 
     // Mark the ahcistate for the SATADISK allocated in kernel_start()
-    for (uint64_t pg = 0; pg < order(sizeof(ahcistate)); ++pg) {
+    for (int pg = 0; pg < (1 << (order(sizeof(ahcistate)) - MIN_ORDER)); ++pg) {
         mark(ka2pa(sata_disk) + pg*PAGESIZE, f_kernel);
     }
 

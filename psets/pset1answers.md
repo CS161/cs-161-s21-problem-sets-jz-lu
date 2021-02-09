@@ -69,6 +69,24 @@ Nothing to write here.
 ### Part F
 Our nasty alloc recursively allocates a lot of local memory in an array. The canary is asserted after most system calls are made (except for things like `getpid` which we assert beforehand). It is not perfect in catching overflow, but it does detect our nasty alloc.
 
+We added the flag `Wstack-usage=4096` (this is quite large but it was for demonstrative purposes vis a vis `sys_nasty()` and can be tuned down to detect unintended overflows). This produced a compiler warning, so it did successfully catch the overflow as the error was static.
+```
+kernel.cc:435:5: warning: stack usage is 12848 bytes [-Wstack-usage=]
+  435 | int proc::syscall_nasty(regstate* regs) {
+      |     ^~~~
+```
+
+*Extra credit*: `fstack-usage` also detects the problem. The file generated `kernel.su` gives
+```
+// stuff...
+kernel.cc:435:5:int proc::syscall_nasty(regstate*)	12848	static
+kernel.cc:452:5:int proc::syscall_testkalloc(regstate*)	16	static
+kernel.cc:474:11:uintptr_t proc::syscall_read(regstate*)	48	static
+kernel.cc:522:11:uintptr_t proc::syscall_write(regstate*)	48	static
+// stuff...
+```
+which clearly detects the stack being far too large. If we change the allocation to a recursive loop style, then the `static` flag will change to `dynamic`. 
+
 ### Part G
 Some high-level notes on the design of our buddy allocator. Our struct of information is as follows:
 ```
@@ -90,3 +108,5 @@ The root block is the original block that has no buddy. To intialize, we walk th
 Grading notes
 -------------
 **Part F**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.
+
+**Extra credit attempts**: `fstack-usage` (see Part F). 

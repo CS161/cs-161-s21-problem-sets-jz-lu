@@ -11,7 +11,6 @@ list<bapg, &bapg::pglink> free_blocks[MAX_ORDER - MIN_ORDER + 1];
 
 // largest_fitting_ord(num, sz)
 //  returns largest power of 2 that fits inside of the given number
-// TODO change sz to a static
 static uint64_t largest_fitting_ord(uint64_t num, int sz=1) {
     if (num == 1) {
         return sz - 1;
@@ -77,7 +76,7 @@ void init_kalloc() {
                     i < (curr_addr + current_size) / PAGESIZE;
                     i++) {
 
-                    pgmap[i].free = true;
+                    pgmap[i].free = 1;
                     pgmap[i].ord = ord;
                     pgmap[i].r_ord = ord;
                     pgmap[i].r_addr = curr_addr; // change this
@@ -93,6 +92,54 @@ void init_kalloc() {
             }
         }
         ++range;
+    }
+}
+
+
+// check_kalloc()
+//  kalloc testing function
+void check_kalloc(void* ptr, uint64_t sz) {
+    if (!ptr) {
+        return;
+    }
+
+    uint64_t pa = kptr2pa(ptr);
+    bapg* start = &pgmap[pa/PAGESIZE];
+    uint64_t ord = order(sz, true);
+    assert(start->returned);
+
+    for (bapg* it = start; it < start + (1 << ord)/PAGESIZE; ++it) {
+        assert(it->ord == ord);
+        assert(!it->free);
+        if (it != start) {
+            assert(!it->returned);
+        }
+    }
+    for (bapg* it = free_blocks[ord - MIN_ORDER].front(); it; it = free_blocks[ord - MIN_ORDER].next(it)) {
+        assert(start != it);
+    }
+}
+
+
+// check_kfree()
+//   kfree testing function
+void check_kfree(void* ptr, uint64_t sz) {
+    if (!ptr) {
+        return;
+    }
+
+    uint64_t pa = kptr2pa(ptr);
+    bapg* start = &pgmap[pa/PAGESIZE];
+    uint64_t ord = order(sz, true);
+    log_printf("[CHECK_KFREE] computed order %i, blk order: %i, addr 0x%x\n", ord, start->ord,  ptr);
+    log_backtrace();
+    log_printf("Checking if its free: %i, ord: %i, r_ord: %i, r_addr: 0x%x, addr: 0x%x\n", 
+        start->free, start->ord, start->r_ord, start->r_addr, (start-pgmap)*PAGESIZE);
+    assert(start->free == 1);
+    for (bapg* it = start; it < start + (1 << ord)/PAGESIZE; ++it) {
+        assert(it->free == 1);
+        assert(it->returned == 0);
+        // We cannot check the order because the buddy can adjoin to some arbitrary block size
     }
 }
 
@@ -115,22 +162,13 @@ void* kalloc(size_t sz) {
         log_printf("[kalloc] Invalid memory request\n");
         return nullptr;
     }
-
+    uint64_t ord = order(sz);
+    
     auto irqs = page_lock.lock();
     void* ptr = nullptr;
-    uint64_t ord = order(sz);
     log_printf("[kalloc] NEW request of size 0x%x, ord %lu\n", sz, ord);
     ord = ord >= MIN_ORDER ? ord : MIN_ORDER; // min alloc is 1 page
 
-    if (ord == 14) {
-        log_printf("Gotcha you sneaky lil allocation now REVEAL UR SECRETS!\n");
-        log_backtrace();
-    }
-
-    if (ord > MAX_ORDER) {
-        log_printf("Error: attempted memory allocation of order larger than maximum\n");
-        return nullptr;
-    }
     log_printf("[kalloc] Actual ord given: %lu\n", ord);
     bapg* blk = nullptr; // New block pointer
 
@@ -186,7 +224,7 @@ void* kalloc(size_t sz) {
     uint64_t addr = (blk - pgmap)*PAGESIZE;
     log_printf("[kalloc] ALLOCATED pa = 0x%x\n", addr);
     ptr = pa2kptr<void*>(addr);
-    blk->returned = true;
+    blk->returned = 1;
 
     for (bapg* it = blk; it - blk < (1 << (ord - MIN_ORDER)); it++) {
         it->free = false;
@@ -222,6 +260,7 @@ static bool buddy_to_the_left(bapg* blk) {
 // kfree(ptr)
 //    Free a pointer previously returned by `kalloc`. Does nothing if
 //    `ptr == nullptr`.
+
 void kfree(void* ptr) {
     auto irqs = page_lock.lock();
     if (!ptr) { // Do nothing
@@ -237,12 +276,18 @@ void kfree(void* ptr) {
         "Error: attempted free on pointer not returned by kalloc()\n"); // kalloc gave this addr it away in the first place
     assert(!blk->free, 
         "Error: attempted free on already freed block\n"); // it's not already free
-    blk->returned = false;
-    blk->free = true;
+    blk->returned = 0;
+    for (bapg* it = blk; it < blk + (1 << blk->ord - MIN_ORDER); ++it) {
+        it->free = 1;
+    }
+
+    // tell sanitizers the freed page is inaccessible
+    asan_mark_memory(ka2pa(ptr), 1 << blk->ord, true);
 
     // Iteratively search for free buddies to combine with until we cannot anymore, 
     // then push to the relevant free list.
     while (true) {
+        log_printf("[KFREE] blk ord: %lu, root ord: %lu\n", blk->ord, blk->r_ord);
         if (blk->ord == blk->r_ord) { // No buddies left (base case)
             free_blocks[blk->ord - MIN_ORDER].push_back(blk);
             log_printf("[kfree] NO BUDDIES left; root order reached. Freeing immediately\n");
@@ -252,30 +297,38 @@ void kfree(void* ptr) {
             uint64_t buddy_addr = buddy_to_the_left(blk) ?
                 addr - (1 << blk->ord) /* left bud */ : addr + (1 << blk->ord) /* right bud */;
             bapg *buddy_blk = &(pgmap[buddy_addr / PAGESIZE]);
-            log_printf("[kfree] FOUND %s BUDDY at pa = 0x%x (for blk at pa = 0x%x). Is it free? ", 
-                buddy_addr < addr ? "LEFT" : "RIGHT", buddy_addr, addr);
-            if (buddy_blk->free) {
+            log_printf("[kfree] FOUND %s BUDDY (currently!) with order %lu at pa = 0x%x (for blk at pa = 0x%x). Is it free? ", 
+                buddy_addr < addr ? "LEFT" : "RIGHT", buddy_blk->ord, buddy_addr, addr);
+            if (buddy_blk->free && buddy_blk->ord == blk->ord) { // If entire block is free
                 assert(!buddy_blk->returned, "WTF you did something rly bad\n");
                 log_printf("Yes!\n[kfree] Adjoining block to %s buddy, updating new pa to 0x%x\n", 
-                    buddy_addr < addr ? "left" : "right", addr);
+                    buddy_addr < addr ? "left" : "right", buddy_addr < addr ? buddy_addr : addr);
                 
-                // Pop the buddy we are about to adjoin off of the free list. It's going 
-                // into a free bin now!
+                // Pop the buddy we are about to adjoin off of the free list. 
+                // It's going into a free bin now!
                 for (bapg* it = free_blocks[blk->ord-MIN_ORDER].front(); 
                     it; 
                     it = free_blocks[blk->ord-MIN_ORDER].next(it)) {
                     log_printf("Now searching a free block VA 0x%x with PA 0x%x\n",
                         it, (it-pgmap)*PAGESIZE);
                     if (it == buddy_blk) {
-                        log_printf("[kfree] LOCATED buddy block on free list\n");
+                        log_printf("[kfree] LOCATED buddy block on free list, addr 0x%x, order %lu\n",
+                            (it-pgmap)*PAGESIZE, it->ord);
                         free_blocks[blk->ord-MIN_ORDER].erase(it);
-                        log_printf("[kfree] POPPED buddy off its free list of order %lu\n", blk->ord);
+                        log_printf("[kfree] POPPED (ord-%lu) buddy off its free list\n", blk->ord);
                         break;
                     }
                 }
 
-                buddy_blk->ord++;
-                blk->ord++;
+                int old_ord = blk->ord;
+                assert(blk->ord == buddy_blk->ord, "[kalloc] Immediate order assertion failure\n");
+                for (bapg *it = blk, *it2 = buddy_blk; 
+                    it < blk + (1 << old_ord)/PAGESIZE; 
+                    ++it, ++it2) {
+                    it->ord++;
+                    it2->ord++;
+                }
+                log_printf("[KFREE] UPDATED buddy ord to %lu and blk ord to %lu\n", buddy_blk->ord, blk->ord);
                 if (buddy_addr < addr) { // If buddy is on the left then update the block for next iter
                     blk = buddy_blk;
                     addr = buddy_addr;
@@ -292,10 +345,6 @@ void kfree(void* ptr) {
     }
 
     page_lock.unlock(irqs);
-    if (ptr) {
-        // tell sanitizers the freed page is inaccessible
-        asan_mark_memory(ka2pa(ptr), PAGESIZE, true);
-    }
 }
 
 

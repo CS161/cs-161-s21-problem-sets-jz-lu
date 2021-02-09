@@ -433,15 +433,17 @@ int proc::syscall_fork(regstate* regs) {
 // proc::syscall_nasty()
 //    Nasty large array allocation to corrupt the stack.
 int proc::syscall_nasty(regstate* regs) {
-    int sz = regs->reg_rdi;
-    long arr[sz] = {0};
-    for (int i = 0; i < sz; ++i) {
-        arr[i] = i;
+    volatile uint64_t arr[1600];
+
+    for (int i = 0; i < 1600; ++i) {
+        arr[i] = rand();
     }
-    long sum = 0;
-    for (int i = 0; i < sz; ++i) {
-        sum += 2 * arr[i];
+
+    volatile int sum = 0;
+    for (int i = 0; i < 1600; ++i) {
+        sum += arr[i];
     }
+
     return sum;
 }
 

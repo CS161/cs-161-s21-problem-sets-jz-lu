@@ -5,8 +5,8 @@ template <unsigned maxsize> class memrangeset;
 
 // struct encoding metadata for each page under the buddy allocator system.
 struct bapg {
-    bool free = false; // whether the bapg is free or not
-    bool returned = false; // if the address of this page has been returned in kalloc()
+    uint64_t free = 0; // whether the bapg is free or not
+    uint64_t returned = 0; // if the address of this page has been returned in kalloc()
     uint64_t ord; // order of the block
     uint64_t r_ord; // order of the root block of the current block
     uintptr_t r_addr; // address of the root block of the current block

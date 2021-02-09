@@ -27,8 +27,8 @@ HOSTCC  = cc
 HOSTCXX = c++
 TAR     = tar
 PERL    = perl
-HOSTCFLAGS := $(CFLAGS) -std=gnu11 -Wall -W 
-HOSTCXXFLAGS := $(CXXFLAGS) -std=gnu++1z -Wall -W -Wstack-usage=256 -fstack-usage
+HOSTCFLAGS := $(CFLAGS) -std=gnu11 -Wall -W
+HOSTCXXFLAGS := $(CXXFLAGS) -std=gnu++1z -Wall -W 
 
 # Compiler flags
 # -Os is required for the boot loader to fit within 512 bytes;
@@ -38,7 +38,7 @@ CPPFLAGS := $(DEFS) -I.
 CCOMMONFLAGS := -m64 -mno-mmx -mno-sse -mno-sse2 -mno-sse3 \
 	-mno-3dnow -ffreestanding -fno-omit-frame-pointer -fno-pic \
 	-fno-stack-protector \
-	-Wall -W -Wshadow -Wno-format -Wno-unused-parameter
+	-Wall -W -Wshadow -Wno-format -Wno-unused-parameter -Wstack-usage=4096 -fstack-usage
 
 ASFLAGS := $(CCOMMONFLAGS)
 ASFLAGS += $(shell $(CXX) -no-integrated-as -E -x c /dev/null >/dev/null 2>&1 && echo -no-integrated-as)
