@@ -109,12 +109,15 @@ The root block is the original block that has no buddy. To intialize, we walk th
 Our test cases all involve some form of deterministic or random allocation and free, followed by checking that the metadata is set properly (i.e. all invariants are consistent) via assert statements.
 1. Simple allocation: allocate a couple pages, then free them.
 2. Random allocations of multiples of `PAGESIZE`.
-3. Random allocations of random sizes (not necessarily a multiple of anything).
-4. Edge cases
+3. Random allocations of random sizes (not necessarily a multiple of anything), allocating a lot and freeing a lot, repeatedly.
+4. Edge cases (wild frees, double frees, unreasonably large allocs, etc.)
 Checking on invariants is done in `check_kalloc()` and `check_kfree()`. These are called if the `BALLOC_PARANOIA` constant in `kernel.hh` is turned on.
 
 Grading notes
 -------------
+
 **Part F**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.
+
+**Part G (Buddy allocator)**: set the constant `BALLOC_PARANOIA = 1` in `kernel.hh` when running test cases so the invariant checker functions are fired. If you feel that the world is too fast and you have too much free time, set it to `2` for a very massive, very slow text dump of all the allocation steps and status updates (do not recommend).
 
 **Extra credit attempts**: `fstack-usage` (see Part F). 

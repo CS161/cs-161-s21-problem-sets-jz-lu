@@ -161,7 +161,9 @@ extern int ncpu;
 inline cpustate* this_cpu();
 
 // Debugging and testing flags
-const uint64_t BALLOC_PARANOIA = 1; // Buddy allocator flag
+// Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 = dump all stats.
+// const uint64_t BALLOC_PARANOIA = 0; 
+// const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
 
 
 // Buddy allocator orders.

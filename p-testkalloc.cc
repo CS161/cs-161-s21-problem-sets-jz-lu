@@ -36,8 +36,8 @@ void process_main() {
         round_down(rdrsp() - 1, PAGESIZE)
     );
     int test_counter = 0;
-    int num_tests = 2;
-    while (test_counter < num_tests) {
+    int ntests = 4;
+    while (test_counter < ntests) {
         sys_testkalloc(test_counter++);
         sys_yield();
         if (rand() < RAND_MAX / 32) {

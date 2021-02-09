@@ -332,7 +332,7 @@ int proc::copy_memory_(proc* child) {
                     vmiter itc(child, itp.va());
                     int try_map_code = itc.try_map(itp.pa(), itp.perm());
                     if (try_map_code == -1) {
-                        log_printf("Try_map failed from parent: %i\n", parent->id_);
+                        log_printf("Try_map failed from parent: %d\n", parent->id_);
                         parent->unlock_pagetable_read(irqs);
                         child->unlock_pagetable_read(irqs_child);
                         return -1;
@@ -384,7 +384,7 @@ int proc::syscall_fork(regstate* regs) {
 
     // no open pid was found
     if (!pid) {
-        log_printf("No open processes, caller PID: %i\n", this->id_);
+        log_printf("No open processes, caller PID: %d\n", this->id_);
         return -1;
     } else {
         log_printf("Successfully found a free PID = %d to fork from parent PID = %d\n", pid, this->id_);
@@ -406,7 +406,7 @@ int proc::syscall_fork(regstate* regs) {
 
     int flag = this->copy_memory_(child);
     if (flag != 0) {
-        log_printf("Copying Memory During Fork FAILED, caller: %i\n", this->id_);
+        log_printf("Copying Memory During Fork FAILED, caller: %d\n", this->id_);
         return -1;
     } else {
         log_printf("Memory successfully copied from parent to child!\n");
@@ -448,18 +448,81 @@ int proc::syscall_nasty(regstate* regs) {
 }
 
 // proc::syscall_testkalloc() 
-//    Test cases for buddy allocator
+//    Test cases for buddy allocator.
 int proc::syscall_testkalloc(regstate* regs) {
     int tcase = regs->reg_rdi;
-    switch (tcase) {
-        case 0: {
-            // Allocate a bunch of pages in succession, then free them.
+    int alloc_size = 100;
+    void* ptrs[alloc_size];
 
+    switch (tcase) {
+        case 0: { // Single-page allocs
+            uint64_t sz = PAGESIZE;
+            for (int i = 0; i < alloc_size; ++i) {
+                ptrs[i] = kalloc(sz);
+            }
+
+            for (int i = 0; i < alloc_size; ++i) {
+                kfree(ptrs[i]);
+            }
+            // Allocate a bunch of pages in succession, then free them.
+            log_printf("======= TEST CASE [0] for PROCESS [%d] COMPLETED =======\n", this->id_);
             break;
         }
-            
+
+        case 1: { // Allocations of sizes with random orders
+            // Expect lots of "no allocs" due to orders being huge.
+            int ro = 0;
+            uint64_t sz = PAGESIZE;
+
+            for (int i = 0; i < alloc_size; ++i) {
+                ro = rand(MIN_ORDER, MAX_ORDER);
+                sz = 1 << ro;
+                ptrs[i] = kalloc(sz);
+            }
+
+            for (int i = 0; i < alloc_size; ++i) {
+                kfree(ptrs[i]);
+            }
+            log_printf("======= TEST CASE [1] for PROCESS [%d] COMPLETED =======\n", this->id_);
+            break;
+        }
+
+        case 2: { // Random allocations, not necessarily multiples of PAGESIZE
+            // Again, expect lots of failed allocs due to large sizes.
+            uint64_t sz = 0;
+
+            for (int i = 0; i < alloc_size; ++i) {
+                sz = rand(1 << MIN_ORDER, 1 << MAX_ORDER);
+                ptrs[i] = kalloc(sz);
+            }
+
+            for (int i = 0; i < alloc_size; ++i) {
+                kfree(ptrs[i]);
+            }
+            log_printf("======= TEST CASE [2] for PROCESS [%d] COMPLETED =======\n", this->id_);
+            break;
+        }
+
+        case 3: { // smaller random non-PAGESIZE multiple allocations
+            // Expect less failed allocations this time.
+            for (int j = 0; j < 10; ++j) {
+                uint64_t sz = 0;
+
+                for (int i = 0; i < alloc_size; ++i) {
+                    sz = rand(1 << MIN_ORDER, 1 << (MAX_ORDER - 5));
+                    ptrs[i] = (void*)kalloc(sz);
+                }
+
+                for (int i = 0; i < alloc_size; ++i) {
+                    kfree(ptrs[i]);
+                }
+            }
+            log_printf("======= TEST CASE [3] for PROCESS [%d] COMPLETED =======\n", this->id_);
+            break;
+        }
+
         default: {
-            log_printf("Test case number %d not implemented\n", tcase);
+            log_printf("======= ERROR: Test case number %d not implemented  =======\n", tcase);
             break;
         }
     }
