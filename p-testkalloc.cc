@@ -18,8 +18,8 @@ void process_main() {
         console[i] = 'T' | 0x8C00; // T as in Troy...? NO YOU PLEBIAN IT'S T AS IN TEST 
     }
 
-    // (void) sys_fork();
-    // (void) sys_fork();
+    (void) sys_fork();
+    (void) sys_fork();
 
     pid_t p = sys_getpid();
     srand(p);

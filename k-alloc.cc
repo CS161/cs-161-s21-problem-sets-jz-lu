@@ -181,18 +181,23 @@ void check_kfree(void* ptr, uint64_t sz) {
 //    The handout code does not free memory and allocates memory in units
 //    of pages.
 void* kalloc(size_t sz) {
-    log_printf("[kalloc] kalloc called\n");
+    log_printf("[kalloc] kalloc called by process %d\n", current()->id_);
     if (sz == 0 || sz > (1 << MAX_ORDER)) {
         // log_printf("[kalloc] Invalid memory request\n");
         return nullptr;
     }
 
-    if (sz <= SLAB_THRESHOLD) {
+    if (sz <= SLAB_THRESHOLD && USING_SLAB_ALLOCATOR) {
         log_printf("[kalloc] transferring to slab alloc\n");
-        return slab_kalloc(sz);
+        void *ptr = slab_kalloc(sz);
+        return ptr;
     }
 
+    if (BALLOC_PARANOIA >= 1) {
+        log_printf("[kalloc] (1) BUDDY LOCKING\n");
+    }
     auto irqs = page_lock.lock();
+    
     void* ptr = nullptr;
     uint64_t ord = order(sz);
     if (BALLOC_PARANOIA >= 1 || BALLOC_METRICS) {
@@ -269,6 +274,9 @@ void* kalloc(size_t sz) {
 
     if (!blk) {
         log_printf("[kalloc] Error: insufficient memory blocks available for requested size 0x%x\n", sz);
+        if (BALLOC_PARANOIA >= 1) {
+            log_printf("[kalloc] (2) BUDDY UNLOCKING\n");
+        }
         page_lock.unlock(irqs);
         return nullptr;
     }
@@ -293,6 +301,9 @@ void* kalloc(size_t sz) {
         check_kalloc(ptr, sz);
     }
 
+    if (BALLOC_PARANOIA >= 1) {
+        log_printf("[kalloc] (3) BUDDY UNLOCKING\n");
+    }
     page_lock.unlock(irqs);
 
     // Tell sanitizers the allocated page is accessible
@@ -308,6 +319,10 @@ void* kalloc(size_t sz) {
 //  allocates big and small slabs for our slab allocator
 void* slab_kalloc(size_t sz) { // reminder call outside of lock in kalloc
     if (SALLOC_PARANOIA > 0) {
+        log_printf("(A) {KALLOC} SLAB LOCKING\n");
+    }
+    auto irqs = slab_lock.lock();
+    if (SALLOC_PARANOIA > 0) {
         log_printf("[slab_kalloc] NEW slab request of sz: 0x%x\n", sz);
         assert(sz <= SLAB_THRESHOLD, "[slab_kalloc] Requested size too large for slab allocation\n");
     }
@@ -318,31 +333,35 @@ void* slab_kalloc(size_t sz) { // reminder call outside of lock in kalloc
     }
 
     if (is_small) {
-        auto irqs = slab_lock.lock();
-        if (SALLOC_PARANOIA > 0) {
-            log_printf("(A) {SMALL} SLAB LOCKED\n");
-        }
+        log_printf("[slab_kalloc] Going down small path\n");
         for (smallslab* it = smallslabs.front(); it; it = smallslabs.next(it)) {
+            log_printf("[slab_kalloc] Now searching small slab index %ld\n", it->ind);
             if (it->state != SLAB_FULL) {
+                log_printf("[slab_kalloc] Small slab index %ld is not full!\n", it->ind);
                 void* ptr = it->give();
-                slab_lock.unlock(irqs);
+                log_printf("[slab_kalloc] Grabbed ptr %p from small slab\n", ptr);
                 if (SALLOC_PARANOIA > 0) {
-                    log_printf("(B) {SMALL} SLAB UNLOCKED\n");
+                    log_printf("(B) {SMALL} SLAB UNLOCKING\n");
                 }
+                slab_lock.unlock(irqs);
                 // We add 8 to cover the metadata at the beginning of the struct.
+                log_printf("[slab_kalloc] Small slab work done, returning\n", it->ind);
                 return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
             }
         }
 
         // If this point is reached, then there are no open chunks in allocated slabs. Get a new one.
         smallslab* slab = knew<smallslab>(small_slab_index++);
+        if (SALLOC_PARANOIA) {
+            log_printf("[slab_kalloc] ALLOCATED new small slab, index now is ** %d **\n", small_slab_index);
+        }
 
         if (!slab) {
             log_printf("[slab_kalloc] Slab allocatior failed to get more memory from buddy allocator\n");
-            slab_lock.unlock(irqs);
             if (SALLOC_PARANOIA > 0) {
-                log_printf("(C) {SMALL} SLAB UNLOCKED\n");
+                log_printf("(C) {SMALL} SLAB UNLOCKING\n");
             }
+            slab_lock.unlock(irqs);
             return nullptr;
         }
 
@@ -356,11 +375,7 @@ void* slab_kalloc(size_t sz) { // reminder call outside of lock in kalloc
         return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
 
     } else { // Big chunk
-        if (SALLOC_PARANOIA > 0) {
-            log_printf("(D) {BIG} SLAB LOCKING\n");
-        }
-        auto irqs = slab_lock.lock();
-
+        log_printf("[slab_kalloc] Going down big path\n");
         for (bigslab* it = bigslabs.front(); it; it = bigslabs.next(it)) {
             if (it->state != SLAB_FULL) {
                 void* ptr = it->give();
@@ -373,6 +388,9 @@ void* slab_kalloc(size_t sz) { // reminder call outside of lock in kalloc
             }
         }
         bigslab* slab = knew<bigslab>(big_slab_index++);
+        if (SALLOC_PARANOIA) {
+            log_printf("[slab_kalloc] ALLOCATED new big slab, index now is ** %d **\n", big_slab_index);
+        }
 
         if (!slab) {
             log_printf("[slab_kalloc] Slab allocatior failed to get more memory from buddy allocator\n");
@@ -423,13 +441,14 @@ void kfree(void* ptr, bool called_by_slab) {
 
     // Assuming the slab isn't the one trying to free a slab page, check if allocation 
     // should be handed off to the slab. Do so if so, being careful about locks!
-    if (!called_by_slab) {
-        log_printf("walking slab list\n");
-        uint64_t chunk_addr = reinterpret_cast<uint64_t>(ptr) - 8;
+    if (!called_by_slab && USING_SLAB_ALLOCATOR) {
+        log_printf("[kfree] (K) {KFREE} SLAB LOCKING\n");
         auto slab_irqs = slab_lock.lock();
+        uint64_t chunk_addr = reinterpret_cast<uint64_t>(ptr) - 8;
         for (smallslab* it = smallslabs.front(); it; it = smallslabs.next(it)) {
             uint64_t slab_addr = reinterpret_cast<uint64_t>(it);
             if (slab_addr <= chunk_addr && chunk_addr <= slab_addr + sizeof(smallslab)) {
+                log_printf("[kfree] (L) {KFREE} SLAB UNLOCKING\n");
                 slab_lock.unlock(slab_irqs);
                 page_lock.unlock(irqs);
                 slab_kfree(ptr);
@@ -439,12 +458,14 @@ void kfree(void* ptr, bool called_by_slab) {
         for (bigslab* it = bigslabs.front(); it; it = bigslabs.next(it)) {
             uint64_t slab_addr = reinterpret_cast<uint64_t>(it);
             if (slab_addr <= chunk_addr && chunk_addr <= slab_addr + sizeof(bigslab)) {
+                log_printf("[kfree] (M) {KFREE} SLAB UNLOCKING\n");
                 slab_lock.unlock(slab_irqs);
                 page_lock.unlock(irqs);
                 slab_kfree(ptr);
                 return;
             }
         }
+        log_printf("[kfree] (N) {KFREE} SLAB UNLOCKING\n");
         slab_lock.unlock(slab_irqs);
     }
 
@@ -474,9 +495,9 @@ void kfree(void* ptr, bool called_by_slab) {
     // Iteratively search for free buddies to combine with until we cannot anymore, 
     // then push to the relevant free list.
     while (true) {
-        // if (BALLOC_PARANOIA >= 2) {
-        //     log_printf("[kfree] blk ord: %lu, root ord: %lu\n", blk->ord, blk->r_ord);
-        // }
+        if (BALLOC_PARANOIA >= 2) {
+            log_printf("[kfree] blk ord: %lu, root ord: %lu\n", blk->ord, blk->r_ord);
+        }
         if (blk->ord == blk->r_ord) { // No buddies left (base case)
             free_blocks[blk->ord - MIN_ORDER].push_back(blk);
             if (BALLOC_PARANOIA >= 2) {
@@ -574,6 +595,9 @@ void kfree(void* ptr, bool called_by_slab) {
 // slab_kfree(ptr)
 //    Free a ptr from the slab.
 void slab_kfree(void* ptr) {
+    log_printf("(H) {FREE} SLAB LOCKING\n");
+    auto irqs = slab_lock.lock();
+
     // Move the pointer from user space to the actual start of the struct.
     ptr = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) - 8);
 
@@ -588,9 +612,6 @@ void slab_kfree(void* ptr) {
     }
 
     bool found = false; // Flag of whether the given slab was found. Huge problem if not!
-
-    log_printf("(H) {FREE} SLAB LOCKING\n");
-    auto irqs = slab_lock.lock();
     if (*chunk_sz == SMALL_CHUNKSIZE) {
         for (smallslab* it = smallslabs.front(); it; it = smallslabs.next(it)) {
             if (it->ind == *chunk_ind) {

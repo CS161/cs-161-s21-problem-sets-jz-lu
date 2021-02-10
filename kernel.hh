@@ -168,9 +168,9 @@ inline cpustate* this_cpu();
 const uint64_t BALLOC_PARANOIA = 0; 
 const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
 
-// Slab allocator flag. 0 = do nothing, 1 = checking.
-const uint64_t SALLOC_PARANOIA = 1;
-
+// Slab allocator flags. 
+const uint64_t SALLOC_PARANOIA = 1; // 0 = do nothing, 1 = checking
+const uint64_t USING_SLAB_ALLOCATOR = 1; // 0 = turn off slab allocation, 1 = turn on
 
 // Buddy allocator orders.
 #define MIN_ORDER 12
