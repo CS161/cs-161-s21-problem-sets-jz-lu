@@ -1,14 +1,19 @@
 #include "kernel.hh"
 #include "k-lock.hh"
 
-#define BALLOC_PARANOIA 0
-#define BALLOC_METRICS 0
-
 static spinlock page_lock;
+static spinlock slab_lock;
 
-// Buddy allocator data structure.
+// Slab indices in the list. 
+// NOTE: should not be accessed outside of a slab lock.
+static int big_slab_index = 0;
+static int small_slab_index = 0;
+
+// Buddy and slab allocator data structures.
 bapg pgmap[MEMSIZE_PHYSICAL/PAGESIZE];
 list<bapg, &bapg::pglink> free_blocks[MAX_ORDER - MIN_ORDER + 1];
+list<smallslab, &smallslab::pglink> smallslabs;
+list<bigslab, &bigslab::pglink> bigslabs;
 
 
 // largest_fitting_ord(num, sz)
@@ -176,9 +181,15 @@ void check_kfree(void* ptr, uint64_t sz) {
 //    The handout code does not free memory and allocates memory in units
 //    of pages.
 void* kalloc(size_t sz) {
+    log_printf("[kalloc] kalloc called\n");
     if (sz == 0 || sz > (1 << MAX_ORDER)) {
         // log_printf("[kalloc] Invalid memory request\n");
         return nullptr;
+    }
+
+    if (sz <= SLAB_THRESHOLD) {
+        log_printf("[kalloc] transferring to slab alloc\n");
+        return slab_kalloc(sz);
     }
 
     auto irqs = page_lock.lock();
@@ -292,6 +303,98 @@ void* kalloc(size_t sz) {
     return ptr;
 }
 
+
+// slab_kalloc(sz)
+//  allocates big and small slabs for our slab allocator
+void* slab_kalloc(size_t sz) { // reminder call outside of lock in kalloc
+    if (SALLOC_PARANOIA > 0) {
+        log_printf("[slab_kalloc] NEW slab request of sz: 0x%x\n", sz);
+        assert(sz <= SLAB_THRESHOLD, "[slab_kalloc] Requested size too large for slab allocation\n");
+    }
+    bool is_small = sz <= 120; // Control flow: use big slab or small slab
+    if (SALLOC_PARANOIA > 0) {
+        log_printf("[slab_kalloc] Going to small slab? %s, big slab? %s\n", 
+            is_small ? "Yes" : "No", is_small ? "No" : "Yes");
+    }
+
+    if (is_small) {
+        auto irqs = slab_lock.lock();
+        if (SALLOC_PARANOIA > 0) {
+            log_printf("(A) {SMALL} SLAB LOCKED\n");
+        }
+        for (smallslab* it = smallslabs.front(); it; it = smallslabs.next(it)) {
+            if (it->state != SLAB_FULL) {
+                void* ptr = it->give();
+                slab_lock.unlock(irqs);
+                if (SALLOC_PARANOIA > 0) {
+                    log_printf("(B) {SMALL} SLAB UNLOCKED\n");
+                }
+                // We add 8 to cover the metadata at the beginning of the struct.
+                return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
+            }
+        }
+
+        // If this point is reached, then there are no open chunks in allocated slabs. Get a new one.
+        smallslab* slab = knew<smallslab>(small_slab_index++);
+
+        if (!slab) {
+            log_printf("[slab_kalloc] Slab allocatior failed to get more memory from buddy allocator\n");
+            slab_lock.unlock(irqs);
+            if (SALLOC_PARANOIA > 0) {
+                log_printf("(C) {SMALL} SLAB UNLOCKED\n");
+            }
+            return nullptr;
+        }
+
+        // Add the slab to the list of slabs. Then return a pointer to the user.
+        smallslabs.push_back(slab);
+        void* ptr = slab->give();
+        log_printf("(J) {SMALL} SLAB UNLOCKING\n");
+        slab_lock.unlock(irqs);
+
+        // We add 8 to cover the metadata at the beginning of the struct.
+        return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
+
+    } else { // Big chunk
+        if (SALLOC_PARANOIA > 0) {
+            log_printf("(D) {BIG} SLAB LOCKING\n");
+        }
+        auto irqs = slab_lock.lock();
+
+        for (bigslab* it = bigslabs.front(); it; it = bigslabs.next(it)) {
+            if (it->state != SLAB_FULL) {
+                void* ptr = it->give();
+                if (SALLOC_PARANOIA) {
+                    log_printf("(E) {BIG} SLAB UNLOCKING\n");
+                }
+                slab_lock.unlock(irqs);
+                // We add 8 to cover the metadata at the beginning of the struct.
+                return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
+            }
+        }
+        bigslab* slab = knew<bigslab>(big_slab_index++);
+
+        if (!slab) {
+            log_printf("[slab_kalloc] Slab allocatior failed to get more memory from buddy allocator\n");
+            if (SALLOC_PARANOIA > 0) {
+                log_printf("(F) {BIG} SLAB UNLOCKING\n");
+            }
+            slab_lock.unlock(irqs);
+            return nullptr;
+        }
+
+        bigslabs.push_back(slab);
+        void* ptr = slab->give();
+        if (SALLOC_PARANOIA > 0) {
+            log_printf("(G) {BIG} SLAB UNLOCKING\n");
+        }
+        slab_lock.unlock(irqs);
+        // We add 8 to cover the metadata at the beginning of the struct.
+        return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
+    }
+}
+
+
 // buddy_to_the_left(addr)
 //    Returns a yes (1) or no (0) of whether the (physical) addr block's memory has buddy on left.
 //    Assumes as a promise that there is a buddy, either to right or left (in physical mem).
@@ -312,28 +415,51 @@ static bool buddy_to_the_left(bapg* blk) {
 //    Free a pointer previously returned by `kalloc`. Does nothing if
 //    `ptr == nullptr`.
 
-void kfree(void* ptr) {
+void kfree(void* ptr, bool called_by_slab) {
     if (!ptr) { // Do nothing
         return;
     }
-
     auto irqs = page_lock.lock();
-    uint64_t addr = kptr2pa(ptr);
-    if (BALLOC_PARANOIA >= 1) {
-        assert((addr & 0xfff) == 0); // assert page-aligned pointer
+
+    // Assuming the slab isn't the one trying to free a slab page, check if allocation 
+    // should be handed off to the slab. Do so if so, being careful about locks!
+    if (!called_by_slab) {
+        log_printf("walking slab list\n");
+        uint64_t chunk_addr = reinterpret_cast<uint64_t>(ptr) - 8;
+        auto slab_irqs = slab_lock.lock();
+        for (smallslab* it = smallslabs.front(); it; it = smallslabs.next(it)) {
+            uint64_t slab_addr = reinterpret_cast<uint64_t>(it);
+            if (slab_addr <= chunk_addr && chunk_addr <= slab_addr + sizeof(smallslab)) {
+                slab_lock.unlock(slab_irqs);
+                page_lock.unlock(irqs);
+                slab_kfree(ptr);
+                return;
+            }
+        }
+        for (bigslab* it = bigslabs.front(); it; it = bigslabs.next(it)) {
+            uint64_t slab_addr = reinterpret_cast<uint64_t>(it);
+            if (slab_addr <= chunk_addr && chunk_addr <= slab_addr + sizeof(bigslab)) {
+                slab_lock.unlock(slab_irqs);
+                page_lock.unlock(irqs);
+                slab_kfree(ptr);
+                return;
+            }
+        }
+        slab_lock.unlock(slab_irqs);
     }
+
+    uint64_t addr = kptr2pa(ptr);
+    assert((addr & 0xfff) == 0, "Attempted free on non page-aligned address\n"); // assert page-aligned pointer
     bapg *blk = &(pgmap[addr / PAGESIZE]);
     uint64_t blksz = 1 << blk->ord;
     if (BALLOC_PARANOIA >= 2 || BALLOC_METRICS) {
-        log_printf("[kfree] kfree called to free %p corr. to pa = 0x%x\n", ptr, addr);
+        log_printf("[kfree] KFREE called to free %p corr. to pa = 0x%x\n", ptr, addr);
     }
 
-    if (BALLOC_PARANOIA >= 1) {
-        assert(blk->returned, 
-            "Error: attempted free on pointer not returned by kalloc()\n"); // kalloc gave this addr it away in the first place
-        assert(!blk->free, 
-            "Error: attempted free on already freed block\n"); // it's not already free 
-    }
+    assert(!blk->free, 
+        "Error: attempted free on already freed block\n"); // it's not already free 
+    assert(blk->returned, 
+        "Error: attempted free on pointer not returned by kalloc()\n"); // kalloc gave this addr it away in the first place
     
     // Update metadata.
     blk->returned = 0;
@@ -443,6 +569,61 @@ void kfree(void* ptr) {
     }
 
     page_lock.unlock(irqs);
+}
+
+// slab_kfree(ptr)
+//    Free a ptr from the slab.
+void slab_kfree(void* ptr) {
+    // Move the pointer from user space to the actual start of the struct.
+    ptr = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) - 8);
+
+    // A priori we don't know which chunk this is. We will find the metadata and 
+    short *chunk_sz = reinterpret_cast<short*>(ptr);
+    short *chunk_ind = reinterpret_cast<short*>(reinterpret_cast<uint64_t>(ptr) + 2);
+    int *chunk_canary = reinterpret_cast<int*>(reinterpret_cast<uint64_t>(ptr) + 4);
+
+    if (SALLOC_PARANOIA) {
+        log_printf("[slab_kfree] Chunk KVA: 0x%x, Chunk size: 0x%x, Slab index: %i\n", ptr, *chunk_sz, *chunk_ind);
+        assert(*chunk_canary == SLAB_CANARY, "Slab metadata corrupted!\n");
+    }
+
+    bool found = false; // Flag of whether the given slab was found. Huge problem if not!
+
+    log_printf("(H) {FREE} SLAB LOCKING\n");
+    auto irqs = slab_lock.lock();
+    if (*chunk_sz == SMALL_CHUNKSIZE) {
+        for (smallslab* it = smallslabs.front(); it; it = smallslabs.next(it)) {
+            if (it->ind == *chunk_ind) {
+                it->receive(ptr);
+                found = true;
+                if (it->state == SLAB_FREE) {
+                    log_printf("[slab_kfree] CALLED kfree to free slab at %p\n", it);
+                    kfree(reinterpret_cast<void*>(it), true);
+                    smallslabs.erase(it);
+                }
+                break;
+            }
+        }
+    } else if (*chunk_sz == BIG_CHUNKSIZE){
+        for (bigslab* it = bigslabs.front(); it; it = bigslabs.next(it)) {
+            if (it->ind == *chunk_ind) {
+                it->receive(ptr);
+                found = true;
+                if (it->state == SLAB_FREE) {
+                    log_printf("[slab_kfree] CALLED kfree to free slab at %p\n", it);
+                    kfree(reinterpret_cast<void*>(it), true);
+                    bigslabs.erase(it);
+                }
+                break;
+            }
+        }
+    } else {
+        panic("Slab allocator corrupted, size metadata damaged!\n");
+    }
+    log_printf("(I) {FREE} SLAB UNLOCKING\n");
+    slab_lock.unlock(irqs);
+
+    assert(found, "Slab corrupted, no slab corresponding to metadata index was found!\n");
 }
 
 

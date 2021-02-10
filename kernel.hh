@@ -73,6 +73,9 @@ struct __attribute__((aligned(4096))) proc {
     // Test the kalloc under buddy allocator framework
     int syscall_testkalloc(regstate* regs);
 
+    // Wild edge cases to test balloc under sanitizers
+    int syscall_wildalloc(regstate* regs);
+
     uintptr_t syscall_read(regstate* reg);
     uintptr_t syscall_write(regstate* reg);
     uintptr_t syscall_readdiskfile(regstate* reg);
@@ -162,13 +165,17 @@ inline cpustate* this_cpu();
 
 // Debugging and testing flags
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 = dump all stats.
-// const uint64_t BALLOC_PARANOIA = 0; 
-// const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
+const uint64_t BALLOC_PARANOIA = 0; 
+const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
+
+// Slab allocator flag. 0 = do nothing, 1 = checking.
+const uint64_t SALLOC_PARANOIA = 1;
 
 
 // Buddy allocator orders.
 #define MIN_ORDER 12
 #define MAX_ORDER 21
+
 
 
 // yieldstate: callee-saved registers that must be preserved across
@@ -338,10 +345,18 @@ uint64_t blk_order(uint64_t pa);
 //    to be page-aligned.
 void* kalloc(size_t sz) __attribute__((malloc));
 
+// slab_kalloc(sz)
+//    Slab allocator called by kalloc() for small requests
+void* slab_kalloc(size_t sz);
+
+// slab_kfree(ptr)
+//    Frees a pointer from the slab
+void slab_kfree(void* ptr);
+
 // kfree(ptr)
 //    Free a pointer previously returned by `kalloc`. Does nothing if
 //    `ptr == nullptr`.
-void kfree(void* ptr);
+void kfree(void* ptr, bool called_by_slab = false);
 
 // operator new, operator delete
 //    Expressions like `new (std::nothrow) T(...)` and `delete x` work,

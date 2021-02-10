@@ -6,7 +6,8 @@ extern uint8_t end[];
 uint8_t* heap_top;
 uint8_t* stack_bottom;
 
-#define TESTNO 1 // Change this number from 0 to (TODO) for the different tests.
+// NOTE: this defines which (if any) wild allocations to run. See pset1answers.md for details.
+#define WILDNO 0
 
 // Test cases for the buddy allocator.
 
@@ -17,8 +18,8 @@ void process_main() {
         console[i] = 'T' | 0x8C00; // T as in Troy...? NO YOU PLEBIAN IT'S T AS IN TEST 
     }
 
-    (void) sys_fork();
-    (void) sys_fork();
+    // (void) sys_fork();
+    // (void) sys_fork();
 
     pid_t p = sys_getpid();
     srand(p);
@@ -35,17 +36,20 @@ void process_main() {
     stack_bottom = reinterpret_cast<uint8_t*>(
         round_down(rdrsp() - 1, PAGESIZE)
     );
-    int test_counter = 0;
-    int ntests = 4;
-    while (test_counter < ntests) {
-        sys_testkalloc(test_counter++);
+    int tstart = 4;
+    int ntests = 5;
+    while (tstart < ntests) {
+        sys_testkalloc(tstart++);
         sys_yield();
         if (rand() < RAND_MAX / 32) {
             sys_pause();
         }
     }
 
-    // After test is complete, do nothing forever
+    // Run a wild allocation if specified.
+    sys_wildkalloc(WILDNO);
+
+    // After tests are complete, do nothing forever
     while (true) {
         sys_yield();
     }

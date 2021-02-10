@@ -118,6 +118,6 @@ Grading notes
 
 **Part F**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.
 
-**Part G (Buddy allocator)**: set the constant `BALLOC_PARANOIA = 1` in `kernel.hh` when running test cases so the invariant checker functions are fired. If you feel that the world is too fast and you have too much free time, set it to `2` for a very massive, very slow text dump of all the allocation steps and status updates (do not recommend).
+**Part G (Buddy allocator)**: set the constant `BALLOC_PARANOIA = 1` in `kernel.hh` when running test cases so the invariant checker functions are fired. If you feel that the world is too fast and you have too much free time, set it to `2` for a very massive, very slow text dump of all the allocation steps and status updates (do not recommend). **Wild tests**: in addition to testing if the buddy allocator works, we have a few tests that ensure the allocator fails an assertion before it does something dumb like a double free. There is a constant `WILDNO` at the top of `p-testkalloc.cc`, which is set to 0 by default to not run these. Only one can run at a time, as the allocator is designed to fail an assertion for each test. Change `WILDNO` from `0` to `1, 2, 3` to respectively try unallocated free, non-aligned free, and free in the middle of a given block.
 
 **Extra credit attempts**: `fstack-usage` (see Part F). 

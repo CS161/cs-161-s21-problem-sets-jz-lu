@@ -3,14 +3,173 @@
 #include "types.h"
 template <unsigned maxsize> class memrangeset;
 
-// struct encoding metadata for each page under the buddy allocator system.
+// Slab allocator constants
+#define SLAB_FREE 0
+#define SLAB_PARTIAL 1
+#define SLAB_FULL 2
+#define SMALL_CHUNKSIZE 128
+#define BIG_CHUNKSIZE 512
+#define NUM_SMALL_SLABS PAGESIZE/SMALL_CHUNKSIZE - 1
+#define NUM_BIG_SLABS 2*PAGESIZE/BIG_CHUNKSIZE - 1
+#define SLAB_CANARY 984257
+#define SLAB_THRESHOLD BIG_CHUNKSIZE - 8
+
+// Buddy allocator struct encoding metadata for each page under the buddy allocator system.
 struct bapg {
     uint64_t free = 0; // whether the bapg is free or not
-    uint64_t returned = 0; // if the address of this page has been returned in kalloc()
-    uint64_t ord; // order of the block
-    uint64_t r_ord; // order of the root block of the current block
-    uintptr_t r_addr; // address of the root block of the current block
-    list_links pglink;
+    uint64_t returned = 0; // if the address of this page has been returned in kalloc().
+    uint64_t ord; // order
+    uint64_t r_ord; // order of the root block associated with current block
+    uintptr_t r_addr; // address of the root block associated with the current block
+    list_links pglink; // To make struct available for link lists
+};
+
+// Units of memory in the slab, called "chunks." The first 8 bytes of the chunks are reserved for
+// metadata; be careful to always return chunk_ptr + 8 bytes to user, and subtract by 8 bytes 
+// when freeing the user pointer to get the right dereferencing, or you will be doing some WILD frees.
+struct small_chunk {
+    unsigned short sz = SMALL_CHUNKSIZE;
+    unsigned short ind;
+    const unsigned int canary = SLAB_CANARY;
+    unsigned char data[SMALL_CHUNKSIZE - sizeof(int) - 2*sizeof(short)];
+};
+
+struct big_chunk {
+    unsigned short sz = BIG_CHUNKSIZE;
+    unsigned short ind;
+    const unsigned int canary = SLAB_CANARY;
+    unsigned char data[BIG_CHUNKSIZE - sizeof(int) - 2*sizeof(short)];
+};
+
+// Small slab allocator
+struct smallslab {
+    private:
+        int64_t nallocs_ = 0; // Number of allocations
+    public:
+        uint64_t state = SLAB_FREE;
+        list_links pglink; // Linked list element
+        int64_t ind; // Index slab within linked list, so we know where to return mem to
+        small_chunk chunks[NUM_SMALL_SLABS]; // Chunks of SMALL_CHUNKSIZE for allocs
+        unsigned char free_chunks[NUM_SMALL_SLABS]; // Indexes whether a given chunk is free or not
+
+    smallslab(uint64_t index) {
+        // Set the index and the size.
+        ind = index;
+        for (uint64_t i = 0; i < NUM_SMALL_SLABS; ++i) {
+            free_chunks[i] = 1; // Initialize every chunk to be free
+            chunks[i].sz = SMALL_CHUNKSIZE;
+            chunks[i].ind = index;
+        }
+    }
+
+    // Allocate a chunk
+    void* give() {
+        assert(state != SLAB_FULL, "Slab is full, clearly you did not implement the allocator correctly\n");
+        uint64_t free_ind = 0;
+        while (free_ind < NUM_SMALL_SLABS) {
+            if (free_chunks[free_ind]) {
+                free_chunks[free_ind] = 0;
+
+                // Update the state if necessary.
+                if (++nallocs_ == NUM_SMALL_SLABS) {
+                    state = SLAB_FULL;
+                }
+                else if (nallocs_ > 0) {
+                    state = SLAB_PARTIAL;
+                }
+
+                return this->chunks + free_ind;
+            }
+            ++free_ind;
+        }
+        assert(false);
+        return nullptr; // Should never get here!
+    }
+
+    // Free a chunk.
+    void receive(void *ptr) {
+        small_chunk *sc = reinterpret_cast<small_chunk*>(ptr);
+        assert(sc->ind == ind);
+        assert(sc->sz == SMALL_CHUNKSIZE);
+        assert(sc->canary == SLAB_CANARY, "Boundary overwrite detected during slab free\n");
+        assert(free_chunks[sc-this->chunks] == 0, "Error: attempted free of allocated chunk in slab\n");
+        free_chunks[sc-this->chunks] = 1; // Mark chunk as free in slab
+
+        // Update the state if necessary.
+        if (--nallocs_ > 0) {
+            state = SLAB_PARTIAL;
+        }
+        else {
+            state = SLAB_FREE;
+        }
+        return;
+    }
+};
+
+// Big slab allocator
+struct bigslab {
+    private:
+        int64_t nallocs_ = 0; // Number of allocations
+    public:
+        uint64_t state = SLAB_FREE;
+        list_links pglink; // Linked list element
+        int64_t ind; // Index slab within linked list, so we know where to return mem to
+        big_chunk chunks[NUM_BIG_SLABS]; // Chunks of SMALL_CHUNKSIZE for allocs
+        unsigned char free_chunks[NUM_BIG_SLABS]; // Indexes whether a given chunk is free or not
+
+    bigslab(uint64_t index) {
+        // Set the index and the size.
+        ind = index;
+        for (uint64_t i = 0; i < NUM_BIG_SLABS; ++i) {
+            free_chunks[i] = 1; // Initialize every chunk to be free
+            chunks[i].sz = BIG_CHUNKSIZE;
+            chunks[i].ind = index;
+        }
+    }
+
+    // Allocate a chunk
+    void* give() {
+        assert(state != SLAB_FULL, "Slab is full, clearly you did not implement the allocator correctly\n");
+        uint64_t free_ind = 0;
+        while (free_ind < NUM_BIG_SLABS) {
+            if (free_chunks[free_ind]) {
+                free_chunks[free_ind] = 0;
+
+                // Update the state if necessary.
+                if (++nallocs_ == NUM_BIG_SLABS) {
+                    state = SLAB_FULL;
+                }
+                else if (nallocs_ > 0) {
+                    state = SLAB_PARTIAL;
+                }
+
+                return this->chunks + free_ind;
+            }
+            ++free_ind;
+        }
+
+        assert(false);
+        return nullptr; // Should never get here!
+    }
+
+    // Free a chunk.
+    void receive(void *ptr) {
+        big_chunk *bc = reinterpret_cast<big_chunk*>(ptr);
+        assert(bc->ind == ind);
+        assert(bc->sz == BIG_CHUNKSIZE);
+        assert(bc->canary == SLAB_CANARY, "Boundary overwrite detected during slab free\n");
+        assert(free_chunks[bc-this->chunks] == 0, "Error: attempted free of allocated chunk in slab\n");
+        free_chunks[bc-this->chunks] = 1; // Mark chunk as free in slab
+
+        // Update the state if necessary.
+        if (--nallocs_ > 0) {
+            state = SLAB_PARTIAL;
+        }
+        else {
+            state = SLAB_FREE;
+        }
+        return;
+    }
 };
 
 // `memrangeset` stores type information for a range of memory addresses.

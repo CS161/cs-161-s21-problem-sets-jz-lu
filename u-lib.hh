@@ -109,6 +109,12 @@ inline int sys_testkalloc(long tcase) {
     return make_syscall(SYSCALL_TESTKALLOC, tcase);
 }
 
+// sys_wildalloc(tcase)
+//    Wild allocation for buddy allocator.
+inline int sys_wildkalloc(long tcase) {
+    return make_syscall(SYSCALL_WILDALLOC, tcase);
+}
+
 // sys_kdisplay(display_type)
 //    Set the display type (one of the KDISPLAY constants).
 inline int sys_kdisplay(int display_type) {

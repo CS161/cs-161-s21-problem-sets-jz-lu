@@ -248,6 +248,9 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_TESTKALLOC: 
         return syscall_testkalloc(regs);
 
+    case SYSCALL_WILDALLOC:
+        return syscall_wildalloc(regs);
+
     case SYSCALL_PAUSE: {
         sti();
         for (uintptr_t delay = 0; delay < 1000000; ++delay) {
@@ -451,17 +454,17 @@ int proc::syscall_nasty(regstate* regs) {
 //    Test cases for buddy allocator.
 int proc::syscall_testkalloc(regstate* regs) {
     int tcase = regs->reg_rdi;
-    int alloc_size = 100;
-    void* ptrs[alloc_size];
+    int nallocs = 100;
+    void* ptrs[nallocs];
 
     switch (tcase) {
         case 0: { // Single-page allocs
             uint64_t sz = PAGESIZE;
-            for (int i = 0; i < alloc_size; ++i) {
+            for (int i = 0; i < nallocs; ++i) {
                 ptrs[i] = kalloc(sz);
             }
 
-            for (int i = 0; i < alloc_size; ++i) {
+            for (int i = 0; i < nallocs; ++i) {
                 kfree(ptrs[i]);
             }
             // Allocate a bunch of pages in succession, then free them.
@@ -474,13 +477,13 @@ int proc::syscall_testkalloc(regstate* regs) {
             int ro = 0;
             uint64_t sz = PAGESIZE;
 
-            for (int i = 0; i < alloc_size; ++i) {
+            for (int i = 0; i < nallocs; ++i) {
                 ro = rand(MIN_ORDER, MAX_ORDER);
                 sz = 1 << ro;
                 ptrs[i] = kalloc(sz);
             }
 
-            for (int i = 0; i < alloc_size; ++i) {
+            for (int i = 0; i < nallocs; ++i) {
                 kfree(ptrs[i]);
             }
             log_printf("======= TEST CASE [1] for PROCESS [%d] COMPLETED =======\n", this->id_);
@@ -489,14 +492,14 @@ int proc::syscall_testkalloc(regstate* regs) {
 
         case 2: { // Random allocations, not necessarily multiples of PAGESIZE
             // Again, expect lots of failed allocs due to large sizes.
-            uint64_t sz = 0;
+            uint64_t sz;
 
-            for (int i = 0; i < alloc_size; ++i) {
+            for (int i = 0; i < nallocs; ++i) {
                 sz = rand(1 << MIN_ORDER, 1 << MAX_ORDER);
                 ptrs[i] = kalloc(sz);
             }
 
-            for (int i = 0; i < alloc_size; ++i) {
+            for (int i = 0; i < nallocs; ++i) {
                 kfree(ptrs[i]);
             }
             log_printf("======= TEST CASE [2] for PROCESS [%d] COMPLETED =======\n", this->id_);
@@ -505,15 +508,14 @@ int proc::syscall_testkalloc(regstate* regs) {
 
         case 3: { // smaller random non-PAGESIZE multiple allocations
             // Expect less failed allocations this time.
+            uint64_t sz;
             for (int j = 0; j < 10; ++j) {
-                uint64_t sz = 0;
-
-                for (int i = 0; i < alloc_size; ++i) {
+                for (int i = 0; i < nallocs; ++i) {
                     sz = rand(1 << MIN_ORDER, 1 << (MAX_ORDER - 5));
-                    ptrs[i] = (void*)kalloc(sz);
+                    ptrs[i] = kalloc(sz);
                 }
 
-                for (int i = 0; i < alloc_size; ++i) {
+                for (int i = 0; i < nallocs; ++i) {
                     kfree(ptrs[i]);
                 }
             }
@@ -521,9 +523,111 @@ int proc::syscall_testkalloc(regstate* regs) {
             break;
         }
 
+        case 4: { // Randomized small slab allocations
+            for (int j = 0; j < 10; ++j) {
+                uint64_t sz;
+                for (int i = 0; i < nallocs; ++i) {
+                    sz = rand(1 << 2, 1 << 6);
+                    ptrs[i] = kalloc(sz);
+                }
+                for (int i = 0; i < nallocs; ++i) {
+                    kfree(ptrs[i]);
+                }
+            }
+            log_printf("======= {SLAB} TEST CASE [4] for PROCESS [%d] COMPLETED =======\n", this->id_);
+            break;
+
+        }
+
+        case 5: { // Randomized big slab allocations
+            for (int j = 0; j < 10; ++j) {
+                uint64_t sz;
+                for (int i = 0; i < nallocs; ++i) {
+                    sz = rand(1 << 7, (1 << 9) - 8);
+                    ptrs[i] = kalloc(sz);
+                }
+                for (int i = 0; i < nallocs; ++i) {
+                    kfree(ptrs[i]);
+                }
+            }
+            log_printf("======= {SLAB} TEST CASE [5] for PROCESS [%d] COMPLETED =======\n", this->id_);
+            break;
+
+        }
+
+        case 6: { // Randomly switch between the big slab and small slab
+            for (int j = 0; j < 10; ++j) {
+                uint64_t sz;
+                for (int i = 0; i < nallocs; ++i) {
+                    sz = rand(1 << 2, (1 << 9)- 8);
+                    ptrs[i] = kalloc(sz);
+                }
+                for (int i = 0; i < nallocs; ++i) {
+                    kfree(ptrs[i]);
+                }
+            }
+            log_printf("======= {SLAB} TEST CASE [6] for PROCESS [%d] COMPLETED =======\n", this->id_);
+            break;
+        }
+
+        case 7: { // Randomly switch between the slab allocator and buddy allocator
+            for (int j = 0; j < 10; ++j) {
+                uint64_t sz;
+                for (int i = 0; i < nallocs; ++i) {
+                    sz = rand(1 << 2, 1 << (MAX_ORDER - 5));
+                    ptrs[i] = kalloc(sz);
+                }
+                for (int i = 0; i < nallocs; ++i) {
+                    kfree(ptrs[i]);
+                }
+            }
+            log_printf("======= {SLAB} TEST CASE [7] for PROCESS [%d] COMPLETED =======\n", this->id_);
+            break;
+
+        }
+
         default: {
             log_printf("======= ERROR: Test case number %d not implemented  =======\n", tcase);
             break;
+        }
+    }
+    return 0;
+}
+
+
+// proc::syscall_wildalloc(regs)
+//    Wild test cases for buddy allocator.
+int proc::syscall_wildalloc(regstate *regs) {
+    int c = regs->reg_rdi;
+    switch (c) {
+        case 1: { // Invalid free of unallocated pointer
+            log_printf("[sys_wildalloc] Running wild allocation 1: free unallocated pointer\n");
+            void* null_ptr = nullptr;
+            kfree(null_ptr); // This should do nothing.
+            void *nasty_ptr = kalloc(PAGESIZE);
+            kfree(nasty_ptr);
+            kfree(nasty_ptr); // Should fail an assert statement with the allocator.
+            break;
+        }
+
+        case 2: { // Invalid free of non page-aligned pointer
+            log_printf("[sys_wildalloc] Running wild allocation 2: free non page-aligned pointer\n");
+            void *ptr = kalloc(PAGESIZE);
+            uint64_t addr = kptr2pa(ptr) + 6;
+            kfree(pa2kptr<void*>(addr));
+            break;
+        }
+
+        case 3: { // Invalid free in the middle of an allocation
+            log_printf("[sys_wildalloc] Running wild allocation 3: free in middle of block\n");
+            void *ptr = kalloc(2*PAGESIZE);
+            uint64_t addr = reinterpret_cast<uint64_t>(ptr) + PAGESIZE;
+            kfree(reinterpret_cast<void*>(addr));
+            break;
+        }
+
+        default: {
+            log_printf("[sys_wildalloc] No wild allocations were run.\n");
         }
     }
     return 0;
