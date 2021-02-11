@@ -1,40 +1,39 @@
 #include "kernel.hh"
 #include "k-lock.hh"
 
-static spinlock page_lock;
-static spinlock slab_lock;
-static bool kalloc_disabled; // Used for testing purposes only
+#define NOT_SLAB 0
+#define SMALL_SLAB 1
+#define BIG_SLAB 2
+#define STATIC_SMALL_SLABS 2
+#define STATIC_BIG_SLABS 1
 
-// Slab indices in the list. 
-// NOTE: should not be accessed outside of a slab lock.
-static int big_slab_index = 0;
-static int small_slab_index = 0;
+static spinlock page_lock;
+static bool kalloc_disabled; // Used for testing purposes only
 
 // Buddy and slab allocator data structures.
 bapg pgmap[MEMSIZE_PHYSICAL/PAGESIZE];
 list<bapg, &bapg::pglink> free_blocks[MAX_ORDER - MIN_ORDER + 1];
-list<smallslab, &smallslab::pglink> smallslabs;
-list<bigslab, &bigslab::pglink> bigslabs;
+smallslab smallslabs[] = {smallslab(0), smallslab(1)};
+bigslab bigslabs[] = {bigslab(0), bigslab(1)};
 
 // disable_kalloc()
 //     FOR TESTING ONLY!
 void disable_kalloc() {
     kalloc_disabled = true;
-}  // CHANGEMADE
+}
 
 // enable_kalloc()
 //     FOR TESTING ONLY!
 void enable_kalloc() {
     kalloc_disabled = false;
-} // CHANGEMADE
+}
 
 // page_is_free(pa) 
 //    Returns whether a page is free or not. Used for forktesting.
 uint64_t page_is_free(uint64_t pa) {
     assert((pa & (PAGESIZE - 1)) == 0); // Must be page-aligned
     return pgmap[pa/PAGESIZE].free;
-} // CHANGEMADE
-
+}
 
 // largest_fitting_ord(num, sz)
 //  returns largest power of 2 that fits inside of the given number
@@ -156,8 +155,6 @@ void check_kalloc(void* ptr, uint64_t sz) {
             assert(it2 != it);
         }
     }
-
-    // log_printf("[kalloc] [CHECKER] PASSED\n");
 }
 
 
@@ -182,10 +179,80 @@ void check_kfree(void* ptr, uint64_t sz) {
         assert(it->returned == 0);
         // We cannot check the order because the buddy can adjoin to some arbitrary block size
     }
-
-    // log_printf("[kfree] [CHECKER] PASSED\n");
 }
 
+
+// check_salloc()
+//    slab alloc testing function.
+void check_salloc(void *ptr) {
+    if (!ptr) {
+        return;
+    }
+    short *csz_ptr = reinterpret_cast<short*>(reinterpret_cast<uint64_t>(ptr) - 8);
+    if (*csz_ptr == SMALL_CHUNKSIZE) {
+        small_chunk *s = reinterpret_cast<small_chunk*>(reinterpret_cast<uint64_t>(ptr) - 8);
+        assert(s->canary == SLAB_CANARY);
+        assert(s->sz == *csz_ptr);
+        assert(s->ind < STATIC_SMALL_SLABS);
+        bool found = false;
+        for (int i = 0; i < STATIC_SMALL_SLABS; ++i) {
+            if (smallslabs[i].ind == s->ind) {
+                found = true;
+                assert(smallslabs[i].state != SLAB_FREE);
+                assert(smallslabs[i].free_chunks[s - smallslabs[i].chunks] == 0); // Chunk should be marked as not free
+            }
+        }
+        assert(found);
+    } else {
+        big_chunk *s = reinterpret_cast<big_chunk*>(reinterpret_cast<uint64_t>(ptr) - 8);
+        assert(s->canary == SLAB_CANARY);
+        assert(s->sz == *csz_ptr);
+        assert(s->ind < STATIC_BIG_SLABS);
+        bool found = false;
+        for (int i = 0; i < STATIC_BIG_SLABS; ++i) {
+            if (bigslabs[i].ind == s->ind) {
+                found = true;
+                assert(bigslabs[i].state != SLAB_FREE);
+                assert(bigslabs[i].free_chunks[s - bigslabs[i].chunks] == 0); // Chunk should be marked as not free
+            }
+        }
+        assert(found);
+    }
+}
+
+
+// check_sfree()
+//    slab free testing function.
+void check_sfree(void *ptr) {
+    if (!ptr) {
+        return;
+    }
+    short *csz_ptr = reinterpret_cast<short*>(reinterpret_cast<uint64_t>(ptr) - 8);
+    if (*csz_ptr == SMALL_CHUNKSIZE) {
+        small_chunk *s = reinterpret_cast<small_chunk*>(reinterpret_cast<uint64_t>(ptr) - 8);
+        assert(s->canary == SLAB_CANARY);
+        assert(s->sz == *csz_ptr);
+        assert(s->ind <= STATIC_SMALL_SLABS);
+        for (int i = 0; i < STATIC_SMALL_SLABS; ++i) {
+            if (smallslabs[i].ind == s->ind) {
+                assert(smallslabs[i].state != SLAB_FULL);
+                assert(smallslabs[i].free_chunks[s - smallslabs[i].chunks] == 1); // Chunk should be marked as not free
+            }
+        }
+        // Don't want to assert found since the slab might have been popped off
+    } else {
+        big_chunk *b = reinterpret_cast<big_chunk*>(reinterpret_cast<uint64_t>(ptr) - 8);
+        assert(b->canary == SLAB_CANARY);
+        assert(b->sz == *csz_ptr);
+        assert(b->ind <= STATIC_BIG_SLABS);
+        for (int i = 0; i < STATIC_BIG_SLABS; ++i) {
+            if (bigslabs[i].ind == b->ind) {
+                assert(bigslabs[i].state != SLAB_FULL);
+                assert(bigslabs[i].free_chunks[b - bigslabs[i].chunks] == 1); // Chunk should be marked as not free
+            }
+        }
+    }
+}
 
 // kalloc(sz)
 //    Allocate and return a pointer to at least sz contiguous bytes of
@@ -204,24 +271,99 @@ void* kalloc(uint64_t sz) {
     if (kalloc_disabled) {
         return nullptr;
     }
-    log_printf("[kalloc] kalloc called by process %d\n", current()->id_);
+    if (BALLOC_PARANOIA >= 2 || SALLOC_PARANOIA >= 2) {
+        log_printf("[kalloc] KALLOC called by process %d\n", current()->id_);
+    }
     if (sz == 0 || sz > (1 << MAX_ORDER)) {
-        // log_printf("[kalloc] Invalid memory request\n");
+        if (BALLOC_PARANOIA >= 1) {
+            log_printf("[kalloc] Invalid memory request of size %lu\n", sz);
+        }
         return nullptr;
     }
-    uint64_t chunk_sz = 0;
-    if (sz <= SLAB_THRESHOLD && USING_SLAB_ALLOCATOR) {
-        log_printf("[kalloc] transferring to slab alloc\n");
-        void *ptr = slab_kalloc(sz);
-        return ptr;
-    }
 
-    if (BALLOC_PARANOIA >= 1) {
-        log_printf("[kalloc] (1) BUDDY LOCKING by process %d\n", current()->id_);
+    int alloc_type = NOT_SLAB; // Which type of slab will best suit this?
+    void *ptr = nullptr;
+    if (SALLOC_PARANOIA >= 2 || BALLOC_PARANOIA >= 2) {
+        log_printf("[kalloc/slab_kalloc] LOCK grabbed by process %d\n", current()->id_);
     }
     auto irqs = page_lock.lock();
+    if (sz <= SLAB_THRESHOLD && USING_SLAB_ALLOCATOR) {
+        // Designate which slab to use.
+        if (sz <= SMALL_SLAB_THRESHOLD) {
+            alloc_type = SMALL_SLAB;
+        } else {
+            alloc_type = BIG_SLAB;
+        }
+
+        // Find an available slab. If one is available, grab and chunk and return it. Otherwise,
+        // defer the request to standard buddy allocation.
+        if (alloc_type == SMALL_SLAB) { // Walk small slabs and set ptr if possible
+            for (int i = 0; i < STATIC_SMALL_SLABS; ++i) {
+                if (SALLOC_PARANOIA >= 1) {
+                    log_printf("[slab_kalloc] Now searching small slab %ld\n", i);
+                }
+
+                if (smallslabs[i].state != SLAB_FULL) {
+                    if (SALLOC_PARANOIA >= 1) {
+                        log_printf("[slab_kalloc] Small slab index %ld is available\n", smallslabs[i].ind);
+                    }
+                    ptr = smallslabs[i].give();
+                    if (SALLOC_PARANOIA >= 1) {
+                        log_printf("[slab_kalloc] Grabbed ptr %p from small slab\n", ptr);
+                    }
+                    // We add 8 to cover the metadata at the beginning of the struct.
+                    ptr = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
+                    if (SALLOC_PARANOIA >= 1) {
+                        check_salloc(ptr);
+                    }
+                    if (SALLOC_PARANOIA >= 2 || BALLOC_PARANOIA >= 2) {
+                        log_printf("[kalloc/slab_kalloc] UNLOCK grabbed by process %d\n", current()->id_);
+                    }
+                    page_lock.unlock(irqs);
+                    return ptr;
+                }
+            }
+            // If there aren't any small slabs available, use a big slab for a small alloc.
+            if (SALLOC_PARANOIA >= 1) {
+                log_printf("[slab_kalloc] No available small slab chunks, attempting to find a big slab chunk instead\n");
+            }
+        }
+
+        for (int i = 0; i < STATIC_BIG_SLABS; ++i) {
+            if (SALLOC_PARANOIA >= 1) {
+                log_printf("[slab_kalloc] Now searching big slab index %ld\n", bigslabs[i].ind);
+            }
+
+            if (bigslabs[i].state != SLAB_FULL) {
+                if (SALLOC_PARANOIA >= 1) {
+                    log_printf("[slab_kalloc] Big slab index %ld is available\n", bigslabs[i].ind);
+                }
+                ptr = bigslabs[i].give();
+                if (SALLOC_PARANOIA >= 1) {
+                    log_printf("[slab_kalloc] Grabbed ptr %p from big slab\n", ptr);
+                }
+                // We add 8 to cover the metadata at the beginning of the struct.
+                ptr = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
+                if (SALLOC_PARANOIA >= 1) {
+                    check_salloc(ptr);
+                }
+                if (SALLOC_PARANOIA >= 2 || BALLOC_PARANOIA >= 2) {
+                    log_printf("[kalloc/slab_kalloc] UNLOCK grabbed by process %d\n", current()->id_);
+                }
+                page_lock.unlock(irqs);
+                return ptr;
+            }
+        }
+
+        // If no slab is available, then defer to the buddy allocator.
+        if (!ptr) {
+            if (SALLOC_PARANOIA >= 1) {
+                log_printf("[slab_kalloc] No big slab found. Deferring task to buddy allocator.\n");
+            }
+        }
+    }
     
-    void* ptr = nullptr;
+    // Run the buddy allocator.
     uint64_t ord = order(sz);
     if (BALLOC_PARANOIA >= 1 || BALLOC_METRICS) {
         log_printf("[kalloc] NEW allocation request of size 0x%x, ord %lu\n", sz, ord);
@@ -288,7 +430,7 @@ void* kalloc(uint64_t sz) {
                 break;
             } 
         }
-    } else { // Yuhhhh! There is already a block of the desired order free
+    } else { // Yippie! There is already a block of the desired order free
         if (BALLOC_PARANOIA >= 2) {
             log_printf("[kalloc] SUCCESS! Found new block of order %lu\n", ord);
         }
@@ -296,144 +438,53 @@ void* kalloc(uint64_t sz) {
     }
 
     if (!blk) {
-        log_printf("[kalloc] Error: insufficient memory blocks available for requested size 0x%x\n", sz);
-        if (BALLOC_PARANOIA >= 1) {
-            log_printf("[kalloc] (2) BUDDY UNLOCKING by process %d\n", current()->id_);
+        if (BALLOC_METRICS || BALLOC_PARANOIA >= 1) {
+            log_printf("[kalloc] Error: insufficient memory blocks available for requested size 0x%x\n", sz);
+        }
+        if (BALLOC_PARANOIA >= 2) {
+        log_printf("[kalloc] UNLOCK grabbed by process %d\n", current()->id_);
         }
         page_lock.unlock(irqs);
         return nullptr;
     }
 
-    // Compute the physical address of the block. Note that the index of pgmap is also the index
-    // of the page in physical memory! So the index is just the offset in physical memory
-    // in units of PAGESIZE's.
-    uint64_t addr = (blk - pgmap)*PAGESIZE;
-    if (BALLOC_PARANOIA >= 1) {
-        log_printf("[kalloc] ALLOCATED pa = 0x%x\n", addr);
-    }
-    ptr = pa2kptr<void*>(addr);
-    blk->returned = 1;
+    // The remaining code should only run upon successful allocation.
+    if (blk) {
+        // Compute the physical address of the block. Note that the index of pgmap is also the index
+        // of the page in physical memory! So the index is just the offset in physical memory
+        // in units of PAGESIZE's.
+        uint64_t addr = (blk - pgmap)*PAGESIZE;
+        if (BALLOC_PARANOIA >= 1) {
+            log_printf("[kalloc] ALLOCATED pa = 0x%x\n", addr);
+        }
+        ptr = pa2kptr<void*>(addr);
+        blk->returned = 1;
 
-    for (bapg* it = blk; it - blk < (1 << (ord - MIN_ORDER)); it++) {
-        it->free = false;
-        it->ord = ord;
-    }
+        for (bapg* it = blk; it - blk < (1 << (ord - MIN_ORDER)); it++) {
+            it->free = false;
+            it->ord = ord;
+        }
 
-    // Check invariants if debugging is on.
-    if (BALLOC_PARANOIA >= 1) {
-        check_kalloc(ptr, sz);
-    }
+        // Check invariants if debugging is on.
+        if (BALLOC_PARANOIA >= 1) {
+            check_kalloc(ptr, sz);
+        }
 
-    if (BALLOC_PARANOIA >= 1) {
-        log_printf("[kalloc] (3) BUDDY UNLOCKING by process %d\n", current()->id_);
+        // Tell sanitizers the allocated page is accessible
+        asan_mark_memory(ka2pa(ptr), 1 << ord, false);
+        // Initialize to int3
+        memset(ptr, 0xCC, 1 << ord);
+    }
+    
+    // If not using slab and ptr is not null, then return the ptr. (Normal buddy alloc.)
+    if (BALLOC_PARANOIA >= 2) {
+        log_printf("[kalloc] Buddy allocation exiting, new kptr given: %p\n", ptr);
+    }
+    if (BALLOC_PARANOIA >= 2) {
+        log_printf("[kalloc] UNLOCK grabbed by process %d\n", current()->id_);
     }
     page_lock.unlock(irqs);
-
-    // Tell sanitizers the allocated page is accessible
-    asan_mark_memory(ka2pa(ptr), 1 << ord, false);
-    // Initialize to int3
-    memset(ptr, 0xCC, 1 << ord);
-    
     return ptr;
-}
-
-
-// slab_kalloc(sz)
-//  allocates big and small slabs for our slab allocator
-void* slab_kalloc(size_t sz) { // reminder call outside of lock in kalloc
-    if (SALLOC_PARANOIA > 0) {
-        log_printf("(A) {KALLOC} SLAB LOCKING by process %d\n", current()->id_);
-    }
-    auto irqs = slab_lock.lock();
-    if (SALLOC_PARANOIA > 0) {
-        log_printf("[slab_kalloc] NEW slab request of sz: 0x%x\n", sz);
-        assert(sz <= SLAB_THRESHOLD, "[slab_kalloc] Requested size too large for slab allocation\n");
-    }
-    bool is_small = sz <= 120; // Control flow: use big slab or small slab
-    if (SALLOC_PARANOIA > 0) {
-        log_printf("[slab_kalloc] Going to small slab? %s, big slab? %s\n", 
-            is_small ? "Yes" : "No", is_small ? "No" : "Yes");
-    }
-
-    if (is_small) {
-        log_printf("[slab_kalloc] Going down small path\n");
-        for (smallslab* it = smallslabs.front(); it; it = smallslabs.next(it)) {
-            log_printf("[slab_kalloc] Now searching small slab index %ld\n", it->ind);
-            if (it->state != SLAB_FULL) {
-                log_printf("[slab_kalloc] Small slab index %ld is not full!\n", it->ind);
-                void* ptr = it->give();
-                log_printf("[slab_kalloc] Grabbed ptr %p from small slab\n", ptr);
-                if (SALLOC_PARANOIA > 0) {
-                    log_printf("(B) {SMALL} SLAB UNLOCKING by process %d\n", current()->id_);
-                }
-                slab_lock.unlock(irqs);
-                // We add 8 to cover the metadata at the beginning of the struct.
-                log_printf("[slab_kalloc] Small slab work done, returning\n", it->ind);
-                return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
-            }
-        }
-
-        // If this point is reached, then there are no open chunks in allocated slabs. Get a new one.
-        smallslab* slab = knew<smallslab>(small_slab_index++);
-        if (SALLOC_PARANOIA) {
-            log_printf("[slab_kalloc] ALLOCATED new small slab at KVA 0x%x, index now is ** %d **\n", 
-                reinterpret_cast<uintptr_t>(slab), small_slab_index);
-        }
-
-        if (!slab) {
-            log_printf("[slab_kalloc] Slab allocatior failed to get more memory from buddy allocator\n");
-            if (SALLOC_PARANOIA > 0) {
-                log_printf("(C) {SMALL} SLAB UNLOCKING by process %d\n", current()->id_);
-            }
-            slab_lock.unlock(irqs);
-            return nullptr;
-        }
-
-        // Add the slab to the list of slabs. Then return a pointer to the user.
-        smallslabs.push_back(slab);
-        void* ptr = slab->give();
-        log_printf("(J) {SMALL} SLAB UNLOCKING by process %d\n", current()->id_);
-        slab_lock.unlock(irqs);
-
-        // We add 8 to cover the metadata at the beginning of the struct.
-        return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
-
-    } else { // Big chunk
-        log_printf("[slab_kalloc] Going down big path\n");
-        for (bigslab* it = bigslabs.front(); it; it = bigslabs.next(it)) {
-            if (it->state != SLAB_FULL) {
-                void* ptr = it->give();
-                if (SALLOC_PARANOIA) {
-                    log_printf("(E) {BIG} SLAB UNLOCKING by process %d\n", current()->id_);
-                }
-                slab_lock.unlock(irqs);
-                // We add 8 to cover the metadata at the beginning of the struct.
-                return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
-            }
-        }
-        bigslab* slab = knew<bigslab>(big_slab_index++);
-        if (SALLOC_PARANOIA) {
-            log_printf("[slab_kalloc] ALLOCATED new big slab, index now is ** %d **\n", big_slab_index);
-        }
-
-        if (!slab) {
-            log_printf("[slab_kalloc] Slab allocatior failed to get more memory from buddy allocator\n");
-            if (SALLOC_PARANOIA > 0) {
-                log_printf("(F) {BIG} SLAB UNLOCKING by process %d\n", current()->id_);
-            }
-            slab_lock.unlock(irqs);
-            return nullptr;
-        }
-
-        bigslabs.push_back(slab);
-        void* ptr = slab->give();
-        if (SALLOC_PARANOIA > 0) {
-            log_printf("(G) {BIG} SLAB UNLOCKING by process %d\n", current()->id_);
-        }
-        slab_lock.unlock(irqs);
-        // We add 8 to cover the metadata at the beginning of the struct.
-        return reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
-    }
 }
 
 
@@ -457,218 +508,196 @@ static bool buddy_to_the_left(bapg* blk) {
 //    Free a pointer previously returned by `kalloc`. Does nothing if
 //    `ptr == nullptr`.
 
-void kfree(void* ptr, bool called_by_slab) {
+void kfree(void* ptr) {
     if (!ptr) { // Do nothing
         return;
     }
+    if (BALLOC_PARANOIA >= 2 || SALLOC_PARANOIA >= 2) {
+        log_printf("[kfree/slab_kfree] LOCK grabbed by process %d\n", current()->id_);
+    }
     auto irqs = page_lock.lock();
 
-    // Assuming the slab isn't the one trying to free a slab page, check if allocation 
-    // should be handed off to the slab. Do so if so, being careful about locks!
-    if (!called_by_slab && USING_SLAB_ALLOCATOR) {
-        log_printf("[kfree] (K) {KFREE} SLAB LOCKING by process %d\n", current()->id_);
-        auto slab_irqs = slab_lock.lock();
-        uint64_t chunk_addr = reinterpret_cast<uint64_t>(ptr) - 8;
-        for (smallslab* it = smallslabs.front(); it; it = smallslabs.next(it)) {
-            uint64_t slab_addr = reinterpret_cast<uint64_t>(it);
-            if (slab_addr <= chunk_addr && chunk_addr <= slab_addr + sizeof(smallslab)) {
-                log_printf("[kfree] (L) {KFREE} SLAB UNLOCKING by process %d\n", current()->id_);
-                slab_lock.unlock(slab_irqs);
-                page_lock.unlock(irqs);
-                slab_kfree(ptr);
-                return;
-            }
-        }
-        for (bigslab* it = bigslabs.front(); it; it = bigslabs.next(it)) {
-            uint64_t slab_addr = reinterpret_cast<uint64_t>(it);
-            if (slab_addr <= chunk_addr && chunk_addr <= slab_addr + sizeof(bigslab)) {
-                log_printf("[kfree] (M) {KFREE} SLAB UNLOCKING by process %d\n", current()->id_);
-                slab_lock.unlock(slab_irqs);
-                page_lock.unlock(irqs);
-                slab_kfree(ptr);
-                return;
-            }
-        }
-        log_printf("[kfree] (N) {KFREE} SLAB UNLOCKING by process %d\n", current()->id_);
-        slab_lock.unlock(slab_irqs);
-    }
+    // Reverse engineer the type of allocation using canaries.
+    int alloc_type = NOT_SLAB;
+    int *chunk_canary = reinterpret_cast<int*>(reinterpret_cast<uint64_t>(ptr) - 4);
+    int *chunk_ind = reinterpret_cast<int*>(reinterpret_cast<uint64_t>(ptr) - 6);
 
-    uint64_t addr = kptr2pa(ptr);
-    assert((addr & 0xfff) == 0, "Attempted free on non page-aligned address\n"); // assert page-aligned pointer
-    bapg *blk = &(pgmap[addr / PAGESIZE]);
-    uint64_t blksz = 1 << blk->ord;
-    if (BALLOC_PARANOIA >= 2 || BALLOC_METRICS) {
-        log_printf("[kfree] KFREE called to free %p corr. to pa = 0x%x\n", ptr, addr);
+    // If the canary matches the slab canary then we are working with a slab ptr
+    if (*chunk_canary == SLAB_CANARY && USING_SLAB_ALLOCATOR) {
+        short *sz_ptr = reinterpret_cast<short*>(reinterpret_cast<uint64_t>(ptr) - 8);
+        if (*sz_ptr == SMALL_CHUNKSIZE) {
+            alloc_type = SMALL_SLAB;
+        } else if (*sz_ptr == BIG_CHUNKSIZE) {
+            alloc_type = BIG_SLAB;
+        } else {
+            panic("[kfree] Corrupted slab memory detected: invalid slab chunk size\n");
+        }
     }
-
-    assert(!blk->free, 
-        "Error: attempted free on already freed block\n"); // it's not already free 
-    assert(blk->returned, 
-        "Error: attempted free on pointer not returned by kalloc()\n"); // kalloc gave this addr it away in the first place
     
-    // Update metadata.
-    blk->returned = 0;
-    for (bapg* it = blk; it < blk + (1 << blk->ord)/PAGESIZE; ++it) {
-        it->free = 1;
+    // For slab allocations, walk the list and find the slab parent. If the parent is free now,
+    // free it by setting ptr to it. Otherwise, set ptr to nullptr which will skip
+    // the buddy allocator freeing process.
+    if (alloc_type != NOT_SLAB && USING_SLAB_ALLOCATOR) {
+        uint64_t chunk_addr = reinterpret_cast<uint64_t>(ptr) - 8;
+        if (alloc_type == SMALL_SLAB) {
+            for (int i = 0; i < STATIC_SMALL_SLABS; ++i) {
+                uint64_t slab_addr = reinterpret_cast<uint64_t>(&smallslabs[i]);
+                if (slab_addr <= chunk_addr && chunk_addr <= slab_addr + sizeof(smallslab)
+                    && *chunk_ind == smallslabs[i].ind) {
+                    // Parent slab found! Free and check if it needs to be free.
+                    smallslabs[i].receive(reinterpret_cast<void*>(chunk_addr));
+                    if (SALLOC_PARANOIA >= 1) {
+                        check_sfree(ptr);
+                    }
+                }
+            }
+        }
+        else {
+            for (int i = 0; i < STATIC_BIG_SLABS; ++i) {
+                uint64_t slab_addr = reinterpret_cast<uint64_t>(&bigslabs[i]);
+                if (slab_addr <= chunk_addr && chunk_addr <= slab_addr + sizeof(bigslab)
+                    && *chunk_ind == bigslabs[i].ind) {
+                    // Parent slab found! Free and check if it needs to be free.
+                    bigslabs[i].receive(reinterpret_cast<void*>(chunk_addr));
+                    if (SALLOC_PARANOIA >= 1) {
+                        check_sfree(ptr);
+                    }
+                }
+            }
+        }
+        if (BALLOC_PARANOIA >= 2 || SALLOC_PARANOIA >= 2) {
+            log_printf("[kfree/sfree] UNLOCK grabbed by process %d\n", current()->id_);
+        }
+        page_lock.unlock(irqs);
+        return;
     }
 
-    // tell sanitizers the freed page is inaccessible
-    // Don't move this! blk->ord updates as the block is reunited with buddies.
-    asan_mark_memory(ka2pa(ptr), 1 << blk->ord, true);
-
-    // Iteratively search for free buddies to combine with until we cannot anymore, 
-    // then push to the relevant free list.
-    while (true) {
-        if (BALLOC_PARANOIA >= 2) {
-            log_printf("[kfree] blk ord: %lu, root ord: %lu\n", blk->ord, blk->r_ord);
+    else {
+        uint64_t addr = kptr2pa(ptr);
+        assert((addr & 0xfff) == 0, "Attempted free on non page-aligned address\n"); // assert page-aligned pointer
+        bapg *blk = &(pgmap[addr / PAGESIZE]);
+        uint64_t blksz = 1 << blk->ord;
+        if (BALLOC_PARANOIA >= 2 || BALLOC_METRICS) {
+            log_printf("[kfree] KFREE called to free %p corr. to pa = 0x%x\n", ptr, addr);
         }
-        if (blk->ord == blk->r_ord) { // No buddies left (base case)
-            free_blocks[blk->ord - MIN_ORDER].push_back(blk);
-            if (BALLOC_PARANOIA >= 2) {
-                log_printf("[kfree] NO BUDDIES left; root order reached. Freeing immediately\n");
-            }
-            break;
-        } else { // We have a buddy, hooray! Let's check if it's free.
-            if (BALLOC_PARANOIA >= 2) {
-                log_printf("[kfree] Buddy found, order of current block: %lu\n", blk->ord);
-            }
-            uint64_t buddy_addr = buddy_to_the_left(blk) ?
-                addr - (1 << blk->ord) /* left bud */ : addr + (1 << blk->ord) /* right bud */;
-            bapg *buddy_blk = &(pgmap[buddy_addr / PAGESIZE]);
-            if (BALLOC_PARANOIA >= 2) {
-                log_printf("[kfree] FOUND %s BUDDY (currently!) with order %lu at pa = 0x%x (for blk at pa = 0x%x). Is it free? ", 
-                    buddy_addr < addr ? "LEFT" : "RIGHT", buddy_blk->ord, buddy_addr, addr);
-            }
-            
-            if (buddy_blk->free && buddy_blk->ord == blk->ord) { // If entire block is free
-                if (BALLOC_PARANOIA >= 2) {
-                    assert(!buddy_blk->returned, "WTF you did something rly bad\n");
-                    log_printf("Yes!\n[kfree] Adjoining block to %s buddy, updating new pa to 0x%x\n", 
-                        buddy_addr < addr ? "left" : "right", buddy_addr < addr ? buddy_addr : addr);
-                    log_printf("[kfree] Order of blk: %d, order of buddy: %d\n", blk->ord, buddy_blk->ord);
-                }
-                
-                // Pop the buddy we are about to adjoin off of the free list. 
-                // It's going into a free bin now!
-                for (bapg* it = free_blocks[blk->ord-MIN_ORDER].front(); 
-                    it; 
-                    it = free_blocks[blk->ord-MIN_ORDER].next(it)) {
-                    if (BALLOC_PARANOIA >= 2) {
-                        log_printf("Now searching a free block VA 0x%x with PA 0x%x\n",
-                            it, (it-pgmap)*PAGESIZE);
-                    }
-                    if (it == buddy_blk) {
-                        if (BALLOC_PARANOIA >= 2) {
-                            log_printf("[kfree] LOCATED buddy block on free list, addr 0x%x, order %lu\n",
-                            (it-pgmap)*PAGESIZE, it->ord);
-                        }
-                        
-                        free_blocks[blk->ord-MIN_ORDER].erase(it);
-                        
-                        if (BALLOC_PARANOIA >= 2) {
-                            log_printf("[kfree] POPPED (ord-%lu) buddy off its free list\n", blk->ord);
-                        }
-                        break;
-                    }
-                }
 
-                int old_ord = blk->ord;
-                if (BALLOC_PARANOIA >= 1) {
-                    assert(blk->ord == buddy_blk->ord, "[kalloc] Immediate order assertion failure\n");
-                }
-                
-                // Update the order for the newly adjoined blocks.
-                for (bapg *it = blk, *it2 = buddy_blk; 
-                    it < blk + (1 << old_ord)/PAGESIZE; 
-                    ++it, ++it2) {
-                    it->ord++;
-                    it2->ord++;
-                }
-                if (BALLOC_PARANOIA >= 2) {
-                    log_printf("[KFREE] UPDATED buddy ord to %lu and blk ord to %lu\n", 
-                        buddy_blk->ord, blk->ord);
-                }
-                if (buddy_addr < addr) { // If buddy is on the left then update the block for next iter
-                    blk = buddy_blk;
-                    addr = buddy_addr;
-                }
+        assert(!blk->free, 
+            "Error: attempted free on already freed block\n");
+        assert(blk->returned, 
+            "Error: attempted free on pointer not returned by kalloc()\n");
+        
+        // Update metadata.
+        blk->returned = 0;
+        for (bapg* it = blk; it < blk + (1 << blk->ord)/PAGESIZE; ++it) {
+            it->free = 1;
+        }
 
-                if (BALLOC_PARANOIA >= 2) {
-                    log_printf("[kfree] ADJOINED buddies. Recursing on higher order\n");
-                }
-            } else { // Darn! The buddy isn't free. Guess we'll just free what we have.
-                if (BALLOC_PARANOIA >= 2) {
-                    log_printf("No (sad) \n[kfree] FREED block of order %lu at pa = 0x%x\n", 
-                    blk->ord, PAGESIZE*(blk-pgmap));
-                }
-                
+        // tell sanitizers the freed page is inaccessible
+        // Don't move this! blk->ord updates as the block is reunited with buddies.
+        asan_mark_memory(ka2pa(ptr), 1 << blk->ord, true);
+
+        // Iteratively search for free buddies to combine with until we cannot anymore, 
+        // then push to the relevant free list.
+        while (true) {
+            if (BALLOC_PARANOIA >= 2) {
+                log_printf("[kfree] blk ord: %lu, root ord: %lu\n", blk->ord, blk->r_ord);
+            }
+            if (blk->ord == blk->r_ord) { // No buddies left (base case)
                 free_blocks[blk->ord - MIN_ORDER].push_back(blk);
+                if (BALLOC_PARANOIA >= 2) {
+                    log_printf("[kfree] NO BUDDIES left; root order reached. Freeing immediately\n");
+                }
                 break;
+            } else { // We have a buddy, hooray! Let's check if it's free.
+                if (BALLOC_PARANOIA >= 2) {
+                    log_printf("[kfree] Buddy found, order of current block: %lu\n", blk->ord);
+                }
+                uint64_t buddy_addr = buddy_to_the_left(blk) ?
+                    addr - (1 << blk->ord) /* left bud */ : addr + (1 << blk->ord) /* right bud */;
+                bapg *buddy_blk = &(pgmap[buddy_addr / PAGESIZE]);
+                if (BALLOC_PARANOIA >= 2) {
+                    log_printf("[kfree] FOUND %s BUDDY (currently!) with order %lu at pa = 0x%x (for blk at pa = 0x%x). Is it free? ", 
+                        buddy_addr < addr ? "LEFT" : "RIGHT", buddy_blk->ord, buddy_addr, addr);
+                }
+                
+                if (buddy_blk->free && buddy_blk->ord == blk->ord) { // If entire block is free
+                    if (BALLOC_PARANOIA >= 2) {
+                        assert(!buddy_blk->returned, "WTF you did something rly bad\n");
+                        log_printf("Yes!\n[kfree] Adjoining block to %s buddy, updating new pa to 0x%x\n", 
+                            buddy_addr < addr ? "left" : "right", buddy_addr < addr ? buddy_addr : addr);
+                        log_printf("[kfree] Order of blk: %d, order of buddy: %d\n", blk->ord, buddy_blk->ord);
+                    }
+                    
+                    // Pop the buddy we are about to adjoin off of the free list. 
+                    // It's going into a free bin now!
+                    for (bapg* it = free_blocks[blk->ord-MIN_ORDER].front(); 
+                        it; 
+                        it = free_blocks[blk->ord-MIN_ORDER].next(it)) {
+                        if (BALLOC_PARANOIA >= 2) {
+                            log_printf("Now searching a free block VA 0x%x with PA 0x%x\n",
+                                it, (it-pgmap)*PAGESIZE);
+                        }
+                        if (it == buddy_blk) {
+                            if (BALLOC_PARANOIA >= 2) {
+                                log_printf("[kfree] LOCATED buddy block on free list, addr 0x%x, order %lu\n",
+                                (it-pgmap)*PAGESIZE, it->ord);
+                            }
+                            
+                            free_blocks[blk->ord-MIN_ORDER].erase(it);
+                            
+                            if (BALLOC_PARANOIA >= 2) {
+                                log_printf("[kfree] POPPED (ord-%lu) buddy off its free list\n", blk->ord);
+                            }
+                            break;
+                        }
+                    }
+
+                    int old_ord = blk->ord;
+                    if (BALLOC_PARANOIA >= 1) {
+                        assert(blk->ord == buddy_blk->ord, "[kalloc] Immediate order assertion failure\n");
+                    }
+                    
+                    // Update the order for the newly adjoined blocks.
+                    for (bapg *it = blk, *it2 = buddy_blk; 
+                        it < blk + (1 << old_ord)/PAGESIZE; 
+                        ++it, ++it2) {
+                        it->ord++;
+                        it2->ord++;
+                    }
+                    if (BALLOC_PARANOIA >= 2) {
+                        log_printf("[KFREE] UPDATED buddy ord to %lu and blk ord to %lu\n", 
+                            buddy_blk->ord, blk->ord);
+                    }
+                    if (buddy_addr < addr) { // If buddy is on the left then update the block for next iter
+                        blk = buddy_blk;
+                        addr = buddy_addr;
+                    }
+
+                    if (BALLOC_PARANOIA >= 2) {
+                        log_printf("[kfree] ADJOINED buddies. Recursing on higher order\n");
+                    }
+                } else { // Darn! The buddy isn't free. Guess we'll just free what we have.
+                    if (BALLOC_PARANOIA >= 2) {
+                        log_printf("No (sad) \n[kfree] FREED block of order %lu at pa = 0x%x\n", 
+                        blk->ord, PAGESIZE*(blk-pgmap));
+                    }
+                    
+                    free_blocks[blk->ord - MIN_ORDER].push_back(blk);
+                    break;
+                }
             }
+        }
+
+        // Check the kfree invariants if debugging is on.
+        if (BALLOC_PARANOIA >= 1) {
+            check_kfree(ptr, blksz);
         }
     }
 
-    // Check the kfree invariants if debugging is on.
-    if (BALLOC_PARANOIA >= 1) {
-        check_kfree(ptr, blksz);
+    if (BALLOC_PARANOIA >= 2 || SALLOC_PARANOIA >= 2) {
+        log_printf("[kfree/sfree] UNLOCK grabbed by process %d\n", current()->id_);
     }
-
     page_lock.unlock(irqs);
-}
-
-// slab_kfree(ptr)
-//    Free a ptr from the slab.
-void slab_kfree(void* ptr) {
-    log_printf("(H) {FREE} SLAB LOCKING by process %d\n", current()->id_);
-    auto irqs = slab_lock.lock();
-
-    // Move the pointer from user space to the actual start of the struct.
-    ptr = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) - 8);
-
-    // A priori we don't know which chunk this is. We will find the metadata and 
-    short *chunk_sz = reinterpret_cast<short*>(ptr);
-    short *chunk_ind = reinterpret_cast<short*>(reinterpret_cast<uint64_t>(ptr) + 2);
-    int *chunk_canary = reinterpret_cast<int*>(reinterpret_cast<uint64_t>(ptr) + 4);
-
-    if (SALLOC_PARANOIA) {
-        log_printf("[slab_kfree] Chunk KVA: 0x%x, Chunk size: 0x%x, Slab index: %i\n", ptr, *chunk_sz, *chunk_ind);
-        assert(*chunk_canary == SLAB_CANARY, "Slab metadata corrupted!\n");
-    }
-
-    bool found = false; // Flag of whether the given slab was found. Huge problem if not!
-    if (*chunk_sz == SMALL_CHUNKSIZE) {
-        for (smallslab* it = smallslabs.front(); it; it = smallslabs.next(it)) {
-            if (it->ind == *chunk_ind) {
-                it->receive(ptr);
-                found = true;
-                if (it->state == SLAB_FREE) {
-                    log_printf("[slab_kfree] CALLED kfree to free slab at %p\n", it);
-                    kfree(reinterpret_cast<void*>(it), true);
-                    smallslabs.erase(it);
-                }
-                break;
-            }
-        }
-    } else if (*chunk_sz == BIG_CHUNKSIZE){
-        for (bigslab* it = bigslabs.front(); it; it = bigslabs.next(it)) {
-            if (it->ind == *chunk_ind) {
-                it->receive(ptr);
-                found = true;
-                if (it->state == SLAB_FREE) {
-                    log_printf("[slab_kfree] CALLED kfree to free slab at %p\n", it);
-                    kfree(reinterpret_cast<void*>(it), true);
-                    bigslabs.erase(it);
-                }
-                break;
-            }
-        }
-    } else {
-        panic("Slab allocator corrupted, size metadata damaged!\n");
-    }
-    log_printf("(I) {FREE} SLAB UNLOCKING by process %d\n", current()->id_);
-    slab_lock.unlock(irqs);
-
-    assert(found, "Slab corrupted, no slab corresponding to metadata index was found!\n");
 }
 
 

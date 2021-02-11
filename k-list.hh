@@ -29,7 +29,6 @@ template <typename T, list_links (T::* member)>
 struct list {
     list_links head_;
 
-
     // Construct an empty list
     inline list();
     // Reset this list to empty, ignoring its current contents

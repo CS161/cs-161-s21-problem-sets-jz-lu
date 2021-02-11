@@ -36,8 +36,8 @@ void process_main() {
     stack_bottom = reinterpret_cast<uint8_t*>(
         round_down(rdrsp() - 1, PAGESIZE)
     );
-    int tstart = 4;
-    int ntests = 5;
+    int tstart = 0;
+    int ntests = 8;
     while (tstart < ntests) {
         sys_testkalloc(tstart++);
         sys_yield();

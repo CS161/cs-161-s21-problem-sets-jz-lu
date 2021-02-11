@@ -396,12 +396,15 @@ int proc::copy_memory_(proc* child) {
         parent->unlock_pagetable_read(irqs);
         child->unlock_pagetable_read(irqs_child);
         return E_NOMEM;
-} // CHANGEMADE
+}
 
 
 // proc::syscall_fork(regs)
 //    Fork a child process.
 int proc::syscall_fork(regstate* regs) {
+    if (FORK_PARANOIA) {
+        log_printf("[fork] Fork called by parent process %d\n", this->id_);
+    }
     pid_t pid = 0;
     {
     spinlock_guard guard(ptable_lock);
@@ -415,39 +418,55 @@ int proc::syscall_fork(regstate* regs) {
 
     // no open pid was found
     if (!pid) {
-        log_printf("No open processes, caller PID: %d\n", this->id_);
+        if (FORK_PARANOIA) {
+            log_printf("No open processes, caller PID: %d\n", this->id_);
+        }
         return -1;
     } else {
-        log_printf("Successfully found a free PID = %d to fork from parent PID = %d\n", pid, this->id_);
+        if (FORK_PARANOIA) {
+            log_printf("Successfully found a free PID = %d to fork from parent PID = %d\n", pid, this->id_);
+        }
     }
 
     proc* child = knew<proc>(); // allocate new process
     int memcpy_failed = 1; // Initialize flag before goto statements.
     x86_64_pagetable* child_pt = nullptr; // same deal
     if (!child) {
-        log_printf("[fork] ERROR: no available memory remaining for child process struct.\n");
+        if (FORK_PARANOIA) {
+            log_printf("[fork] ERROR: no available memory remaining for child process struct.\n");
+        }
         goto eret;
     }
     child_pt = kalloc_pagetable();
     if (!child_pt) {
-        log_printf("[fork] ERROR: no available memory remaining for child pagetable.\n");
+        if (FORK_PARANOIA) {
+            log_printf("[fork] ERROR: no available memory remaining for child pagetable.\n");
+        }
         goto free_proc;
     }
 
     child->init_user(pid, child_pt);
-    log_printf("[fork] Child initialized with early pagetable and set to runnable\n");
+    if (FORK_PARANOIA) {
+        log_printf("[fork] Child initialized with early pagetable and set to runnable\n");
+    }
 
     memcpy_failed = this->copy_memory_(child);
     if (memcpy_failed) {
-        log_printf("[fork] Copying Memory During Fork FAILED, caller: %d\n", this->id_);
+        if (FORK_PARANOIA) {
+            log_printf("[fork] Copying Memory During Fork FAILED, caller: %d\n", this->id_);
+        }
         goto free_pt;
     } else {
-        log_printf("[fork] Memory successfully copied from parent to child!\n");
+        if (FORK_PARANOIA) {
+            log_printf("[fork] Memory successfully copied from parent to child!\n");
+        }
     }
 
     // Copy over parent's registers.
     memcpy(child->regs_, regs, sizeof(regstate)); 
-    log_printf("Copied parent registers to child\n");
+    if (FORK_PARANOIA) {
+        log_printf("[fork] Copied parent registers to child\n");
+    }
 
     // add to process table (requires lock in case another CPU is already
     // running processes)
@@ -460,17 +479,27 @@ int proc::syscall_fork(regstate* regs) {
 
     return pid;
 
-    // Fork failure cleanup methods, accessed via goto
+    // Fork failure cleanup methods, accessed via goto.
     free_pt:
-        log_printf("[fork] Fork failed, freeing process pagetable\n");
+        if (FORK_PARANOIA) {
+            log_printf("[fork] Fork failed, freeing process pagetable\n");
+        }
         kfree(child_pt);
-        log_printf("[fork] Process pagetable freed\n");
+        if (FORK_PARANOIA) {
+            log_printf("[fork] Process pagetable freed\n");
+        }
     free_proc:
-        log_printf("[fork] Fork failed, freeing struct proc\n");
+        if (FORK_PARANOIA) {
+            log_printf("[fork] Fork failed, freeing struct proc\n");
+        }
         kfree(child); // BE FREE MY CHILD
-        log_printf("[fork] Struct proc freed\n");
+        if (FORK_PARANOIA) {
+            log_printf("[fork] Struct proc freed\n");
+        }
     eret:
-        log_printf("[fork] Exiting with exit status %d (no memory)\n", E_NOMEM);
+        if (FORK_PARANOIA) {
+            log_printf("[fork] Exiting with exit status %d (no memory)\n", E_NOMEM);
+        }
         return E_NOMEM;
     }
 }
@@ -572,7 +601,7 @@ int proc::syscall_forktest(regstate* regs) {
     log_printf("\nva dump: \n");
 
     return 0;
-} // CHANGEMADE
+}
 
 
 // proc::syscall_nasty()
@@ -596,7 +625,7 @@ int proc::syscall_nasty(regstate* regs) {
 //    Test cases for buddy allocator.
 int proc::syscall_testkalloc(regstate* regs) {
     int tcase = regs->reg_rdi;
-    int nallocs = 100;
+    int nallocs = 50;
     void* ptrs[nallocs];
 
     switch (tcase) {
@@ -664,7 +693,7 @@ int proc::syscall_testkalloc(regstate* regs) {
             log_printf("======= TEST CASE [3] for PROCESS [%d] COMPLETED =======\n", this->id_);
             break;
         }
-
+        // ----- Slab allocator test starts here! -----
         case 4: { // Randomized small slab allocations
             for (int j = 0; j < 10; ++j) {
                 uint64_t sz;
@@ -694,7 +723,6 @@ int proc::syscall_testkalloc(regstate* regs) {
             }
             log_printf("======= {SLAB} TEST CASE [5] for PROCESS [%d] COMPLETED =======\n", this->id_);
             break;
-
         }
 
         case 6: { // Randomly switch between the big slab and small slab
@@ -716,7 +744,7 @@ int proc::syscall_testkalloc(regstate* regs) {
             for (int j = 0; j < 10; ++j) {
                 uint64_t sz;
                 for (int i = 0; i < nallocs; ++i) {
-                    sz = rand(1 << 2, 1 << (MAX_ORDER - 5));
+                    sz = rand(1 << 2, 1 << (MIN_ORDER + 2));
                     ptrs[i] = kalloc(sz);
                 }
                 for (int i = 0; i < nallocs; ++i) {
@@ -725,7 +753,6 @@ int proc::syscall_testkalloc(regstate* regs) {
             }
             log_printf("======= {SLAB} TEST CASE [7] for PROCESS [%d] COMPLETED =======\n", this->id_);
             break;
-
         }
 
         default: {

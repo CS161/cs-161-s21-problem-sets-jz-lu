@@ -13,6 +13,7 @@ template <unsigned maxsize> class memrangeset;
 #define NUM_BIG_SLABS 2*PAGESIZE/BIG_CHUNKSIZE - 1
 #define SLAB_CANARY 984257
 #define SLAB_THRESHOLD BIG_CHUNKSIZE - 8
+#define SMALL_SLAB_THRESHOLD SMALL_CHUNKSIZE - 8
 
 // Buddy allocator struct encoding metadata for each page under the buddy allocator system.
 struct bapg {
@@ -43,14 +44,12 @@ struct big_chunk {
 
 // Small slab allocator
 struct smallslab {
-    private:
-        int64_t nallocs_ = 0; // Number of allocations
-    public:
-        uint64_t state = SLAB_FREE;
-        list_links pglink; // Linked list element
-        int64_t ind; // Index slab within linked list, so we know where to return mem to
-        small_chunk chunks[NUM_SMALL_SLABS]; // Chunks of SMALL_CHUNKSIZE for allocs
-        unsigned char free_chunks[NUM_SMALL_SLABS]; // Indexes whether a given chunk is free or not
+    int64_t nallocs_ = 0; // Number of allocations
+    uint64_t state = SLAB_FREE;
+    list_links pglink; // Linked list element
+    int64_t ind; // Index slab within linked list, so we know where to return mem to
+    small_chunk chunks[NUM_SMALL_SLABS]; // Chunks of SMALL_CHUNKSIZE for allocs
+    unsigned char free_chunks[NUM_SMALL_SLABS]; // Indexes whether a given chunk is free or not
 
     smallslab(uint64_t index) {
         // Set the index and the size.
@@ -77,6 +76,7 @@ struct smallslab {
                 else if (nallocs_ > 0) {
                     state = SLAB_PARTIAL;
                 }
+                assert(chunks[free_ind].canary == SLAB_CANARY);
 
                 return this->chunks + free_ind;
             }
@@ -134,6 +134,8 @@ struct bigslab {
         while (free_ind < NUM_BIG_SLABS) {
             if (free_chunks[free_ind]) {
                 free_chunks[free_ind] = 0;
+
+                assert(chunks[free_ind].canary == SLAB_CANARY);
 
                 // Update the state if necessary.
                 if (++nallocs_ == NUM_BIG_SLABS) {

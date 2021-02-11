@@ -173,7 +173,7 @@ const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
 const uint64_t FORK_PARANOIA = 1;
 
 // Slab allocator flags. 
-const uint64_t SALLOC_PARANOIA = 1; // 0 = do nothing, 1 = checking
+const uint64_t SALLOC_PARANOIA = 0; // 0 = do nothing, 1 = checking
 const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
 
 // Buddy allocator orders.
@@ -357,18 +357,11 @@ uint64_t blk_order(uint64_t pa);
 //    to be page-aligned.
 void* kalloc(size_t sz) __attribute__((malloc));
 
-// slab_kalloc(sz)
-//    Slab allocator called by kalloc() for small requests
-void* slab_kalloc(size_t sz);
-
-// slab_kfree(ptr)
-//    Frees a pointer from the slab
-void slab_kfree(void* ptr);
 
 // kfree(ptr)
 //    Free a pointer previously returned by `kalloc`. Does nothing if
 //    `ptr == nullptr`.
-void kfree(void* ptr, bool called_by_slab = false);
+void kfree(void* ptr);
 
 // operator new, operator delete
 //    Expressions like `new (std::nothrow) T(...)` and `delete x` work,
