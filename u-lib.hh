@@ -115,12 +115,6 @@ inline int sys_wildkalloc(long tcase) {
     return make_syscall(SYSCALL_WILDALLOC, tcase);
 }
 
-// sys_forktest(tcase)
-//    Assert that fork frees all memory in failure cases.
-inline int sys_forktest() {
-    return make_syscall(SYSCALL_FORKTEST);
-} // CHANGEMADE
-
 // sys_kdisplay(display_type)
 //    Set the display type (one of the KDISPLAY constants).
 inline int sys_kdisplay(int display_type) {

@@ -264,10 +264,6 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_FORK:
         return syscall_fork(regs);
     
-    case SYSCALL_FORKTEST:
-        syscall_forktest(regs);
-        return 0;
-    
     case SYSCALL_NASTY: {
         long n =  syscall_nasty(regs);
         assert(this->canary == CANARY_EV, 
@@ -352,6 +348,12 @@ int proc::copy_memory_(proc* child) {
                     }
                     vmiter itc(child, itp.va());
                     int try_map_code = itc.try_map(npg, itp.perm());
+
+                    // Simulate failed mapping, encompasses all test cases for memcopies
+                    if (FORK_TESTING && rand(0, 10) < 4) { 
+                        log_printf("[forktest] Simulating failed child mem copy for parent process %d\n", this->id_);
+                        try_map_code = -1;
+                    }
                     if (try_map_code == -1) {
                         log_printf("[fork::copy_memory] Try_map failed from parent: pid= %d\n", parent->id_);
                         kfree(npg);
@@ -429,8 +431,14 @@ int proc::syscall_fork(regstate* regs) {
     }
 
     proc* child = knew<proc>(); // allocate new process
+    if (FORK_TESTING == 1 && rand(0, 1) < 1) { // Testing: simulate struct proc alloc failure
+        log_printf("[forktest] Simulating child struct proc failed alloc for parent process %d\n", this->id_);
+        kfree(child);
+        child = nullptr;
+    }
     int memcpy_failed = 1; // Initialize flag before goto statements.
     x86_64_pagetable* child_pt = nullptr; // same deal
+
     if (!child) {
         if (FORK_PARANOIA) {
             log_printf("[fork] ERROR: no available memory remaining for child process struct.\n");
@@ -438,6 +446,11 @@ int proc::syscall_fork(regstate* regs) {
         goto eret;
     }
     child_pt = kalloc_pagetable();
+    if (FORK_TESTING == 2 && rand(0, 1) < 1) { // simulate child pt alloc failure
+        log_printf("[forktest] Simulating child pt failed alloc for parent process %d\n", this->id_);
+        kfree(child_pt);
+        child_pt = nullptr;
+    }
     if (!child_pt) {
         if (FORK_PARANOIA) {
             log_printf("[fork] ERROR: no available memory remaining for child pagetable.\n");
@@ -502,105 +515,6 @@ int proc::syscall_fork(regstate* regs) {
         }
         return E_NOMEM;
     }
-}
-
-// proc::syscall_forktest(regs)
-//    Tests freeing functionalities of fork.
-//    This will trigger a page fault on process 4 after it returns!
-//    We are freeing some of process 4's memory in a determinstic way to test fork
-//    under specific instances of physical memory availability, but because of that 
-//    process 4 can't continue to run after the test is done. This is irrelevant to the 
-//    functionality of fork when it fails, since the test shows it works. In reality this 
-//    does not cause an issue.
-int proc::syscall_forktest(regstate* regs) {
-    disable_kalloc(); // So that other processes can't mess with our assertions when we test
-    const int NUM_FREES = 8;
-    assert(!kalloc(PAGESIZE), "[forktest] Error: forktest must be called when no pages are free\n");
-    uintptr_t freepgs_pa[8] = {0}; // We will be freeing 8 pages total
-    log_printf("\n\n\n\n ########### STARTING FORKTEST YEEHAW ###########\n\n\n\n");
-    // Test 1: try to fork, and assert that it fails immediately.
-    log_printf("[forktest] RUNNING test 1: process alloc fail\n");
-    int t1fail = syscall_fork(regs);
-    assert(t1fail);
-    log_printf("[forktest] PASSED test 1\n");
-
-    // Test 2: free 1 page of memory in the given process,
-    // then assert that it failed. The logs should show that the process was allocated
-    // but NOT the pagetable. Assert that the page we freed, which must be the one given to the
-    // child process struct, is again free after fork returns.
-    {
-        spinlock_guard guard(ptable_lock);
-        log_printf("[forktest] RUNNING test 2: process alloc, ptable fail\n");
-        vmiter it(this);
-        while (it.low()) {
-            if (it.user() && it.pa() != CONSOLE_ADDR) {
-                freepgs_pa[0] = it.pa();
-                it.kfree_page();
-                break;
-            }
-            it.next();
-        }
-    }
-    int t2fail = syscall_fork(regs);
-    assert(t2fail);
-    log_printf("Asserting page 0 free for test 2\n");
-    assert(page_is_free(freepgs_pa[0]));
-    log_printf("[forktest] PASSED test 2\n");
-
-    // Test 3: free 2 pages of memory. Then same deal as before, but this time the process
-    // and the pagetable should be allocated, and the failure should come from the first attempt to copy
-    // memory.
-    {
-        spinlock_guard guard(ptable_lock);
-        log_printf("[forktest] RUNNING test 3: process and ptable alloc, memcpy fail\n");
-        vmiter it(this);
-        for (int i = 1; i < 3;) {
-            if (it.user() && it.pa() != CONSOLE_ADDR) {
-                freepgs_pa[i] = it.pa();
-                it.kfree_page();
-                ++i;
-            }
-            it.next();
-        }
-    }
-    int t3fail = syscall_fork(regs);
-    assert(t3fail);
-    for (int i = 0; i < 3; ++i) {
-        log_printf("Asserting page %d free for test 3\n", i);
-        assert(page_is_free(freepgs_pa[i]));
-    }   
-    log_printf("[forktest] PASSED test 3\n");
-    
-    // Test 4: free 5 more pages of memory. Then same deal, but this time there should be nontrivial frees
-    // by proc::copy_memory(), which is hard to assert but can easily be checked in the logs.
-    {
-        spinlock_guard guard(ptable_lock);
-        log_printf("[forktest] RUNNING test 4: partial mem copy before failure\n");
-        vmiter it(this);
-        for (int i = 3; i < NUM_FREES;) {
-            if (it.user() && it.pa() != CONSOLE_ADDR) {
-                freepgs_pa[i] = it.pa();
-                it.kfree_page();
-                ++i;
-            }
-            it.next();
-        }
-    }
-    int t4fail = syscall_fork(regs);
-    assert(t4fail);
-    for (int i = 0; i < NUM_FREES; ++i) {
-        log_printf("Asserting page %d free for test 4\n", i);
-        assert(page_is_free(freepgs_pa[i]));
-    }   
-    log_printf("[forktest] PASSED test 4\n");
-
-    log_printf("\npa dump: \n");
-    for (auto i : freepgs_pa) {
-        log_printf("0x%x\n", i);
-    }
-    log_printf("\nva dump: \n");
-
-    return 0;
 }
 
 

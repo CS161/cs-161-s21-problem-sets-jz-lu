@@ -8,6 +8,7 @@ uint8_t* stack_bottom;
 
 // NOTE: this defines which (if any) wild allocations to run. See pset1answers.md for details.
 #define WILDNO 0
+#define FORKTESTING 1
 
 // Test cases for the buddy allocator.
 
@@ -36,23 +37,42 @@ void process_main() {
     stack_bottom = reinterpret_cast<uint8_t*>(
         round_down(rdrsp() - 1, PAGESIZE)
     );
-    int tstart = 0;
-    int ntests = 8;
-    while (tstart < ntests) {
-        sys_testkalloc(tstart++);
-        sys_yield();
-        if (rand() < RAND_MAX / 32) {
-            sys_pause();
+
+    if (FORKTESTING) {
+        while (true) {
+            if (rand(0, ALLOC_SLOWDOWN - 1) < p) {
+                if (heap_top == stack_bottom || sys_page_alloc(heap_top) < 0) {
+                    break;
+                }
+                *heap_top = p;      /* check we have write access to new page */
+                heap_top += PAGESIZE;
+            }
+            sys_yield();
+            if (rand() < RAND_MAX / 32) {
+                sys_pause();
+            }
+        }
+    } else {
+        int tstart = 0;
+        int ntests = 8;
+        while (tstart < ntests) {
+            sys_testkalloc(tstart++);
+            sys_yield();
+            if (rand() < RAND_MAX / 32) {
+                sys_pause();
+            }
+        }
+
+        // Run a wild allocation if specified.
+        sys_wildkalloc(WILDNO);
+
+        // After tests are complete, do nothing forever
+        while (true) {
+            sys_yield();
         }
     }
 
-    // Run a wild allocation if specified.
-    sys_wildkalloc(WILDNO);
-
-    // After tests are complete, do nothing forever
-    while (true) {
-        sys_yield();
-    }
-
     panic("Should never reach here u bimbo!\n");
+
+    
 }

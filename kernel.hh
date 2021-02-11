@@ -67,9 +67,6 @@ struct __attribute__((aligned(4096))) proc {
     // Make an exact copy of the process.
     int syscall_fork(regstate* regs);
 
-    // Test fork freeing functionalities.
-    int syscall_forktest(regstate* regs); // CHANGEMADE
-
     // A nasty allocation syscall that corrupts the kernel stack via resursive local variable
     int syscall_nasty(regstate* regs);
 
@@ -172,6 +169,11 @@ const uint64_t BALLOC_PARANOIA = 0;
 const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
 const uint64_t FORK_PARANOIA = 1;
 
+// 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
+// 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_
+const uint64_t FORK_TESTING = 1; 
+
+
 // Slab allocator flags. 
 const uint64_t SALLOC_PARANOIA = 0; // 0 = do nothing, 1 = checking
 const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
@@ -179,7 +181,6 @@ const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = tu
 // Buddy allocator orders.
 #define MIN_ORDER 12
 #define MAX_ORDER 21
-
 
 
 // yieldstate: callee-saved registers that must be preserved across
