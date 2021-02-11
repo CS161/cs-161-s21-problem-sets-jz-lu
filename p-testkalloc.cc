@@ -22,6 +22,13 @@ void process_main() {
     (void) sys_fork();
     (void) sys_fork();
 
+    if (FORKTESTING) {
+        (void) sys_fork();
+        (void) sys_fork();
+        (void) sys_fork();
+        (void) sys_fork();
+    }
+
     pid_t p = sys_getpid();
     srand(p);
 
@@ -65,14 +72,12 @@ void process_main() {
 
         // Run a wild allocation if specified.
         sys_wildkalloc(WILDNO);
+    }
 
-        // After tests are complete, do nothing forever
-        while (true) {
-            sys_yield();
-        }
+    // After tests are complete, do nothing forever
+    while (true) {
+        sys_yield();
     }
 
     panic("Should never reach here u bimbo!\n");
-
-    
 }

@@ -10,7 +10,7 @@ Answers to written questions
 2. Experimentally determined to be `ptr = 0xffff800000001000`; this is 1 page up from the start of high canonical memory, where the physical memory map is allocated (which is consistent with the boot process of Chickadee where the physical memory map is the first allocation by direct linear translation to high canonical memory). In `kernel.hh` the function `init_physical_ranges()` reserves the zero page (for `nullptr`) and then sets the permissions of the lower canonical and upper canonical regions, so by the direct linear mapping of the physical memory table the first allocation begins 1 page up since that is the first allocatable page. 
 3. The max is `0xffff8000001ff000`, after which `kalloc()` returns `nullptr`. We should expect this since this is an offset 1 page size smaller than `MEMSIZE_PHYSICAL = 0x200000`.
 4. The address types are high canonical, as they are of the form `0xffff8000xxxxxxxx`. The line `ptr = pa2kptr<void*>(next_free_pa)` in `kalloc()` calls a function that returns `pa2ka(pa)`, which by the documentation returns the high canonical address of the PA.
-5. We could change `MEMSIZE_PHYSICAL = 0x200000` to say `300000`, i.e. `#define MEMSIZE_PHYSICAL 0x300000`, or equivalently in `k-init.cc` change the same constant in `physical_ranges.set(0, MEMSIZE_PHYSICAL, mem_available)`. Then the max `kalloc()` goes to just short of `0x300000`, due to some reserved pages and 300000 being the `MEMSIZE_VIRTUAL`.
+5. We could change `MEMSIZE_PHYSICAL = 0x200000` to say `300000`, i.e. `#define MEMSIZE_PHYSICAL 0x300000`, but that is an `.hh` file, so instead we equivalently in `k-init.cc` change the same constant in `physical_ranges.set(0, MEMSIZE_PHYSICAL, mem_available)`. Then the max `kalloc()` goes to just short of `0x300000`, due to some reserved pages and `0x300000` being the `MEMSIZE_VIRTUAL`.
 6. We switch to the following:
 ```
 while (next_free_pa < physical_ranges.limit() && 
@@ -61,13 +61,13 @@ This is done once per CPU to initialize the CPU state.
 7. `idle()` in `k-cpu.cc`. Called when there are no processes left to run, or when there are more CPUs asked for than `MAXCPU`, which `k-exception.S` handles by `jge ap_entry_failed` where `ap_entry_failed` is the imbedding of the `idle()` function (which is just an assembly inline) of doing `hlt` and then `jmp` forever. The allocation of the stack is done in `init_kernel()` by adding a `PROCSTACK_SIZE` to `%rsp`. That is called from `init_idle_task()`, called in `schedule()` the first time a CPU is initialized. Idling occurs in `resume()` when appropriate.
 
 ### Part D
-Note that we used green dollar signs to decorate our console. cashmoney
+Note that we used green dollar signs to decorate our console. (cashmoney)
 
 ### Part E
-Nothing to write here.
+We have an additional set of test cases to make sure `fork` frees properly upon failed forking. These are discussed in the grading notes.
 
 ### Part F
-Our nasty alloc recursively allocates a lot of local memory in an array. The canary is asserted after most system calls are made (except for things like `getpid` which we assert beforehand). It is not perfect in catching overflow, but it does detect our nasty alloc.
+Our nasty alloc allocates a lot of local memory in an array. The canary is asserted after most system calls are made (except for things like `getpid` which we assert beforehand). It is not perfect in catching overflow, but it does detect our nasty alloc.
 
 We added the flag `Wstack-usage=4096` (this is quite large but it was for demonstrative purposes vis a vis `sys_nasty()` and can be tuned down to detect unintended overflows). This produced a compiler warning, so it did successfully catch the overflow as the error was static.
 ```
@@ -101,7 +101,7 @@ struct bapg {
 
 bapg pgmap[MEMSIZE_PHYSICAL/PAGESIZE]
 ```
-The root block is the original block that has no buddy. To intialize, we walk through each range in `physical_ranges`. We iteratively compute the largest block of size `2**ord` that fits in the range, and set the relevant metadata. Allocating is done by walking through the lowest-order nonempty free list and breaking down blocks if needed, and freeing is done by computing buddy address, checking if free, and if so adjoining the blocks and repeating until no free buiddy is found, at which time the block is pushed onto the relevant free list.
+The root block is the original block that has no buddy. To intialize, we walk through each range in `physical_ranges`. We iteratively compute the largest block of size `2**ord` that fits in the range, and set the relevant metadata. Allocating is done by walking through the lowest-order nonempty free list and breaking down blocks if needed, and freeing is done by computing buddy address, checking if free, and if so adjoining the blocks and repeating until no free buiddy is found, at which time the block is pushed onto the relevant free list. The buddy is computed by pure pointer arithmetic, by translating the block backwards by the root address, so that it apppears to be offset from 0, and then using power-of-2 math to determine whether it is a left buddy or right buddy.
 
 *Note*: the buddy allocator revealed an additional 4 pages of memory being allocated by the kernel that are not marked. A backtrace showed that an allocation in `ahcistate::find()` was made in `kernel_start()`, which has initially been returned a `nullptr` by the driver `kalloc`ator due to allocation being larger than a page. We marked these in `memviewer::refresh()` so again no pages are left unmarked.
 
@@ -111,20 +111,45 @@ Our test cases all involve some form of deterministic or random allocation and f
 2. Random allocations of multiples of `PAGESIZE`.
 3. Random allocations of random sizes (not necessarily a multiple of anything), allocating a lot and freeing a lot, repeatedly.
 4. Edge cases (wild frees, double frees, unreasonably large allocs, etc.)
-Checking on invariants is done in `check_kalloc()` and `check_kfree()`. These are called if the `BALLOC_PARANOIA` constant in `kernel.hh` is turned on.
+Checking on invariants is done in `check_kalloc()` and `check_kfree()`. These are called if the `BALLOC_PARANOIA` constant in `kernel.hh` is turned on. If you feel that the world is too fast and you have too much free time, set it to `2` for a very massive, very slow text dump of all the allocation steps and status updates (do not recommend). **Wild tests**: in addition to testing if the buddy allocator works, we have a few tests that ensure the allocator fails an assertion before it does something dumb like a double free. There is a constant `WILDNO` at the top of `p-testkalloc.cc`, which is set to 0 by default to not run these. Only one can run at a time, as the allocator is designed to fail an assertion for each test. Change `WILDNO` from `0` to `1, 2, 3` to respectively try unallocated free, non-aligned free, and free in the middle of a given block. *These tests also include slab allocator tests; see below about those.*
 
 Grading notes
 -------------
-**Extra credit attempts**: `fstack-usage` (see Part F). 
+**Late hours used**: 3.
 
-**Part E**: we implement one additional test case in `fork()`, in particular that of calling `kfree()` in the kernel if the fork fails. This test case is controlled by the constant `TESTING` defined at the top of `p-allocator.cc`. If this flag is on, which it currently is, then `p-allocator.cc` will attempt to fork twice more at the end of the usual 4-process allocations, once the memory has certainly run out. This is done via an additional syscall which tests 3 cases.
-1. Pure fork. Fork immediately, and nothing will be allocated since memory is 100% full. Expect immediate return.
-2. Free 1 page and fork. Expect that the child process will be allocated, but memory runs out when allocating the pagetable. Thus the process will need to be freed.
-3. Free 2 pages and fork. Expect that the child process and pagetable will be allocated, but the fork fails as soon as the mem copying begins.
-4. Free 8 pages and fork. Expect that the child process, pagetable, and part of the memory will be allocated before the fail.
-We should expect `log.txt` to report a failed fork, and `kfree()` to free any pages that were allocated before the failure.
-*How to run*: set the flag in `p-allocator.cc` to `1` and do `make run`. Check the logs for an analysis of what is going on--note in particular that all pages are freed properly. Our test relies on asserting that the pages are free; in reality other threads/processes might want to allocate that page, and thus for testing purposes only we turned on `kalloc()` once `syscall_forktest()` fires, so that we can properly assert. This serves merely to make our asserts valid, and does not cause any race conditions as in practical use we *want* other processes to take that memory---the disabling of `kalloc()` just ensures we can test that `fork()` worked. Also note that to test `fork()` we free the first `k` pages of process 4 after all memory is taken so we can control exactly how many pages are available. This means that the test works accurately and deterministically, but will page fault at the end. This is intentional and is not a statement on correctness.
+**Extra credit attempts**: 
+1. `fstack-usage` (see Part F). 
+2. Slab allocator implemented. Design: two slab sizes `smallslab` and `bigslab`. `smallslab` gives 128-byte chunks, and `bigslab` gives 512-byte chunks. These are allocated statically upon bootup, and are then given in `kalloc()` if available. If no chunks are available, then the buddy allocator is used. In essence freing and allocating pass through a checker to see whether the slab can handle it first; if not then buddy allocators will take care of it. The metadata is standard to a memory arena, and can be viewed from `k-memrange.hh`. Note that the first 8 bytes of every chunk is metadata, which is not given to the user (the pointer is moved before returning and moved back in `kfree()`). A comprehensive set of test cases, including random small chunk allocs, random big chunk allocs, random mixed chunk allocs, and random mix of all types including large non-slab allocs, are automatically run along with the buddy allocator test cases. **Important**: to run the slab allocator, the flag `USING_SLAB_ALLOCATOR` must be turned on in `kernel.hh`. Since we won't be using slab for coursework, the flag is turned off by default, but you can turn it on to test.
+
+**Part E**: we implement one additional test case in `fork()`, in particular that of calling `kfree()` in the kernel if the fork fails. This test is controlled by the constant `FORKTESTING`, which if switched to 1 will divert the buddy and slab allocator test cases into testing fork in failure cases (change it in `p-testkalloc.cc` to run tests). The constant triggers `p-testkalloc.cc` to fork many more times, and also gets `fork()` to simulate failures to (a) allocate a `struct proc`, (b) allocate a child pagetable, or (c) copy the memory/mappings over in `proc::copy_memory_`. We put enough `sys_fork()`s in the testing file to get all cases to appear, and verified that they successfully exited. The test is based on assuming the buddy allocator is correct. To see the logs verifying the correctness, turn `FORK_PARANOIA` on to `1` in `kernel.hh`. Examples of the 3 in `logs.txt` are
+```
+// Bad mem copy/map
+[forktest] Simulating failed child mem copy for parent process 1
+[fork::copy_memory] Try_map failed from parent: pid= 1
+[fork::copy_memory] FREEING va 0x100000 / pa 0x8b000
+[copy_memory] Finished freeing with vmiter
+[fork::copy_memory] FREEING va 0x0 / pa 0x8a000
+[fork::copy_memory] FREEING va 0x0 / pa 0x89000
+[fork::copy_memory] FREEING va 0x0 / pa 0x1fd000
+[copy_memory] Finished freeing with ptiter
+[fork] Copying Memory During Fork FAILED, caller: 1
+[fork] Fork failed, freeing process pagetable
+[fork] Process pagetable freed
+[fork] Fork failed, freeing struct proc
+[fork] Struct proc freed
+[fork] Exiting with exit status -12 (no memory)
+
+// Bad struct proc alloc
+[forktest] Simulating child struct proc failed alloc for parent process 1
+[fork] ERROR: no available memory remaining for child process struct.
+[fork] Exiting with exit status -12 (no memory)
+
+// Bad pagetable
+[forktest] Simulating child pt failed alloc for parent process 1
+[fork] ERROR: no available memory remaining for child pagetable.
+[fork] Fork failed, freeing struct proc
+[fork] Struct proc freed
+[fork] Exiting with exit status -12 (no memory)
+```
 
 **Part F**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.
-
-**Part G (Buddy allocator)**: set the constant `BALLOC_PARANOIA = 1` in `kernel.hh` when running test cases so the invariant checker functions are fired. If you feel that the world is too fast and you have too much free time, set it to `2` for a very massive, very slow text dump of all the allocation steps and status updates (do not recommend). **Wild tests**: in addition to testing if the buddy allocator works, we have a few tests that ensure the allocator fails an assertion before it does something dumb like a double free. There is a constant `WILDNO` at the top of `p-testkalloc.cc`, which is set to 0 by default to not run these. Only one can run at a time, as the allocator is designed to fail an assertion for each test. Change `WILDNO` from `0` to `1, 2, 3` to respectively try unallocated free, non-aligned free, and free in the middle of a given block.

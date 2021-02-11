@@ -345,6 +345,9 @@ int proc::copy_memory_(proc* child) {
                     if (!npg) {
                         log_printf("[fork::copy_memory] kalloc allocation error from parent: pid = %d\n", parent->id_);
                         goto free_mem_maps;
+                    } else if (FORK_PARANOIA) {
+                        log_printf("[fork::copy_memory] NEW page copy at va %p, pa 0x%x from parent: pid = %d\n",
+                            npg, kptr2pa(npg), parent->id_);
                     }
                     vmiter itc(child, itp.va());
                     int try_map_code = itc.try_map(npg, itp.perm());
@@ -356,7 +359,9 @@ int proc::copy_memory_(proc* child) {
                     }
                     if (try_map_code == -1) {
                         log_printf("[fork::copy_memory] Try_map failed from parent: pid= %d\n", parent->id_);
-                        kfree(npg);
+                        if (!FORK_TESTING) {
+                            kfree(npg); // Simulation would make this a double free!
+                        }
                         goto free_mem_maps;
                     }
                     memcpy((void*) npg, (void*) itp.va(), PAGESIZE);
@@ -386,13 +391,19 @@ int proc::copy_memory_(proc* child) {
                 itc.next_range();
             }
         }
-        
+        if (FORK_TESTING || FORK_PARANOIA) {
+            log_printf("[copy_memory] Finished freeing with vmiter\n");
+        }
+
         // Walk the page tables and free all pages.
         for (ptiter it(child); it.low(); it.next()) {
             if (FORK_PARANOIA) {
                 log_printf("[fork::copy_memory] FREEING va 0x%x / pa 0x%x\n", it.va(), it.pa());
             }
             it.kfree_ptp();
+        }
+        if (FORK_TESTING || FORK_PARANOIA) {
+            log_printf("[copy_memory] Finished freeing with ptiter\n");
         }
 
         parent->unlock_pagetable_read(irqs);
@@ -431,7 +442,7 @@ int proc::syscall_fork(regstate* regs) {
     }
 
     proc* child = knew<proc>(); // allocate new process
-    if (FORK_TESTING == 1 && rand(0, 1) < 1) { // Testing: simulate struct proc alloc failure
+    if (FORK_TESTING == 1 && rand(0, 5) < 1) { // Testing: simulate struct proc alloc failure
         log_printf("[forktest] Simulating child struct proc failed alloc for parent process %d\n", this->id_);
         kfree(child);
         child = nullptr;
@@ -444,9 +455,13 @@ int proc::syscall_fork(regstate* regs) {
             log_printf("[fork] ERROR: no available memory remaining for child process struct.\n");
         }
         goto eret;
+    } else {
+        if (FORK_PARANOIA) {
+            log_printf("[fork] Child proc struct va: %p, pa: 0x%x\n", child, kptr2pa(child));
+        }
     }
     child_pt = kalloc_pagetable();
-    if (FORK_TESTING == 2 && rand(0, 1) < 1) { // simulate child pt alloc failure
+    if (FORK_TESTING == 1 && rand(0, 1) < 1) { // simulate child pt alloc failure
         log_printf("[forktest] Simulating child pt failed alloc for parent process %d\n", this->id_);
         kfree(child_pt);
         child_pt = nullptr;
@@ -456,6 +471,10 @@ int proc::syscall_fork(regstate* regs) {
             log_printf("[fork] ERROR: no available memory remaining for child pagetable.\n");
         }
         goto free_proc;
+    } else {
+        if (FORK_PARANOIA) {
+            log_printf("[fork] Child pt va: %p, pa: 0x%x\n", child_pt, kptr2pa(child_pt));
+        }
     }
 
     child->init_user(pid, child_pt);
