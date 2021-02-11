@@ -1,7 +1,7 @@
 #include "u-lib.hh"
 #define ALLOC_SLOWDOWN 8
 
-#define TESTING 1
+#define TESTING 0 // Turn this on to test how fork fails.
 
 extern uint8_t end[];
 

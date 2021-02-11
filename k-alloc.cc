@@ -20,13 +20,13 @@ list<bigslab, &bigslab::pglink> bigslabs;
 //     FOR TESTING ONLY!
 void disable_kalloc() {
     kalloc_disabled = true;
-}
+}  // CHANGEMADE
 
 // enable_kalloc()
 //     FOR TESTING ONLY!
 void enable_kalloc() {
     kalloc_disabled = false;
-}
+} // CHANGEMADE
 
 // page_is_free(pa) 
 //    Returns whether a page is free or not. Used for forktesting.
@@ -200,7 +200,7 @@ void check_kfree(void* ptr, uint64_t sz) {
 //
 //    The handout code does not free memory and allocates memory in units
 //    of pages.
-void* kalloc(size_t sz) {
+void* kalloc(uint64_t sz) {
     if (kalloc_disabled) {
         return nullptr;
     }
@@ -209,7 +209,7 @@ void* kalloc(size_t sz) {
         // log_printf("[kalloc] Invalid memory request\n");
         return nullptr;
     }
-
+    uint64_t chunk_sz = 0;
     if (sz <= SLAB_THRESHOLD && USING_SLAB_ALLOCATOR) {
         log_printf("[kalloc] transferring to slab alloc\n");
         void *ptr = slab_kalloc(sz);
