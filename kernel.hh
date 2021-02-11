@@ -67,6 +67,9 @@ struct __attribute__((aligned(4096))) proc {
     // Make an exact copy of the process.
     int syscall_fork(regstate* regs);
 
+    // Test fork freeing functionalities.
+    int syscall_forktest(regstate* regs); // CHANGEMADE
+
     // A nasty allocation syscall that corrupts the kernel stack via resursive local variable
     int syscall_nasty(regstate* regs);
 
@@ -164,13 +167,14 @@ extern int ncpu;
 inline cpustate* this_cpu();
 
 // Debugging and testing flags
-// Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 = dump all stats.
+// Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
 const uint64_t BALLOC_PARANOIA = 0; 
 const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
+const uint64_t FORK_PARANOIA = 1;
 
 // Slab allocator flags. 
 const uint64_t SALLOC_PARANOIA = 1; // 0 = do nothing, 1 = checking
-const uint64_t USING_SLAB_ALLOCATOR = 1; // 0 = turn off slab allocation, 1 = turn on
+const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
 
 // Buddy allocator orders.
 #define MIN_ORDER 12
@@ -326,6 +330,14 @@ inline T read_unaligned(const uint8_t* ptr, T (U::* member)) {
     memcpy(&a, ptr + (reinterpret_cast<uintptr_t>(&(dummy->*member)) - reinterpret_cast<uintptr_t>(dummy)), sizeof(T));
     return a;
 }
+
+// FOR TESTING ONLY!
+void disable_kalloc();
+void enable_kalloc();
+
+// page_is_free(pa) 
+//    Returns whether a page is free or not. Used for forktesting.
+uint64_t page_is_free(uint64_t pa);
 
 // order(sz)
 //    Returns order of a block, i.e. ceil(log(sz))

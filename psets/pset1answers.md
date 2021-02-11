@@ -116,6 +116,12 @@ Checking on invariants is done in `check_kalloc()` and `check_kfree()`. These ar
 Grading notes
 -------------
 
+**Part E**: we implement one additional test case in `fork()`, in particular that of calling `kfree()` in the kernel if the fork fails. This test case is controlled by the constant `TESTING` defined at the top of `p-allocator.cc`. If this flag is on, which it currently is, then `p-allocator.cc` will attempt to fork twice more at the end of the usual 4-process allocations, once the memory has certainly run out. This is done via an additional syscall which tests 3 cases.
+1. Pure fork. Fork immediately, and nothing will be allocated since memory is 100% full. Expect immediate return.
+2. Free 1 page and fork. Expect that the child process will be allocated, but memory runs out when allocating the pagetable. Thus the process will need to be freed.
+3. Free 2 pages and fork. Expect that the child process will be 
+We should expect `log.txt` to report a failed fork, and `kfree()` to free any pages that were allocated before the failure.
+
 **Part F**: for some reason the assertion failure error message appears behind the kernel, but the canary is still working---check `log.txt`.
 
 **Part G (Buddy allocator)**: set the constant `BALLOC_PARANOIA = 1` in `kernel.hh` when running test cases so the invariant checker functions are fired. If you feel that the world is too fast and you have too much free time, set it to `2` for a very massive, very slow text dump of all the allocation steps and status updates (do not recommend). **Wild tests**: in addition to testing if the buddy allocator works, we have a few tests that ensure the allocator fails an assertion before it does something dumb like a double free. There is a constant `WILDNO` at the top of `p-testkalloc.cc`, which is set to 0 by default to not run these. Only one can run at a time, as the allocator is designed to fail an assertion for each test. Change `WILDNO` from `0` to `1, 2, 3` to respectively try unallocated free, non-aligned free, and free in the middle of a given block.
