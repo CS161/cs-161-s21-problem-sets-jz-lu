@@ -279,6 +279,7 @@ struct bitset_view {
 #define SYSCALL_TESTKALLOC 132 // Testing framework for buddy allocator
 #define SYSCALL_WILDALLOC 133 // Wild allocations for assert statements and the sanitizer to catch
 #define SYSCALL_TESTSLABALLOC 134 // Testing framework for slab allocator
+#define SYSCALL_MSLEEP 135 // Sleep for millisecond units
 
 // System call error return values
 

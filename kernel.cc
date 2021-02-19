@@ -63,6 +63,7 @@ void boot_process_start(pid_t pid, const char* name) {
     void* stkpg = kalloc(PAGESIZE);
     assert(stkpg);
     vmiter(p, MEMSIZE_VIRTUAL - PAGESIZE).map(stkpg, PTE_PWU);
+    vmiter(p, CONSOLE_ADDR).map(CONSOLE_ADDR, PTE_PWU); // Map virtual console addr to physical console addr
     p->regs_->reg_rsp = MEMSIZE_VIRTUAL;
 
     // add to process table (requires lock in case another CPU is already
@@ -110,7 +111,7 @@ void proc::exception(regstate* regs) {
             tick();
         }
         lapicstate::get().ack();
-        regs_ = regs;
+        regs_ = regs; // Set the regs in the proc metadata for the return to process via resume regstate
         yield_noreturn();
         break;                  /* will not be reached */
     }
@@ -261,8 +262,13 @@ uintptr_t proc::syscall(regstate* regs) {
         return 0;
     }
 
-    case SYSCALL_FORK:
-        return syscall_fork(regs);
+    case SYSCALL_FORK: {
+        pid_t pid = syscall_fork(regs);
+        if (FORK_PARANOIA) {
+            log_printf("[syscall] fork returned a pid %d\n", pid);
+        }
+        return pid;
+    }
     
     case SYSCALL_NASTY: {
         long n =  syscall_nasty(regs);
@@ -307,6 +313,13 @@ uintptr_t proc::syscall(regstate* regs) {
         return 0;
     }
 
+    case SYSCALL_EXIT:
+        syscall_exit(regs);
+        return 0;
+    
+    case SYSCALL_MSLEEP:
+        return syscall_msleep(regs);
+
     default:
         // no such system call
         log_printf("%d: no such system call %u\n", id_, regs->reg_rax);
@@ -345,7 +358,7 @@ int proc::copy_memory_(proc* child) {
                     if (!npg) {
                         log_printf("[fork::copy_memory] kalloc allocation error from parent: pid = %d\n", parent->id_);
                         goto free_mem_maps;
-                    } else if (FORK_PARANOIA) {
+                    } else if (FORK_PARANOIA >= 2) {
                         log_printf("[fork::copy_memory] NEW page copy at va %p, pa 0x%x from parent: pid = %d\n",
                             npg, kptr2pa(npg), parent->id_);
                     }
@@ -382,7 +395,7 @@ int proc::copy_memory_(proc* child) {
             if (itc.va() == CONSOLE_ADDR) {
                 itc.next();
             } else if (itc.user()) {
-                if (FORK_PARANOIA) {
+                if (FORK_PARANOIA >= 2) {
                     log_printf("[fork::copy_memory] FREEING va 0x%x / pa 0x%x\n", itc.va(), itc.pa());
                 }
                 itc.kfree_page();
@@ -391,7 +404,7 @@ int proc::copy_memory_(proc* child) {
                 itc.next_range();
             }
         }
-        if (FORK_TESTING || FORK_PARANOIA) {
+        if (FORK_TESTING || FORK_PARANOIA >= 2) {
             log_printf("[copy_memory] Finished freeing with vmiter\n");
         }
 
@@ -402,7 +415,7 @@ int proc::copy_memory_(proc* child) {
             }
             it.kfree_ptp();
         }
-        if (FORK_TESTING || FORK_PARANOIA) {
+        if (FORK_TESTING || FORK_PARANOIA >= 2) {
             log_printf("[copy_memory] Finished freeing with ptiter\n");
         }
 
@@ -456,7 +469,7 @@ int proc::syscall_fork(regstate* regs) {
         }
         goto eret;
     } else {
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA >= 2) {
             log_printf("[fork] Child proc struct va: %p, pa: 0x%x\n", child, kptr2pa(child));
         }
     }
@@ -472,13 +485,13 @@ int proc::syscall_fork(regstate* regs) {
         }
         goto free_proc;
     } else {
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA >= 2) {
             log_printf("[fork] Child pt va: %p, pa: 0x%x\n", child_pt, kptr2pa(child_pt));
         }
     }
 
     child->init_user(pid, child_pt);
-    if (FORK_PARANOIA) {
+    if (FORK_PARANOIA >= 2) {
         log_printf("[fork] Child initialized with early pagetable and set to runnable\n");
     }
 
@@ -489,14 +502,14 @@ int proc::syscall_fork(regstate* regs) {
         }
         goto free_pt;
     } else {
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA >= 2) {
             log_printf("[fork] Memory successfully copied from parent to child!\n");
         }
     }
 
     // Copy over parent's registers.
     memcpy(child->regs_, regs, sizeof(regstate)); 
-    if (FORK_PARANOIA) {
+    if (FORK_PARANOIA >= 2) {
         log_printf("[fork] Copied parent registers to child\n");
     }
 
@@ -509,6 +522,9 @@ int proc::syscall_fork(regstate* regs) {
 
     cpus[pid % ncpu].enqueue(child); // enqueueing on a cpu
 
+    if (FORK_PARANOIA) {
+        log_printf("[fork] Returning NEW process PID %d\n", pid);
+    }
     return pid;
 
     // Fork failure cleanup methods, accessed via goto.
@@ -699,7 +715,7 @@ int proc::syscall_testkalloc(regstate* regs) {
 
 // proc::syscall_wildalloc(regs)
 //    Wild test cases for buddy allocator.
-int proc::syscall_wildalloc(regstate *regs) {
+int proc::syscall_wildalloc(regstate* regs) {
     int c = regs->reg_rdi;
     switch (c) {
         case 1: { // Invalid free of unallocated pointer
@@ -732,6 +748,73 @@ int proc::syscall_wildalloc(regstate *regs) {
             log_printf("[sys_wildalloc] No wild allocations were run.\n");
         }
     }
+    return 0;
+}
+
+
+// proc::syscall_exit(regs)
+//    Exits a process without data races
+void proc::syscall_exit(regstate* regs) {
+    proc* p = this;
+    pid_t pid = this->id_;
+
+    {
+    spinlock_guard guard(ptable_lock);
+
+    if (EXIT_PARANOIA >= 1) {
+        log_printf("[SYSCALL_EXIT] Freeing process at VA 0x%x with pid %lu\n", p, pid);
+    }
+    auto irqs = this->lock_pagetable_read();
+
+    for (vmiter itc(p); itc.va() < MEMSIZE_VIRTUAL; ) {
+        if (itc.va() == CONSOLE_ADDR) {
+            itc.next(); // Ignore the console
+        } else if (itc.user()) {
+            if (EXIT_PARANOIA >= 1) {
+                log_printf("[SYSCALL_EXIT] FREEING VA 0x%x, i.e. PA 0x%x\n", itc.va(), itc.pa());
+            }
+            itc.kfree_page();
+            itc.next();
+        } else {
+            itc.next_range(); // Skip unallocated ranges to save time
+        }
+    }
+
+    // Now that all allocated mempages are freed, free the pagetable.
+    for (ptiter it(p); it.low(); it.next()) {
+        if (EXIT_PARANOIA) {
+            log_printf("[SYSCALL_EXIT] FREEING VA 0x%x, i.e. PA 0x%x\n", it.va(), it.pa());
+        }
+        it.kfree_ptp();
+    }
+    this->unlock_pagetable_read(irqs);
+
+    // Set the pagetable of the current process to the OG pagetable
+    // before freeing the L4 pagetable of the process.
+    set_pagetable(early_pagetable);
+    kfree(this->pagetable_);
+
+    // Mark the process as free for allocation
+    p->pstate_ = ps_blank;
+    ptable[pid] = nullptr;
+    }
+    yield_noreturn();
+}
+
+
+// proc::syscall_msleep(regs)
+//    Sleeps for msec milliseconds
+int proc::syscall_msleep(regstate* regs) {
+    uint64_t msec = regs->reg_rdi;
+    if (msec % 10) { // If time is not already a multipkle of 10 round up.
+        msec = msec - msec%10 + 10;
+    }
+
+    uint64_t start = ticks;
+    while (msec > 10*(ticks - start)) {
+        yield();
+    }
+
     return 0;
 }
 

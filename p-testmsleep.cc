@@ -9,12 +9,13 @@ void process_main() {
     int my_idx = 0;
     for (int i = 0; i < 3; ++i) {
         pid_t f = sys_fork();
-        assert_ge(f, 0);
+        assert(f >= 0);
         my_idx = (my_idx * 2) + (f == 0);
     }
 
     // each process sleeps for `100 * order[my_idx]` milliseconds
     int r = sys_msleep(100 * order[my_idx]);
+
     assert_eq(r, 0);
 
     // then prints its position

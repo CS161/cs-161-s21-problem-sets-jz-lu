@@ -275,7 +275,7 @@ _ZN4proc5yieldEv:
 
 1:      // disable interrupts, store yieldstate pointer
         cli
-        movq %rsp, 16(%rdi)
+        movq %rsp, 16(%rdi)                // stores rsp in CPU scratch space
         // jump to `proc::yield_noreturn`
         jmp _ZN4proc14yield_noreturnEv
 

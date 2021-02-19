@@ -76,6 +76,12 @@ struct __attribute__((aligned(4096))) proc {
     // Wild edge cases to test balloc under sanitizers
     int syscall_wildalloc(regstate* regs);
 
+    void syscall_exit(regstate* regs);
+
+    // Sleep for some number of milliseconds
+    int syscall_msleep(regstate *regs);
+    
+
     uintptr_t syscall_read(regstate* reg);
     uintptr_t syscall_write(regstate* reg);
     uintptr_t syscall_readdiskfile(regstate* reg);
@@ -167,7 +173,8 @@ inline cpustate* this_cpu();
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
 const uint64_t BALLOC_PARANOIA = 0; 
 const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
-const uint64_t FORK_PARANOIA = 0;
+const uint64_t FORK_PARANOIA = 1;
+const uint64_t EXIT_PARANOIA = 0;
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_

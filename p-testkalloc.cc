@@ -8,7 +8,7 @@ uint8_t* stack_bottom;
 
 // NOTE: this defines which (if any) wild allocations to run. See pset1answers.md for details.
 #define WILDNO 0
-#define FORKTESTING 1
+#define FORKTESTING 0
 
 // Test cases for the buddy allocator.
 

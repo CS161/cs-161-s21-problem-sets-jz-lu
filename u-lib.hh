@@ -115,6 +115,13 @@ inline int sys_wildkalloc(long tcase) {
     return make_syscall(SYSCALL_WILDALLOC, tcase);
 }
 
+// sys_exit(regs)
+//    Exit a process, freeing everything without data races
+inline void sys_exit() {
+    make_syscall(SYSCALL_EXIT);
+}
+
+
 // sys_kdisplay(display_type)
 //    Set the display type (one of the KDISPLAY constants).
 inline int sys_kdisplay(int display_type) {
@@ -169,7 +176,7 @@ inline pid_t sys_fork() {
 // sys_msleep(msec)
 //    Block for approximately `msec` milliseconds.
 inline int sys_msleep(unsigned msec) {
-    return E_NOSYS;
+    return make_syscall(SYSCALL_MSLEEP, msec);
 }
 
 // sys_getppid()
