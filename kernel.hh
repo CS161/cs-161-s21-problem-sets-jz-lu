@@ -14,6 +14,7 @@ struct yieldstate;
 struct proc_loader;
 struct elf_program;
 #define PROC_RUNNABLE 1
+#define NPROC 16
 
 #define CANARY_EV 894753471348 // Expected canary value
 
@@ -25,7 +26,7 @@ struct elf_program;
 // Process descriptor type
 struct __attribute__((aligned(4096))) proc {
     enum pstate_t {
-        ps_blank = 0, ps_runnable = PROC_RUNNABLE, ps_broken
+        ps_blank = 0, ps_runnable = PROC_RUNNABLE, ps_broken, ps_blocked
     };
 
     // These four members must come first:
@@ -33,6 +34,9 @@ struct __attribute__((aligned(4096))) proc {
     regstate* regs_ = nullptr;                 // Process's current registers
     yieldstate* yields_ = nullptr;             // Process's current yield state
     std::atomic<int> pstate_ = ps_blank;       // Process state
+    pid_t ppid_ = 1;                           // Parent ID, initialized to k_proc_init's ID.
+    int nchildren_ = 0;                        // Number of children
+    pid_t childpids_[NPROC] = {0};             // PID Array of children
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
     uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
@@ -98,7 +102,6 @@ struct __attribute__((aligned(4096))) proc {
     uint64_t canary = CANARY_EV;
 };
 
-#define NPROC 16
 extern proc* ptable[NPROC];
 extern spinlock ptable_lock;
 #define PROCSTACK_SIZE 4096UL

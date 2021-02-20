@@ -115,12 +115,6 @@ inline int sys_wildkalloc(long tcase) {
     return make_syscall(SYSCALL_WILDALLOC, tcase);
 }
 
-// sys_exit(regs)
-//    Exit a process, freeing everything without data races
-inline void sys_exit() {
-    make_syscall(SYSCALL_EXIT);
-}
-
 
 // sys_kdisplay(display_type)
 //    Set the display type (one of the KDISPLAY constants).
@@ -182,7 +176,7 @@ inline int sys_msleep(unsigned msec) {
 // sys_getppid()
 //    Return parent process ID.
 inline pid_t sys_getppid() {
-    return E_NOSYS;
+    return make_syscall(SYSCALL_GETPPID);
 }
 
 // sys_waitpid(pid, status, options)

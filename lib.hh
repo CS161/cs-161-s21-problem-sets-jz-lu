@@ -280,6 +280,7 @@ struct bitset_view {
 #define SYSCALL_WILDALLOC 133 // Wild allocations for assert statements and the sanitizer to catch
 #define SYSCALL_TESTSLABALLOC 134 // Testing framework for slab allocator
 #define SYSCALL_MSLEEP 135 // Sleep for millisecond units
+#define SYSCALL_GETPPID 136 // Get parent pid
 
 // System call error return values
 

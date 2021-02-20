@@ -20,6 +20,14 @@ std::atomic<int> kdisplay;
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
 
+// k_proc_init()
+//    The almighty init process, holding PID = PPID = 1.
+//    Handles final struct proc freeing and zombie waitpid-ing.
+void k_proc_init() {
+    while(true) {
+        current()->yield();
+    }
+}
 
 // kernel_start(command)
 //    Initialize the hardware and processes and start running. The `command`
@@ -34,8 +42,18 @@ void kernel_start(const char* command) {
         ptable[i] = nullptr;
     }
 
-    // start first process
-    boot_process_start(1, CHICKADEE_FIRST_PROCESS);
+    proc* init_task = knew<proc>();
+    init_task->ppid_ = 1;
+    init_task->init_kernel(1, k_proc_init);
+    {
+        spinlock_guard guard(ptable_lock);
+        assert(!ptable[1]);
+        ptable[1] = init_task;
+    }
+    cpus[0].enqueue(init_task);
+
+    // start first process, at pid = 2
+    boot_process_start(2, CHICKADEE_FIRST_PROCESS);
 
     // start running processes
     cpus[0].schedule(nullptr);
@@ -188,6 +206,11 @@ uintptr_t proc::syscall(regstate* regs) {
         assert(this->canary == CANARY_EV, 
             "Kernel task stack overflow, detected change in canary\n"); // canary checker
         return id_;
+    
+    case SYSCALL_GETPPID:
+        assert(this->canary == CANARY_EV, 
+                "Kernel task stack overflow, detected change in canary\n"); // canary checker
+        return ppid_;
 
     case SYSCALL_YIELD:
         yield();
@@ -267,6 +290,8 @@ uintptr_t proc::syscall(regstate* regs) {
         if (FORK_PARANOIA) {
             log_printf("[syscall] fork returned a pid %d\n", pid);
         }
+        assert(this->canary == CANARY_EV, 
+            "Kernel task stack overflow, detected change in canary\n"); // canary checker
         return pid;
     }
     
@@ -525,6 +550,15 @@ int proc::syscall_fork(regstate* regs) {
     if (FORK_PARANOIA) {
         log_printf("[fork] Returning NEW process PID %d\n", pid);
     }
+
+    child->ppid_ = this->id_;
+    this->childpids_[this->nchildren_] = pid;
+    this->nchildren_++;
+    if (FORK_PARANOIA) {
+        log_printf("[fork] Setting child ppid to %d and updating this parent's metadata\n", child->ppid_);
+        log_printf("[fork] Fork complete!\n");
+    }
+
     return pid;
 
     // Fork failure cleanup methods, accessed via goto.
@@ -793,6 +827,56 @@ void proc::syscall_exit(regstate* regs) {
     // before freeing the L4 pagetable of the process.
     set_pagetable(early_pagetable);
     kfree(this->pagetable_);
+
+    if (EXIT_PARANOIA) {
+        log_printf("[syscall_exit] this process has ppid %d, who has %d children\n", 
+            this->ppid_, ptable[this->ppid_]->nchildren_);
+        log_printf("[syscall_exit] Children PIDs:");
+        for (int i = 0; i < ptable[this->ppid_]->nchildren_; ++i) {
+            log_printf("%d ", ptable[this->ppid_]->childpids_[i]);
+        }
+        log_printf("\n");
+    }
+
+    // Update this process's parent's metadata, if parent is not already k_proc_init.
+    if (this->ppid_ != 1) {
+        if (EXIT_PARANOIA) {
+            log_printf("[syscall_exit] this process has non-init parent %d, updating parent's child array...\n", 
+                this->ppid_);
+        }
+        proc* parent = ptable[this->ppid_];
+        int child_ind = -1;
+        for (int i = 0; i < parent->nchildren_; ++i) {
+            if (EXIT_PARANOIA) {
+                log_printf("[syscall_exit] Examining element %d of paren't child array, which holds PID %d\n", 
+                    i, parent->childpids_[i]);
+            }
+            if (this->id_ == parent->childpids_[i]) {
+                child_ind = i;
+                break;
+            }
+        }
+        assert(child_ind != -1); // Check that it found the child.
+
+        // Shift the parent's child array left one and decrement number of children.
+        for (int i = child_ind + 1; i < parent->nchildren_; ++i) {
+            parent->childpids_[i-1] = parent->childpids_[i];
+        }
+        --parent->nchildren_;
+
+        if (EXIT_PARANOIA) {
+            log_printf("[syscall_exit] parent's child array after shift and cleanup: [");
+            for (int i = 0; i < ptable[this->ppid_]->nchildren_; ++i) {
+                log_printf("%d ", ptable[this->ppid_]->childpids_[i]);
+            }
+            log_printf("]\n");
+        }
+    } 
+
+    // Update this process's children's metadata.
+    for (int i = 0; i < this->nchildren_; ++i) {
+       ptable[this->childpids_[i]]->ppid_ = 1; // Reparent to k_proc_init
+    }
 
     // Mark the process as free for allocation
     p->pstate_ = ps_blank;
