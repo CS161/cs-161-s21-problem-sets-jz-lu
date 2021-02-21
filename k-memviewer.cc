@@ -103,7 +103,9 @@ void memusage::refresh() {
     assert(ptable_lock.is_locked());
     for (int pid = 1; pid < NPROC; ++pid) {
         proc* p = ptable[pid];
-        if (p) {
+        if (p && p->pstate_ == proc::ps_runnable) {
+            log_printf("[refresh] Working on behalf of process %p with PID=%d and state %d\n", 
+                p, p->id_, (int) p->pstate_);
             mark(ka2pa(p), f_kernel | f_process(pid));
 
             auto irqs = p->lock_pagetable_read();
@@ -112,6 +114,8 @@ void memusage::refresh() {
                     mark(it.pa(), f_kernel | f_process(pid));
                 }
                 mark(ka2pa(p->pagetable_), f_kernel | f_process(pid));
+
+                log_printf("[refresh] ptiter fine\n");
 
                 for (vmiter it(p); it.low(); ) {
                     if (it.user()) {

@@ -22,10 +22,27 @@ static void boot_process_start(pid_t pid, const char* program_name);
 
 // k_proc_init()
 //    The almighty init process, holding PID = PPID = 1.
-//    Handles final struct proc freeing and zombie waitpid-ing.
+//    Handles final zombie waitpid-ing.
 void k_proc_init() {
+    regstate regs;
+    regs.reg_rdi =  0; // pid = 0 (Wait for first one to exit)
+    regs.reg_rsi =  0; // status = nullptr (status not needed)
+    regs.reg_rdx =  0; // options = 0 (blocking)
+    proc *kinit = ptable[1];
+
+    // Waitpid forever (Not the most exciting of jobs, but someone gotta do it).
     while(true) {
-        current()->yield();
+        {
+        spinlock_guard guard(ptable_lock);
+        if (WAITPID_PARANOIA >= 1 && kinit->nchildren_) {
+            log_printf("Children of ALMIGHTY INIT with PID=%d (bow down): [", kinit->id_);
+            for (int i = 0; i < (kinit->nchildren_); ++i) {
+                log_printf("%d ", kinit->childpids_[i]);
+            }
+            log_printf("]\n");
+        }
+        }
+        kinit->syscall_waitpid(&regs);
     }
 }
 
@@ -287,7 +304,7 @@ uintptr_t proc::syscall(regstate* regs) {
 
     case SYSCALL_FORK: {
         pid_t pid = syscall_fork(regs);
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA >= 3) {
             log_printf("[syscall] fork returned a pid %d\n", pid);
         }
         assert(this->canary == CANARY_EV, 
@@ -340,14 +357,21 @@ uintptr_t proc::syscall(regstate* regs) {
 
     case SYSCALL_EXIT:
         syscall_exit(regs);
+        assert(this->canary == CANARY_EV, 
+                "Kernel task stack overflow, detected change in canary\n"); // canary checker
         return 0;
     
     case SYSCALL_MSLEEP:
         return syscall_msleep(regs);
+    
+    case SYSCALL_WAITPID:
+        assert(this->canary == CANARY_EV, 
+            "Kernel task stack overflow, detected change in canary\n"); // canary checker
+        return syscall_waitpid(regs);
 
     default:
         // no such system call
-        log_printf("%d: no such system call %u\n", id_, regs->reg_rax);
+        log_printf("Process PID=%d: no such system call num=%u\n", id_, regs->reg_rax);
         assert(this->canary == CANARY_EV, 
             "Kernel task stack overflow, detected change in canary\n"); // canary checker
         return E_NOSYS;
@@ -453,7 +477,7 @@ int proc::copy_memory_(proc* child) {
 // proc::syscall_fork(regs)
 //    Fork a child process.
 int proc::syscall_fork(regstate* regs) {
-    if (FORK_PARANOIA) {
+    if (FORK_PARANOIA >= 1) {
         log_printf("[fork] Fork called by parent process %d\n", this->id_);
     }
     pid_t pid = 0;
@@ -467,14 +491,14 @@ int proc::syscall_fork(regstate* regs) {
         }
     }
 
-    // no open pid was found
+    // Handle: No available process table entry found.
     if (!pid) {
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA >= 1) {
             log_printf("No open processes, caller PID: %d\n", this->id_);
         }
         return -1;
     } else {
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA >= 1) {
             log_printf("Successfully found a free PID = %d to fork from parent PID = %d\n", pid, this->id_);
         }
     }
@@ -489,7 +513,7 @@ int proc::syscall_fork(regstate* regs) {
     x86_64_pagetable* child_pt = nullptr; // same deal
 
     if (!child) {
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA >= 1) {
             log_printf("[fork] ERROR: no available memory remaining for child process struct.\n");
         }
         goto eret;
@@ -505,7 +529,7 @@ int proc::syscall_fork(regstate* regs) {
         child_pt = nullptr;
     }
     if (!child_pt) {
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA >= 1) {
             log_printf("[fork] ERROR: no available memory remaining for child pagetable.\n");
         }
         goto free_proc;
@@ -522,7 +546,7 @@ int proc::syscall_fork(regstate* regs) {
 
     memcpy_failed = this->copy_memory_(child);
     if (memcpy_failed) {
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA >= 1) {
             log_printf("[fork] Copying Memory During Fork FAILED, caller: %d\n", this->id_);
         }
         goto free_pt;
@@ -547,16 +571,25 @@ int proc::syscall_fork(regstate* regs) {
 
     cpus[pid % ncpu].enqueue(child); // enqueueing on a cpu
 
-    if (FORK_PARANOIA) {
+    if (FORK_PARANOIA >= 1) {
         log_printf("[fork] Returning NEW process PID %d\n", pid);
     }
 
     child->ppid_ = this->id_;
     this->childpids_[this->nchildren_] = pid;
     this->nchildren_++;
-    if (FORK_PARANOIA) {
+    if (FORK_PARANOIA >= 1) {
         log_printf("[fork] Setting child ppid to %d and updating this parent's metadata\n", child->ppid_);
-        log_printf("[fork] Fork complete!\n");
+    }
+
+    // Print updated metrics for waidpid.
+    if (WAITPID_PARANOIA >= 1) {
+        log_printf("[fork] pid: %i, num_children: %i, childpid_arr: [", 
+            this->id_, this->nchildren_);
+        for (int i = 0; i < this->nchildren_; ++i) {
+            log_printf("%d ", this->childpids_[i]);
+        }
+        log_printf("]\n");
     }
 
     return pid;
@@ -796,7 +829,7 @@ void proc::syscall_exit(regstate* regs) {
     spinlock_guard guard(ptable_lock);
 
     if (EXIT_PARANOIA >= 1) {
-        log_printf("[SYSCALL_EXIT] Freeing process at VA 0x%x with pid %lu\n", p, pid);
+        log_printf("[exit] Freeing process at VA 0x%x with pid %lu\n", p, pid);
     }
     auto irqs = this->lock_pagetable_read();
 
@@ -804,7 +837,7 @@ void proc::syscall_exit(regstate* regs) {
         if (itc.va() == CONSOLE_ADDR) {
             itc.next(); // Ignore the console
         } else if (itc.user()) {
-            if (EXIT_PARANOIA >= 1) {
+            if (EXIT_PARANOIA >= 2) {
                 log_printf("[SYSCALL_EXIT] FREEING VA 0x%x, i.e. PA 0x%x\n", itc.va(), itc.pa());
             }
             itc.kfree_page();
@@ -816,8 +849,8 @@ void proc::syscall_exit(regstate* regs) {
 
     // Now that all allocated mempages are freed, free the pagetable.
     for (ptiter it(p); it.low(); it.next()) {
-        if (EXIT_PARANOIA) {
-            log_printf("[SYSCALL_EXIT] FREEING VA 0x%x, i.e. PA 0x%x\n", it.va(), it.pa());
+        if (EXIT_PARANOIA >= 2) {
+            log_printf("[exit] FREEING VA 0x%x, i.e. PA 0x%x\n", it.va(), it.pa());
         }
         it.kfree_ptp();
     }
@@ -828,59 +861,46 @@ void proc::syscall_exit(regstate* regs) {
     set_pagetable(early_pagetable);
     kfree(this->pagetable_);
 
-    if (EXIT_PARANOIA) {
-        log_printf("[syscall_exit] this process has ppid %d, who has %d children\n", 
+    if (EXIT_PARANOIA >=1) {
+        log_printf("[exit] this process has ppid %d, who has %d children\n", 
             this->ppid_, ptable[this->ppid_]->nchildren_);
-        log_printf("[syscall_exit] Children PIDs:");
+        log_printf("[exit] Children PIDs: [");
         for (int i = 0; i < ptable[this->ppid_]->nchildren_; ++i) {
             log_printf("%d ", ptable[this->ppid_]->childpids_[i]);
         }
-        log_printf("\n");
+        log_printf("]\n");
     }
 
-    // Update this process's parent's metadata, if parent is not already k_proc_init.
-    if (this->ppid_ != 1) {
-        if (EXIT_PARANOIA) {
-            log_printf("[syscall_exit] this process has non-init parent %d, updating parent's child array...\n", 
-                this->ppid_);
-        }
-        proc* parent = ptable[this->ppid_];
-        int child_ind = -1;
-        for (int i = 0; i < parent->nchildren_; ++i) {
-            if (EXIT_PARANOIA) {
-                log_printf("[syscall_exit] Examining element %d of paren't child array, which holds PID %d\n", 
-                    i, parent->childpids_[i]);
-            }
-            if (this->id_ == parent->childpids_[i]) {
-                child_ind = i;
-                break;
-            }
-        }
-        assert(child_ind != -1); // Check that it found the child.
+    // Don't update the process's parent's metadata in exit(). Instead, we will do it
+    // in waitpid() once the process is fully freed from zombie mode.
 
-        // Shift the parent's child array left one and decrement number of children.
-        for (int i = child_ind + 1; i < parent->nchildren_; ++i) {
-            parent->childpids_[i-1] = parent->childpids_[i];
-        }
-        --parent->nchildren_;
-
-        if (EXIT_PARANOIA) {
-            log_printf("[syscall_exit] parent's child array after shift and cleanup: [");
-            for (int i = 0; i < ptable[this->ppid_]->nchildren_; ++i) {
-                log_printf("%d ", ptable[this->ppid_]->childpids_[i]);
-            }
-            log_printf("]\n");
-        }
-    } 
-
-    // Update this process's children's metadata.
+    // Reparent process's children.
+    proc *kinit = ptable[1];
     for (int i = 0; i < this->nchildren_; ++i) {
        ptable[this->childpids_[i]]->ppid_ = 1; // Reparent to k_proc_init
+       if (WAITPID_PARANOIA >= 1) {
+           log_printf("[exit] REPARENTED child process PID=%d, NEW-PPID=%d to k_proc_init\n", 
+            ptable[this->childpids_[i]]->id_, ptable[this->childpids_[i]]->ppid_);
+       }
+       kinit->childpids_[kinit->nchildren_] = this->childpids_[i];
+       kinit->nchildren_++;
+    }
+    if (WAITPID_PARANOIA >= 1) {
+        log_printf("[exit] UPDATED k_proc_init child array to [");
+        for (int i = 0; i < ptable[1]->nchildren_; ++i) {
+            log_printf("%d ", ptable[1]->childpids_[i]);
+        }
+        log_printf("]\n");
     }
 
-    // Mark the process as free for allocation
+    // Mark the process as free, but don't clear its entry on pagetable.
+    // (that's for waitpid to do!)
     p->pstate_ = ps_blank;
-    ptable[pid] = nullptr;
+    p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
+
+    if (EXIT_PARANOIA >= 1) {
+        log_printf("[exit] Finished turning process PID=%d into a zombie\n", this->id_);
+    }
     }
     yield_noreturn();
 }
@@ -900,6 +920,234 @@ int proc::syscall_msleep(regstate* regs) {
     }
 
     return 0;
+}
+
+
+// release_child()
+//    Helper function to sys_waitpid()
+//    Updates the child metadata to complete the zombie reaping.
+static void release_child(proc* p, pid_t cpid) { 
+    if (WAITPID_PARANOIA >= 2) {
+        log_printf("[release_child] Release child called\n");
+    }
+    int ch_ind = -1;
+    for (int i = 0; i < p->nchildren_; ++i) {
+        if (WAITPID_PARANOIA >= 2) {
+            log_printf("[release_child] From parent pid %d, freeing child pid %d. Current search: arr[%d]=%d\n", 
+                p->id_, cpid, i, p->childpids_[i]);
+        }
+        if (cpid == p->childpids_[i]) {
+            ch_ind = i;
+            if (WAITPID_PARANOIA >= 2) {
+                log_printf("[release_child] MATCHED child to arr[%d]=%d\n", i, p->childpids_[i]);
+            }
+            break;
+        }
+    }
+    assert(ch_ind != -1);
+
+    // Update the child-array to get rid of the fully exited child proc.
+    for (int i = ch_ind + 1; i < p->nchildren_; ++i) {
+        p->childpids_[i-1] = p->childpids_[i];
+    }
+    --p->nchildren_;
+
+    if (WAITPID_PARANOIA >= 2) {
+        log_printf("[release_child] Updated child array: [");
+        for (int i = 0; i < ptable[p->id_]->nchildren_; ++i) {
+            log_printf("%d ", ptable[p->id_]->childpids_[i]);
+        }
+        log_printf("]; num (alive) children = %d\n", p->nchildren_);
+    }
+}
+
+// proc::syscall_waitpid(regs)
+//    Waits for either a specific child PID or the first to exit and cleans up.
+uint64_t proc::syscall_waitpid(regstate *regs) {
+    pid_t pid = regs->reg_rdi;
+    int* status = reinterpret_cast<int*>(regs->reg_rsi);
+    int options = regs->reg_rdx;
+
+    if (WAITPID_PARANOIA >= 1 && this->id_ != 1) {
+        log_printf("[waitpid] WAITPID CALLED. Parent (caller) pid: %d, arg_pid: %d, status: %p, options: %d\n",
+            this->id_, pid, status, options);
+    }
+
+    int ind_found = -1;
+    for (int i = 0; i < this->nchildren_; ++i) {
+        if (this->childpids_[i] == pid) {
+            ind_found = i;
+            break;
+        }
+    }
+
+    // If the waitpid is invalid, return immediately.
+    if ((this->nchildren_ == 0) || (ind_found == -1 && pid != 0)) {
+        if (WAITPID_PARANOIA && this->id_ != 1) {
+            log_printf("[waitpid] E_CHILD | parent (caller) pid: %d, arg_pid: %d, num_children: %d, ind_found: %d\n",
+                this->id_, pid, this->nchildren_, ind_found);
+        }
+        return E_CHILD;
+    } 
+    else { // Work through a valid waitpid
+        if (pid != 0) { // If a pid is specified then search for it.
+            if (!options) { // Block
+                proc* child = ptable[pid];
+                while (true) {
+                    {
+                    spinlock_guard guard(ptable_lock);
+                    if (child->pstate_ == ps_blank) {
+                        break;
+                    }
+                    }
+                    yield();
+                }
+                uint64_t retpid = (child->retval << 32) + child->id_;
+                if (WAITPID_PARANOIA && this->id_ != 1) {
+                    log_printf("[waitpid] REAP INIT child PID=%d for parent PID=%d\n",
+                        pid, this->id_);
+                    log_printf("[waitpid] PTABLE ENTRY for child struct proc=%p with retval %d\n", 
+                        child, child->retval);
+                }
+                {
+                    spinlock_guard guard(ptable_lock);
+                    release_child(this, pid);
+                    kfree(child);
+                    ptable[pid] = nullptr;
+                    if (WAITPID_PARANOIA >= 1) {
+                        log_printf("[waitpid] REAPED ZOMBIE\n");
+                    }
+                }
+                return retpid;
+            } else { // Poll
+                proc* child = ptable[pid];
+                if (child->pstate_ != ps_blank) { // Child is not free. Return error: try again.
+                    if (WAITPID_PARANOIA >= 1 && this->id_ != 1) {
+                        log_printf("[waitpid] TRY AGAIN: poll failed on ppid %d, cpid %d\n",
+                            this->id_, pid);
+                    }
+                    return E_AGAIN;
+                } else { // Child is free! Release and return.
+                    uint64_t retpid = (child->retval << 32) + child->id_;
+                    {
+                        spinlock_guard guard(ptable_lock);
+                        release_child(this, pid);
+                        kfree(child);
+                        ptable[pid] = nullptr;
+                        if (WAITPID_PARANOIA >= 1) {
+                            log_printf("[waitpid] REAPED ZOMBIE\n");
+                        }
+                    }
+                    return retpid;
+                }
+            }
+        } 
+        else { // If no pid is specified then walk through to find the first free one.
+            if (!options) { // Block
+                int child_ind = -1;
+                while (true) {
+                    {
+                    spinlock_guard guard(ptable_lock);
+                    for (int i = 0; i < this->nchildren_; ++i) {
+                        if (WAITPID_PARANOIA && this->id_ != 1) {
+                            log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
+                                this->childpids_[i], this->id_);
+                        }
+                        if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
+                            child_ind = i;
+                            if (WAITPID_PARANOIA && this->id_ != 1) {
+                                log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
+                                    this->childpids_[i], this->id_);
+                            }
+                            break;
+                        }
+                    }
+
+                    if (child_ind != -1) {
+                        break;
+                    }
+                    if (WAITPID_PARANOIA && this->id_ != 1) {
+                        log_printf("[waitpid] Did not find any exited children this time, yielding\n");
+                    }
+                    }
+                    yield();
+                }
+                proc* child = ptable[this->childpids_[child_ind]];
+                if (WAITPID_PARANOIA && this->id_ != 1) {
+                    log_printf("[waitpid] REAP INIT child PID=%d (at ind=%d) for parent PID=%d\n",
+                        this->childpids_[child_ind], child_ind, this->id_);
+                    log_printf("[waitpid] PTABLE ENTRY for child struct proc=%p with retval %d and cpid %d\n", 
+                        child, child->retval, child->id_);
+                }
+                uint64_t retpid = (child->retval << 32) + child->id_;
+                {
+                    spinlock_guard guard(ptable_lock);
+                    release_child(this, child->id_);
+                    ptable[child->id_] = nullptr;
+                    kfree(child);
+                    if (WAITPID_PARANOIA >= 1) {
+                        log_printf("[waitpid] REAPED ZOMBIE\n");
+                    }
+                }
+                return retpid;
+
+            } else { // Poll
+                int child_ind = -1;
+                {
+                spinlock_guard guard(ptable_lock);
+                for (int i = 0; i < this->nchildren_; ++i) {
+                    if (WAITPID_PARANOIA && this->id_ != 1) {
+                        log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
+                            this->childpids_[i], this->id_);
+                    }
+                    if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
+                        child_ind = i;
+                        if (WAITPID_PARANOIA && this->id_ != 1) {
+                            log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
+                                this->childpids_[i], this->id_);
+                        }
+                        break;
+                    }
+                }
+                }
+
+                if (child_ind == -1) { // No exited processes found
+                    if (WAITPID_PARANOIA >= 1) {
+                        log_printf("[waitpid] TRY AGAIN | WAITPID arg_pid: %d, num children: %d, child_ind: %d\n",
+                            pid, this->nchildren_, child_ind);
+                    }
+                    return E_AGAIN;
+                } else { // Exited process found! Release and return.
+                    proc* child = ptable[this->childpids_[child_ind]];
+                    if (WAITPID_PARANOIA && this->id_ != 1) {
+                        log_printf("[waitpid] REAP INIT child PID=%d (at ind=%d) for parent PID=%d\n",
+                            this->childpids_[child_ind], child_ind, this->id_);
+                        log_printf("[waitpid] PTABLE ENTRY for child struct proc=%p with retval %d\n", 
+                            child, child->retval);
+                    }
+                    uint64_t retpid = (child->retval << 32) + child->id_;
+                    {
+                        spinlock_guard guard(ptable_lock);
+                        if (WAITPID_PARANOIA >= 1) {
+                            log_printf("[waitpid] FOUND ZOMBIE | WAITPID arg_pid: %d, num children: %d, cpid: %d, cind: %d\n",
+                                pid, this->nchildren_, child->id_, child_ind);
+                        }
+                        release_child(this, child->id_);
+                        ptable[child->id_] = nullptr;
+                        kfree(child);
+                        if (WAITPID_PARANOIA >= 1) {
+                            log_printf("[waitpid] REAPED ZOMBIE\n");
+                        }
+                    }
+                    if (WAITPID_PARANOIA >= 1) {
+                        log_printf("[waitpid] retpid=%lu, pid=%lu, status=%lu\n",
+                            retpid, retpid & 0xFFFFFFFF, retpid >> 32);
+                    }
+                    return retpid;
+                }
+            }
+        }
+    }
 }
 
 

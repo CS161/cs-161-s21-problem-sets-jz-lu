@@ -34,6 +34,7 @@ struct __attribute__((aligned(4096))) proc {
     regstate* regs_ = nullptr;                 // Process's current registers
     yieldstate* yields_ = nullptr;             // Process's current yield state
     std::atomic<int> pstate_ = ps_blank;       // Process state
+    uint64_t retval = 0;                       // Return value of process
     pid_t ppid_ = 1;                           // Parent ID, initialized to k_proc_init's ID.
     int nchildren_ = 0;                        // Number of children
     pid_t childpids_[NPROC] = {0};             // PID Array of children
@@ -84,8 +85,10 @@ struct __attribute__((aligned(4096))) proc {
 
     // Sleep for some number of milliseconds
     int syscall_msleep(regstate *regs);
-    
 
+    // Wait for a child process to exit and clean up.
+    uint64_t syscall_waitpid(regstate *regs);
+    
     uintptr_t syscall_read(regstate* reg);
     uintptr_t syscall_write(regstate* reg);
     uintptr_t syscall_readdiskfile(regstate* reg);
@@ -98,7 +101,6 @@ struct __attribute__((aligned(4096))) proc {
 
     // Copies all of the user memory from parent to child.
     int copy_memory_(proc* child);
-
     uint64_t canary = CANARY_EV;
 };
 
@@ -177,7 +179,8 @@ inline cpustate* this_cpu();
 const uint64_t BALLOC_PARANOIA = 0; 
 const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
 const uint64_t FORK_PARANOIA = 1;
-const uint64_t EXIT_PARANOIA = 0;
+const uint64_t EXIT_PARANOIA = 2;
+const uint64_t WAITPID_PARANOIA = 1;
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_

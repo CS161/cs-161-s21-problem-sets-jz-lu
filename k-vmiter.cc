@@ -33,6 +33,9 @@ void vmiter::down() {
         x86_64_pagetable* pt = pa2kptr<x86_64_pagetable*>(pa);
         pep_ = &pt->entry[pageindex(va_, level_)];
     }
+    // if ((uint64_t) pt_ == 0xffff8000001ff000) {
+    //     log_printf("PEP MATCH? %p\n", *pep_);
+    // }
     if ((*pep_ & PTE_PAMASK) >= 0x100000000UL) {
         panic("Page table %p may contain uninitialized memory!\n"
               "(Page table contents: %p)\n", pt_, *pep_);
