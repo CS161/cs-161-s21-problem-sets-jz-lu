@@ -59,13 +59,16 @@ void kernel_start(const char* command) {
         ptable[i] = nullptr;
     }
 
-    proc* init_task = knew<proc>();
+    proc *init_task = knew<proc>();
     init_task->ppid_ = 1;
     init_task->init_kernel(1, k_proc_init);
     {
         spinlock_guard guard(ptable_lock);
         assert(!ptable[1]);
         ptable[1] = init_task;
+        if (WAITPID_PARANOIA >= 1) {
+            log_printf("[kernel_start] Initializing init_task\n");
+        } 
     }
     cpus[0].enqueue(init_task);
 
@@ -860,6 +863,7 @@ void proc::syscall_exit(regstate* regs) {
     // before freeing the L4 pagetable of the process.
     set_pagetable(early_pagetable);
     kfree(this->pagetable_);
+    this->pagetable_= nullptr;
 
     if (EXIT_PARANOIA >=1) {
         log_printf("[exit] this process has ppid %d, who has %d children\n", 

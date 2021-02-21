@@ -106,6 +106,7 @@ struct __attribute__((aligned(4096))) proc {
 
 extern proc* ptable[NPROC];
 extern spinlock ptable_lock;
+// extern proc *init_task;
 #define PROCSTACK_SIZE 4096UL
 
 
