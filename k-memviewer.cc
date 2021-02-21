@@ -104,7 +104,6 @@ void memusage::refresh() {
     for (int pid = 1; pid < NPROC; ++pid) {
         proc* p = ptable[pid];
         if (p) {
-                p, p->id_, (int) p->pstate_);
             mark(ka2pa(p), f_kernel | f_process(pid));
 
             auto irqs = p->lock_pagetable_read();

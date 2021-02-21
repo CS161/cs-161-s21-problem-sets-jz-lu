@@ -43,7 +43,22 @@ void k_proc_init() {
         }
         }
         kinit->syscall_waitpid(&regs);
+        {
+        spinlock_guard guard(ptable_lock);
+        bool found_runnable_proc = false;
+        for (int i = 2; i < NPROC; ++i) {
+            if (ptable[i]->pstate_ == proc::ps_runnable) {
+                found_runnable_proc = true;
+                break;
+            }
+        }
+        if (!found_runnable_proc) {
+            break;
+        }
+        }
     }
+    log_printf("[k_proc_init] halting QEMU, goodbye cruel world\n");
+    process_halt();
 }
 
 // kernel_start(command)
