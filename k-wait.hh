@@ -18,20 +18,68 @@ inline waiter::~waiter() {
 }
 
 inline void waiter::prepare(wait_queue& wq) {
-    // your code here
+    // Mark the waiter as serving the current process.
+    p_ = current();
+
+    // Lock the associated wait queue.
+    auto irqs = wq_->lock_.lock();
+    p_->pstate_ = proc::ps_blocked;
+
+    // Push the waiter onto the wait queue.
+    wq_->q_.push_back(this);
+
+    // Unlock the wiat queue.
+    wq_->lock_.unlock(irqs);
 }
 
 inline void waiter::block() {
-    assert(p_ == current());
-    // your code here
+    assert(p_ == current(), "You have crossed me for the last time!\n");
+    while (true) {
+        auto irqs = wq_->lock_.lock();
+        if (p_->pstate_ == proc::ps_blocked) {
+            wq_->lock_.unlock(irqs);
+            break;
+        }
+        wq_->lock_.unlock(irqs);
+        p_->yield();
+    }
+
+    // auto irqs = wq_->lock_.lock();
+    // if (p_->pstate_ == proc::ps_blocked) {
+    //     wq_->lock_.unlock(irqs);
+    //     p_->yield();
+    // }
+    // wq_->lock_.unlock(irqs);
+    clear();
 }
 
 inline void waiter::clear() {
-    // your code here
+    // Lock the wait queue.
+    auto irqs = wq_->lock_.lock();
+
+    // Wake up the process.
+    p_->wake();
+
+    // Dequeue the waiter off the the wait queue, if it is enqueued.
+    for (waiter *it = wq_->q_.front(); it; it = wq_->q_.next(it)) {
+        if (it == this) {
+            wq_->q_.erase(it);
+            break;
+        }
+    }
+
+    // Unlock the wait queue.
+    wq_->lock_.unlock(irqs);
 }
 
 inline void waiter::wake() {
-    // your code here
+    // Lock the wait queue.
+    auto irqs = wq_->lock_.lock();
+
+    p_->wake();
+
+    // Unlock the wait queue.
+    wq_->lock_.unlock(irqs);
 }
 
 

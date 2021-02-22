@@ -184,8 +184,6 @@ inline pid_t sys_getppid() {
 //    is stored in `*status`, if `status != nullptr`. If `pid == 0`,
 //    waits for any child. If `options == W_NOHANG`, returns immediately.
 inline pid_t sys_waitpid(pid_t pid, int* status = nullptr, int options = 0) {
-    // console_printf("[u-waitpid] WAITPID on pid %d, status ptr %p, and options %d\n",
-    //         pid, status, options);
     uint64_t retpid = make_syscall(SYSCALL_WAITPID, pid, 
         reinterpret_cast<uintptr_t>(status), options);
     // Unpack the retpid into the ret status (left 32 bits) and pid (right 32 bits).

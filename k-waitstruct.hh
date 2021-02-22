@@ -13,9 +13,9 @@ struct spinlock_guard;
 
 
 struct waiter {
-    proc* p_ = nullptr;
-    wait_queue* wq_;
-    list_links links_;
+    proc* p_ = nullptr;             // Process that this waiter is serving
+    wait_queue* wq_;                // Parent queue that this waiter belongs to
+    list_links links_;              // Linked list implementation variable for wait_queue
 
     explicit inline waiter();
     inline ~waiter();

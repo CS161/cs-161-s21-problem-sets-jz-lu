@@ -69,6 +69,8 @@ struct __attribute__((aligned(4096))) proc {
 
     inline bool resumable() const;
 
+    inline void wake();
+
     // Make an exact copy of the process.
     int syscall_fork(regstate* regs);
 
@@ -542,6 +544,16 @@ inline bool proc::resumable() const {
     assert(!regs_ || contains(regs_));      // `regs_` points within this
     assert(!yields_ || contains(yields_));  // same for `yields_`
     return regs_ || yields_;
+}
+
+// proc::wake()
+//    Sets a proc pstate from blocked to runnable.
+inline void proc::wake() {
+    // This already holds a lock from waiter, so just go ahead and check pstate
+    int s = ps_blocked;
+    if (pstate_.compare_exchange_strong(s, ps_runnable)) {
+        cpus[id_ % ncpu].enqueue(this);
+    }
 }
 
 // proc::lock_pagetable_read()
