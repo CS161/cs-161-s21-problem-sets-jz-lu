@@ -254,10 +254,15 @@ uintptr_t proc::syscall(regstate* regs) {
             "Kernel task stack overflow, detected change in canary\n"); // canary checker
         return id_;
     
-    case SYSCALL_GETPPID:
+    case SYSCALL_GETPPID: {
+        spinlock_guard guard(ptable_lock);
         assert(this->canary == CANARY_EV, 
                 "Kernel task stack overflow, detected change in canary\n"); // canary checker
+        if (PPID_PARANOIA >= 1) {
+            log_printf("[syscall_ppid] Process PID=%d has PPID=%d\n", id_, ppid_);
+        }
         return ppid_;
+    }
 
     case SYSCALL_YIELD:
         yield();
@@ -600,6 +605,9 @@ int proc::syscall_fork(regstate* regs) {
     child->regs_->reg_rax = 0; // making sure child returns 0
 
     cpus[pid % ncpu].enqueue(child); // enqueueing on a cpu
+    if (WAITQ_PARANOIA >= 2) {
+        log_printf("[fork] [pre-return] Child PID=%d to run on CPU %d\n", pid, pid % ncpu);
+    }
 
     if (FORK_PARANOIA >= 1) {
         log_printf("[fork] Returning NEW process PID %d\n", pid);
@@ -614,7 +622,7 @@ int proc::syscall_fork(regstate* regs) {
 
     // Print updated metrics for waidpid.
     if (WAITPID_PARANOIA >= 1) {
-        log_printf("[fork] pid: %i, num_children: %i, childpid_arr: [", 
+        log_printf("[fork] [return] this pid: %i, num_children: %i, child pids: [", 
             this->id_, this->nchildren_);
         for (int i = 0; i < this->nchildren_; ++i) {
             log_printf("%d ", this->childpids_[i]);
@@ -858,7 +866,7 @@ void proc::syscall_exit(regstate* regs) {
     {
     spinlock_guard guard(ptable_lock);
 
-    if (EXIT_PARANOIA >= 1) {
+    if (EXIT_PARANOIA >= 1 || WAITQ_PARANOIA >= 1 || WAITPID_PARANOIA >= 1) {
         log_printf("[exit] Freeing process at VA 0x%x with pid %lu\n", p, pid);
     }
     auto irqs = this->lock_pagetable_read();
@@ -907,7 +915,7 @@ void proc::syscall_exit(regstate* regs) {
     // BUT we do want to set the parent proc interrupt flag to E_INTR.
     ptable[ppid_]->e_intr = E_INTR;
 
-    // Reparent process's children.
+    // Reparent process's children to k_proc_init.
     proc *kinit = ptable[1];
     for (int i = 0; i < this->nchildren_; ++i) {
        ptable[this->childpids_[i]]->ppid_ = 1; // Reparent to k_proc_init
@@ -930,7 +938,8 @@ void proc::syscall_exit(regstate* regs) {
     // (that's for waitpid to do!)
     p->pstate_ = ps_blank;
     p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
-    parent_child_queue.wake_one(ptable[ppid_]); // Wake up the parent process to notify them of an exit // CHANGEMADE
+    // parent_child_queue.wake_one(ptable[ppid_]); // Wake up the parent process to notify them of an exit // CHANGEMADE
+    parent_child_queue.wake_all();
 
     if (EXIT_PARANOIA >= 1) {
         log_printf("[exit] Finished turning process PID=%d into a zombie\n", this->id_);
@@ -959,7 +968,7 @@ int proc::syscall_msleep(regstate* regs) {
         if (WAITQ_PARANOIA >= 2) {
             log_printf("[predicate] waketime=%d\n", wakeup_time);
         }
-        return (long(wakeup_time - ticks) < 0 || e_intr != 0);
+        return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
     });
 
     return e_intr;
@@ -1065,7 +1074,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                     kfree(child);
                     ptable[pid] = nullptr;
                     if (WAITPID_PARANOIA >= 1) {
-                        log_printf("[waitpid] REAPED ZOMBIE\n");
+                        log_printf("[waitpid] REAPED ZOMBIE PID=%d\n", pid);
                     }
                 }
                 return retpid;
@@ -1085,7 +1094,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                         kfree(child);
                         ptable[pid] = nullptr;
                         if (WAITPID_PARANOIA >= 1) {
-                            log_printf("[waitpid] REAPED ZOMBIE\n");
+                            log_printf("[waitpid] REAPED ZOMBIE PID=%d\n", pid);
                         }
                     }
                     return retpid;
@@ -1154,6 +1163,9 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                 uint64_t retpid = (child->retval << 32) + child->id_;
                 {
                     spinlock_guard guard(ptable_lock);
+                    if (WAITPID_PARANOIA >= 1) {
+                        log_printf("[waitpid] REAPING ZOMBIE, PID=%d\n", child->id_);
+                    }
                     release_child(this, child->id_);
                     ptable[child->id_] = nullptr;
                     kfree(child);
@@ -1201,7 +1213,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                     {
                         spinlock_guard guard(ptable_lock);
                         if (WAITPID_PARANOIA >= 1) {
-                            log_printf("[waitpid] FOUND ZOMBIE | WAITPID arg_pid: %d, num children: %d, cpid: %d, cind: %d\n",
+                            log_printf("[waitpid] REAPING ZOMBIE | WAITPID arg_pid: %d, num children: %d, cpid: %d, cind: %d\n",
                                 pid, this->nchildren_, child->id_, child_ind);
                         }
                         release_child(this, child->id_);

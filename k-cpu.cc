@@ -63,6 +63,10 @@ void cpustate::disable_irq(int irqno) {
 void cpustate::enqueue(proc* p) {
     spinlock_guard guard(runq_lock_);
     if (current_ != p && !p->runq_links_.is_linked()) {
+        if (WAITQ_PARANOIA >= 2) {
+            log_printf("[cpu::enqueue] Is proc %p, PID=%d runnable? %s\n",
+                p, p->id_, p->pstate_ == proc::ps_runnable ? "YUHH" : "Naww");
+        }
         assert(p->resumable() || p->pstate_ != proc::ps_runnable);
         runq_.push_back(p);
     }

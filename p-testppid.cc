@@ -38,12 +38,13 @@ void process_main() {
     if (sys_getpid() == original) {
         console_printf("ppid tests without exit succeed\n");
     } else {
-        sys_exit(0);
+        sys_exit(0); // All processes except the original should exit
     }
 
 
     // Tests that implicate `exit` behavior
     assert(original != 1);
+
     fork1 = sys_fork();
 
     if (fork1 == 0) {
