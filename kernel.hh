@@ -37,6 +37,7 @@ struct __attribute__((aligned(4096))) proc {
     uint64_t retval = 0;                       // Return value of process
     pid_t ppid_ = 1;                           // Parent ID, initialized to k_proc_init's ID.
     int nchildren_ = 0;                        // Number of children
+    int e_intr = 0;                            // Interrupt code
     pid_t childpids_[NPROC] = {0};             // PID Array of children
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
@@ -189,7 +190,7 @@ const uint64_t WAITQ_PARANOIA = 1;
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_
 const uint64_t FORK_TESTING = 0; 
-
+const uint64_t TRUEBLOCK_TESTING = 1;
 
 // Slab allocator flags. 
 const uint64_t SALLOC_PARANOIA = 0; // 0 = do nothing, 1 = checking

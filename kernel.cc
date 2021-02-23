@@ -904,6 +904,8 @@ void proc::syscall_exit(regstate* regs) {
 
     // Don't update the process's parent's metadata in exit(). Instead, we will do it
     // in waitpid() once the process is fully freed from zombie mode.
+    // BUT we do want to set the parent proc interrupt flag to E_INTR.
+    ptable[ppid_]->e_intr = E_INTR;
 
     // Reparent process's children.
     proc *kinit = ptable[1];
@@ -928,7 +930,7 @@ void proc::syscall_exit(regstate* regs) {
     // (that's for waitpid to do!)
     p->pstate_ = ps_blank;
     p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
-    parent_child_queue.wake_all(); // Wake up the parent processes to norify them of an exit // CHANGEMADE
+    parent_child_queue.wake_one(ptable[ppid_]); // Wake up the parent process to notify them of an exit // CHANGEMADE
 
     if (EXIT_PARANOIA >= 1) {
         log_printf("[exit] Finished turning process PID=%d into a zombie\n", this->id_);
@@ -941,6 +943,9 @@ void proc::syscall_exit(regstate* regs) {
 // proc::syscall_msleep(regs)
 //    Sleeps for msec milliseconds rounded up to nearest 10.
 int proc::syscall_msleep(regstate* regs) {
+    // Zero out the interrupt flag before sleeping, which is allowed by the inherent
+    // child interrupt signaling race condition discussed on the pset handout.
+    e_intr = 0;
     if (WAITQ_PARANOIA >= 1) {
         log_printf("[msleep] sleep called by process PID=%d to sleep for %d msecs\n", id_, (regs->reg_rdi + 9) / 10);
     }
@@ -954,10 +959,10 @@ int proc::syscall_msleep(regstate* regs) {
         if (WAITQ_PARANOIA >= 2) {
             log_printf("[predicate] waketime=%d\n", wakeup_time);
         }
-        return (long(wakeup_time - ticks) < 0);
+        return (long(wakeup_time - ticks) < 0 || e_intr != 0);
     });
 
-    return 0; // TODO change return to be interrupt number
+    return e_intr;
 }
 
 

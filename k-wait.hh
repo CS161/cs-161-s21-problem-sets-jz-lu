@@ -158,4 +158,21 @@ inline void wait_queue::wake_all() {
     }
 }
 
+// wait_queue::wake_one(p)
+//    Lock the wait queue, then pop off a process if it matches the given one.
+//    Does nothing if it cannot find the input process on the queue.
+inline void wait_queue::wake_one(proc* p) {
+    spinlock_guard guard(lock_);
+    if (WAITQ_PARANOIA >= 2) {
+        log_printf("[wake_all] [%p] Waking process VA=%p, pid=%d now\n", this, p, p->id_);
+    }
+    for (auto it = q_.front(); it; it = q_.next(it)) {
+        if (it->p_ == p) {
+            q_.erase(it);
+            it->wake();
+            break;
+        }
+    }
+}
+
 #endif
