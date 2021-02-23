@@ -17,7 +17,8 @@ std::atomic<unsigned long> ticks;
 // display type; initially KDISPLAY_CONSOLE
 std::atomic<int> kdisplay;
 const uint64_t NUM_WQS = 5;
-wait_queue time_wheel[NUM_WQS];
+wait_queue time_wheel[NUM_WQS]; // Sleep wait wheel // CHANGEMADE 
+wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
@@ -927,6 +928,7 @@ void proc::syscall_exit(regstate* regs) {
     // (that's for waitpid to do!)
     p->pstate_ = ps_blank;
     p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
+    parent_child_queue.wake_all(); // Wake up the parent processes to norify them of an exit // CHANGEMADE
 
     if (EXIT_PARANOIA >= 1) {
         log_printf("[exit] Finished turning process PID=%d into a zombie\n", this->id_);
@@ -948,7 +950,7 @@ int proc::syscall_msleep(regstate* regs) {
     if (WAITQ_PARANOIA >= 2) {
         log_printf("[msleep] wq VA=%p, PA=0x%x, ticks=%ld\n", wq, kptr2pa(wq), (unsigned long) ticks);
     }
-    waiter().block_until(*wq, [=] () {
+    waiter().block_until(*wq, [&] () {
         if (WAITQ_PARANOIA >= 2) {
             log_printf("[predicate] waketime=%d\n", wakeup_time);
         }
@@ -1029,15 +1031,22 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
         if (pid != 0) { // If a pid is specified then search for it.
             if (!options) { // Block
                 proc* child = ptable[pid];
-                while (true) {
-                    {
+                // while (true) {
+                //     {
+                //     spinlock_guard guard(ptable_lock);
+                //     if (child->pstate_ == ps_blank) {
+                //         break;
+                //     }
+                //     }
+                //     yield();
+                // }
+                {
                     spinlock_guard guard(ptable_lock);
-                    if (child->pstate_ == ps_blank) {
-                        break;
-                    }
-                    }
-                    yield();
+                    waiter().block_until(parent_child_queue, [&] () {
+                        return (child->pstate_ == ps_blank);
+                    }, guard);
                 }
+
                 uint64_t retpid = (child->retval << 32) + child->id_;
                 if (WAITPID_PARANOIA && this->id_ != 1) {
                     log_printf("[waitpid] REAP INIT child PID=%d for parent PID=%d\n",
@@ -1081,33 +1090,55 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
         else { // If no pid is specified then walk through to find the first free one.
             if (!options) { // Block
                 int child_ind = -1;
-                while (true) {
-                    {
+                // while (true) {
+                //     {
+                //     spinlock_guard guard(ptable_lock);
+                //     for (int i = 0; i < this->nchildren_; ++i) {
+                //         if (WAITPID_PARANOIA && this->id_ != 1) {
+                //             log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
+                //                 this->childpids_[i], this->id_);
+                //         }
+                //         if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
+                //             child_ind = i;
+                //             if (WAITPID_PARANOIA && this->id_ != 1) {
+                //                 log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
+                //                     this->childpids_[i], this->id_);
+                //             }
+                //             break;
+                //         }
+                //     }
+
+                //     if (child_ind != -1) {
+                //         break;
+                //     }
+                //     if (WAITPID_PARANOIA && this->id_ != 1) {
+                //         log_printf("[waitpid] Did not find any exited children this time, yielding\n");
+                //     }
+                //     }
+                //     yield();
+                // }
+
+                {
                     spinlock_guard guard(ptable_lock);
-                    for (int i = 0; i < this->nchildren_; ++i) {
-                        if (WAITPID_PARANOIA && this->id_ != 1) {
-                            log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
-                                this->childpids_[i], this->id_);
-                        }
-                        if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
-                            child_ind = i;
+                    waiter().block_until(parent_child_queue, [&] () {
+                        for (int i = 0; i < this->nchildren_; ++i) {
                             if (WAITPID_PARANOIA && this->id_ != 1) {
-                                log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
+                                log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
                                     this->childpids_[i], this->id_);
                             }
-                            break;
+                            if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
+                                child_ind = i;
+                                if (WAITPID_PARANOIA && this->id_ != 1) {
+                                    log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
+                                        this->childpids_[i], this->id_);
+                                }
+                                break;
+                            }
                         }
-                    }
-
-                    if (child_ind != -1) {
-                        break;
-                    }
-                    if (WAITPID_PARANOIA && this->id_ != 1) {
-                        log_printf("[waitpid] Did not find any exited children this time, yielding\n");
-                    }
-                    }
-                    yield();
+                        return (child_ind != -1);
+                    }, guard);
                 }
+
                 proc* child = ptable[this->childpids_[child_ind]];
                 if (WAITPID_PARANOIA && this->id_ != 1) {
                     log_printf("[waitpid] REAP INIT child PID=%d (at ind=%d) for parent PID=%d\n",

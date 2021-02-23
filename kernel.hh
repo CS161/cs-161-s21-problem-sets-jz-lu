@@ -550,7 +550,9 @@ inline bool proc::resumable() const {
 // proc::wake()
 //    Sets a proc pstate from blocked to runnable.
 inline void proc::wake() {
-    log_printf("[p::wake] wakey wakey\n");
+    if (WAITQ_PARANOIA >= 1) {
+        log_printf("[p::wake] wakey wakey\n");
+    }
     // This already holds a lock from waiter, so just go ahead and check pstate
     int s = ps_blocked;
     if (pstate_.compare_exchange_strong(s, ps_runnable)) {
