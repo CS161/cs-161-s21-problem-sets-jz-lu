@@ -16,6 +16,8 @@ std::atomic<unsigned long> ticks;
 
 // display type; initially KDISPLAY_CONSOLE
 std::atomic<int> kdisplay;
+const uint64_t NUM_WQS = 5;
+wait_queue time_wheel[NUM_WQS];
 
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
@@ -45,14 +47,14 @@ void k_proc_init() {
         kinit->syscall_waitpid(&regs);
         {
         spinlock_guard guard(ptable_lock);
-        bool found_runnable_proc = false;
+        bool found_proc = false;
         for (int i = 2; i < NPROC; ++i) {
-            if (ptable[i]->pstate_ == proc::ps_runnable) {
-                found_runnable_proc = true;
+            if (ptable[i]->pstate_ == proc::ps_runnable || ptable[i]->pstate_ == proc::ps_blocked) {
+                found_proc = true;
                 break;
             }
         }
-        if (!found_runnable_proc) {
+        if (!found_proc) {
             break;
         }
         }
@@ -165,6 +167,15 @@ void proc::exception(regstate* regs) {
         }
         lapicstate::get().ack();
         regs_ = regs; // Set the regs in the proc metadata for the return to process via resume regstate
+        
+        // Rise and shine! Wake up sleeping processes.
+        long cur_tick = (long) ticks;
+        if (WAITQ_PARANOIA >= 1) {
+            log_printf("[irq_timer] Timer fired at tick %ld, waking wheel %p (ind. %d)\n", 
+                cur_tick, &time_wheel[cur_tick%NUM_WQS], cur_tick%NUM_WQS);
+        }
+        time_wheel[cur_tick%NUM_WQS].wake_all(); // CHANGEMADE
+
         yield_noreturn();
         break;                  /* will not be reached */
     }
@@ -926,19 +937,25 @@ void proc::syscall_exit(regstate* regs) {
 
 
 // proc::syscall_msleep(regs)
-//    Sleeps for msec milliseconds
+//    Sleeps for msec milliseconds rounded up to nearest 10.
 int proc::syscall_msleep(regstate* regs) {
-    uint64_t msec = regs->reg_rdi;
-    if (msec % 10) { // If time is not already a multipkle of 10 round up.
-        msec = msec - msec%10 + 10;
+    if (WAITQ_PARANOIA >= 1) {
+        log_printf("[msleep] sleep called by process PID=%d to sleep for %d msecs\n", id_, (regs->reg_rdi + 9) / 10);
     }
+    unsigned long wakeup_time = ticks + (regs->reg_rdi + 9) / 10;
 
-    uint64_t start = ticks;
-    while (msec > 10*(ticks - start)) {
-        yield();
+    wait_queue* wq = &time_wheel[wakeup_time%NUM_WQS];
+    if (WAITQ_PARANOIA >= 2) {
+        log_printf("[msleep] wq VA=%p, PA=0x%x, ticks=%ld\n", wq, kptr2pa(wq), (unsigned long) ticks);
     }
+    waiter().block_until(*wq, [=] () {
+        if (WAITQ_PARANOIA >= 2) {
+            log_printf("[predicate] waketime=%d\n", wakeup_time);
+        }
+        return (long(wakeup_time - ticks) < 0);
+    });
 
-    return 0;
+    return 0; // TODO change return to be interrupt number
 }
 
 

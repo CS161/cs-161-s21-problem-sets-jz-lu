@@ -18,47 +18,60 @@ inline waiter::~waiter() {
 }
 
 inline void waiter::prepare(wait_queue& wq) {
-    // Mark the waiter as serving the current process.
+    // Mark the waiter as serving the current process
+    if (WAITQ_PARANOIA >= 3) {
+        log_printf("[waiter] [prepare] wq VA=%p, PA=0x%x\n", &wq, kptr2pa(&wq));
+    }
     p_ = current();
+    wq_ = &wq;
+    if (WAITQ_PARANOIA >= 3) {
+        log_printf("[waiter] Set p_ to current(), VA=%p, PA=0x%x\n", p_, kptr2pa(p_));
+    }
 
     // Lock the associated wait queue.
-    auto irqs = wq_->lock_.lock();
+    auto irqs = wq.lock_.lock();
+    if (WAITQ_PARANOIA >= 3) {
+        log_printf("[waiter] locked\n");
+    }
     p_->pstate_ = proc::ps_blocked;
+    if (WAITQ_PARANOIA >= 3) {
+        log_printf("[waiter] Set p_->pstate_\n");
+    }
 
     // Push the waiter onto the wait queue.
-    wq_->q_.push_back(this);
+    if (WAITQ_PARANOIA >= 3) {
+        log_printf("[waiter] About to enqueue into the wait queue\n");
+    }
+    wq.q_.push_back(this);
 
-    // Unlock the wiat queue.
-    wq_->lock_.unlock(irqs);
+    // Unlock the wait queue.
+    wq.lock_.unlock(irqs);
 }
 
 inline void waiter::block() {
-    assert(p_ == current(), "You have crossed me for the last time!\n");
-    while (true) {
-        auto irqs = wq_->lock_.lock();
-        if (p_->pstate_ == proc::ps_blocked) {
-            wq_->lock_.unlock(irqs);
-            break;
-        }
-        wq_->lock_.unlock(irqs);
+    assert(p_ == current(), "You have yee'd your last haw!\n");
+
+    if (p_->pstate_ == proc::ps_blocked) {
+        if (WAITQ_PARANOIA >= 3) {
+            log_printf("[block] yielding, ticks=%ld\n", (unsigned long) ticks);
+        } 
         p_->yield();
     }
-
-    // auto irqs = wq_->lock_.lock();
-    // if (p_->pstate_ == proc::ps_blocked) {
-    //     wq_->lock_.unlock(irqs);
-    //     p_->yield();
-    // }
-    // wq_->lock_.unlock(irqs);
+    if (WAITQ_PARANOIA >= 3) {
+        log_printf("[block] clearing\n");
+    }
     clear();
 }
 
 inline void waiter::clear() {
     // Lock the wait queue.
+    if (WAITQ_PARANOIA >= 3) {
+        log_printf("[clear] clearing\n");
+    }
     auto irqs = wq_->lock_.lock();
 
     // Wake up the process.
-    p_->wake();
+    wake();
 
     // Dequeue the waiter off the the wait queue, if it is enqueued.
     for (waiter *it = wq_->q_.front(); it; it = wq_->q_.next(it)) {
@@ -73,13 +86,7 @@ inline void waiter::clear() {
 }
 
 inline void waiter::wake() {
-    // Lock the wait queue.
-    auto irqs = wq_->lock_.lock();
-
     p_->wake();
-
-    // Unlock the wait queue.
-    wq_->lock_.unlock(irqs);
 }
 
 
@@ -88,11 +95,23 @@ inline void waiter::wake() {
 template <typename F>
 inline void waiter::block_until(wait_queue& wq, F predicate) {
     while (true) {
+        if (WAITQ_PARANOIA >= 3) {
+            log_printf("[k-wait] About to prepare\n");
+        }
         prepare(wq);
+        if (WAITQ_PARANOIA >= 3) {
+            log_printf("[k-wait] Prepared. Predicate VA=%p\n", predicate);
+        }
         if (predicate()) {
             break;
         }
+        if (WAITQ_PARANOIA >= 3) {
+            log_printf("[k-wait] About to block\n");
+        }
         block();
+        if (WAITQ_PARANOIA >= 3) {
+            log_printf("[k-wait] Blocked\n");
+        }
     }
     clear();
 }
@@ -131,6 +150,9 @@ inline void waiter::block_until(wait_queue& wq, F predicate,
 //    Lock the wait queue, then clear it by waking all waiters.
 inline void wait_queue::wake_all() {
     spinlock_guard guard(lock_);
+    if (WAITQ_PARANOIA >= 2) {
+        log_printf("[wake_all] [%p] Waking all now\n", this);
+    }
     while (auto w = q_.pop_front()) {
         w->wake();
     }

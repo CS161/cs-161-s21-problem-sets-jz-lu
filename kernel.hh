@@ -181,9 +181,10 @@ inline cpustate* this_cpu();
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
 const uint64_t BALLOC_PARANOIA = 0; 
 const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
-const uint64_t FORK_PARANOIA = 1;
-const uint64_t EXIT_PARANOIA = 2;
+const uint64_t FORK_PARANOIA = 0;
+const uint64_t EXIT_PARANOIA = 0;
 const uint64_t WAITPID_PARANOIA = 1;
+const uint64_t WAITQ_PARANOIA = 1;
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_
@@ -549,6 +550,7 @@ inline bool proc::resumable() const {
 // proc::wake()
 //    Sets a proc pstate from blocked to runnable.
 inline void proc::wake() {
+    log_printf("[p::wake] wakey wakey\n");
     // This already holds a lock from waiter, so just go ahead and check pstate
     int s = ps_blocked;
     if (pstate_.compare_exchange_strong(s, ps_runnable)) {
