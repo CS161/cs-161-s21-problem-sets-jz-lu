@@ -119,6 +119,7 @@ void cpustate::schedule(proc* yielding_from) {
 
     // run `current_`
     set_pagetable(current_->pagetable_);
+    if (TRUEBLOCK_TESTING) ++BLOCK_NUM_RESUMES;
     current_->resume(); // does not return
 }
 

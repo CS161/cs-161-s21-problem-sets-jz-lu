@@ -19,6 +19,7 @@ std::atomic<int> kdisplay;
 const uint64_t NUM_WQS = 5;
 wait_queue time_wheel[NUM_WQS]; // Sleep wait wheel // CHANGEMADE 
 wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
+uint64_t BLOCK_NUM_RESUMES = 0;
 
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
@@ -59,6 +60,10 @@ void k_proc_init() {
             break;
         }
         }
+    }
+    if (TRUEBLOCK_TESTING) {
+        log_printf("[k_proc_init] [TRUE BLOCK TEST] [TYPE=%s] Total num resumes recorded: %lu\n",
+            USING_PSEUDO_BLOCKING ? "Pseudoblock" : "Trueblock", BLOCK_NUM_RESUMES);
     }
     log_printf("[k_proc_init] halting QEMU, goodbye cruel world\n");
     process_halt();
@@ -938,8 +943,11 @@ void proc::syscall_exit(regstate* regs) {
     // (that's for waitpid to do!)
     p->pstate_ = ps_blank;
     p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
-    // parent_child_queue.wake_one(ptable[ppid_]); // Wake up the parent process to notify them of an exit // CHANGEMADE
-    parent_child_queue.wake_all();
+
+    // Wake up the parent process to notify them of an exit // CHANGEMADE
+    if (!USING_PSEUDO_BLOCKING) {
+        parent_child_queue.wake_one(ptable[ppid_]); 
+    }
 
     if (EXIT_PARANOIA >= 1) {
         log_printf("[exit] Finished turning process PID=%d into a zombie\n", this->id_);
@@ -955,22 +963,31 @@ int proc::syscall_msleep(regstate* regs) {
     // Zero out the interrupt flag before sleeping, which is allowed by the inherent
     // child interrupt signaling race condition discussed on the pset handout.
     e_intr = 0;
-    if (WAITQ_PARANOIA >= 1) {
-        log_printf("[msleep] sleep called by process PID=%d to sleep for %d msecs\n", id_, (regs->reg_rdi + 9) / 10);
-    }
     unsigned long wakeup_time = ticks + (regs->reg_rdi + 9) / 10;
-
-    wait_queue* wq = &time_wheel[wakeup_time%NUM_WQS];
-    if (WAITQ_PARANOIA >= 2) {
-        log_printf("[msleep] wq VA=%p, PA=0x%x, ticks=%ld\n", wq, kptr2pa(wq), (unsigned long) ticks);
-    }
-    waiter().block_until(*wq, [&] () {
-        if (WAITQ_PARANOIA >= 2) {
-            log_printf("[predicate] waketime=%d\n", wakeup_time);
+    if (USING_PSEUDO_BLOCKING && TRUEBLOCK_TESTING) {
+        log_printf("[msleep] [TRUE BLOCK TESTING] msleep called by PID=%d, to wake at ticks=%lu\n", 
+            id_, wakeup_time);
+        while (long(wakeup_time - ticks) > 0 && e_intr == 0) {
+            yield();
         }
-        return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
-    });
+    }
+    else {
+        if (WAITQ_PARANOIA >= 1) {
+            log_printf("[msleep] sleep called by process PID=%d to sleep until %lu\n", 
+                id_, wakeup_time);
+        }
 
+        wait_queue* wq = &time_wheel[wakeup_time%NUM_WQS];
+        if (WAITQ_PARANOIA >= 2) {
+            log_printf("[msleep] wq VA=%p, PA=0x%x, ticks=%ld\n", wq, kptr2pa(wq), (unsigned long) ticks);
+        }
+        waiter().block_until(*wq, [&] () {
+            if (WAITQ_PARANOIA >= 2) {
+                log_printf("[predicate] waketime=%d\n", wakeup_time);
+            }
+            return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
+        });
+    }
     return e_intr;
 }
 
@@ -1045,20 +1062,24 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
         if (pid != 0) { // If a pid is specified then search for it.
             if (!options) { // Block
                 proc* child = ptable[pid];
-                // while (true) {
-                //     {
-                //     spinlock_guard guard(ptable_lock);
-                //     if (child->pstate_ == ps_blank) {
-                //         break;
-                //     }
-                //     }
-                //     yield();
-                // }
-                {
-                    spinlock_guard guard(ptable_lock);
-                    waiter().block_until(parent_child_queue, [&] () {
-                        return (child->pstate_ == ps_blank);
-                    }, guard);
+                if (USING_PSEUDO_BLOCKING && TRUEBLOCK_TESTING) {
+                    while (true) {
+                        {
+                        spinlock_guard guard(ptable_lock);
+                        if (child->pstate_ == ps_blank) {
+                            break;
+                        }
+                        }
+                        yield();
+                    }
+                }
+                else {
+                    {
+                        spinlock_guard guard(ptable_lock);
+                        waiter().block_until(parent_child_queue, [&] () {
+                            return (child->pstate_ == ps_blank);
+                        }, guard);
+                    }
                 }
 
                 uint64_t retpid = (child->retval << 32) + child->id_;
@@ -1104,35 +1125,38 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
         else { // If no pid is specified then walk through to find the first free one.
             if (!options) { // Block
                 int child_ind = -1;
-                // while (true) {
-                //     {
-                //     spinlock_guard guard(ptable_lock);
-                //     for (int i = 0; i < this->nchildren_; ++i) {
-                //         if (WAITPID_PARANOIA && this->id_ != 1) {
-                //             log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
-                //                 this->childpids_[i], this->id_);
-                //         }
-                //         if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
-                //             child_ind = i;
-                //             if (WAITPID_PARANOIA && this->id_ != 1) {
-                //                 log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
-                //                     this->childpids_[i], this->id_);
-                //             }
-                //             break;
-                //         }
-                //     }
+                if (USING_PSEUDO_BLOCKING && TRUEBLOCK_TESTING) {
+                    while (true) {
+                        {
+                        spinlock_guard guard(ptable_lock);
+                        for (int i = 0; i < this->nchildren_; ++i) {
+                            if (WAITPID_PARANOIA && this->id_ != 1) {
+                                log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
+                                    this->childpids_[i], this->id_);
+                            }
+                            if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
+                                child_ind = i;
+                                if (WAITPID_PARANOIA && this->id_ != 1) {
+                                    log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
+                                        this->childpids_[i], this->id_);
+                                }
+                                break;
+                            }
+                        }
 
-                //     if (child_ind != -1) {
-                //         break;
-                //     }
-                //     if (WAITPID_PARANOIA && this->id_ != 1) {
-                //         log_printf("[waitpid] Did not find any exited children this time, yielding\n");
-                //     }
-                //     }
-                //     yield();
-                // }
+                        if (child_ind != -1) {
+                            break;
+                        }
+                        if (WAITPID_PARANOIA && this->id_ != 1) {
+                            log_printf("[waitpid] Did not find any exited children this time, yielding\n");
+                        }
+                        }
+                        yield();
+                    }
+                }
 
-                {
+                else {
+                    {
                     spinlock_guard guard(ptable_lock);
                     waiter().block_until(parent_child_queue, [&] () {
                         for (int i = 0; i < this->nchildren_; ++i) {
@@ -1151,6 +1175,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                         }
                         return (child_ind != -1);
                     }, guard);
+                    }
                 }
 
                 proc* child = ptable[this->childpids_[child_ind]];

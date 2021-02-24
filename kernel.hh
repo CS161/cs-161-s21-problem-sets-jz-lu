@@ -183,21 +183,23 @@ extern wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 // Debugging and testing flags
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
 const uint64_t BALLOC_PARANOIA = 0; 
-const uint64_t BALLOC_METRICS = 0; // Print allocation metrics
+const uint64_t SALLOC_PARANOIA = 0; // 0 = do nothing, 1 = checking
 const uint64_t FORK_PARANOIA = 0;
 const uint64_t EXIT_PARANOIA = 0;
-const uint64_t PPID_PARANOIA = 1;
-const uint64_t WAITPID_PARANOIA = 1;
-const uint64_t WAITQ_PARANOIA = 2;
+const uint64_t PPID_PARANOIA = 0;
+const uint64_t WAITPID_PARANOIA = 0;
+const uint64_t WAITQ_PARANOIA = 0;
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_
+const uint64_t BALLOC_METRICS = 0; // Print allocation metric
 const uint64_t FORK_TESTING = 0; 
-const uint64_t TRUEBLOCK_TESTING = 1;
+const uint64_t TRUEBLOCK_TESTING = 0;
 
-// Slab allocator flags. 
-const uint64_t SALLOC_PARANOIA = 0; // 0 = do nothing, 1 = checking
+// "Using" flags
 const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
+const uint64_t USING_PSEUDO_BLOCKING = 0;
+extern uint64_t BLOCK_NUM_RESUMES; // Testing number of calls to resume
 
 // Buddy allocator orders.
 #define MIN_ORDER 12
