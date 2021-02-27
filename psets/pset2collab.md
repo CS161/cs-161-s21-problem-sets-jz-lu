@@ -3,8 +3,8 @@ CS 161 Problem Set 2 Collaboration
 
 Collaborators
 -------------
-(Other students you worked with)
+Aakash Mishra
 
 Citations
 ---------
-(Other sources consulted)
+GeeksForGeeks MinHeap Tutorial

@@ -26,7 +26,7 @@ struct elf_program;
 // Process descriptor type
 struct __attribute__((aligned(4096))) proc {
     enum pstate_t {
-        ps_blank = 0, ps_runnable = PROC_RUNNABLE, ps_broken, ps_blocked
+        ps_blank = 0, ps_runnable = PROC_RUNNABLE, ps_broken, ps_blocked, ps_transition
     };
 
     // These four members must come first:
@@ -188,7 +188,8 @@ const uint64_t FORK_PARANOIA = 0;
 const uint64_t EXIT_PARANOIA = 0;
 const uint64_t PPID_PARANOIA = 0;
 const uint64_t WAITPID_PARANOIA = 0;
-const uint64_t WAITQ_PARANOIA = 0;
+const uint64_t WAITQ_PARANOIA = 2;
+const uint64_t WAITH_PARANOIA = 0; // (Wait heap)
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_

@@ -17,12 +17,16 @@ std::atomic<unsigned long> ticks;
 // display type; initially KDISPLAY_CONSOLE
 std::atomic<int> kdisplay;
 const uint64_t NUM_WQS = 5;
-wait_queue time_wheel[NUM_WQS]; // Sleep wait wheel // CHANGEMADE 
+wait_queue time_wheel[NUM_WQS]; // Sleep wait wheel
 wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 uint64_t BLOCK_NUM_RESUMES = 0;
 
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
+
+void panic_align() {
+    panic("Alignment issue detected!\n");
+}
 
 // k_proc_init()
 //    The almighty init process, holding PID = PPID = 1.
@@ -180,7 +184,8 @@ void proc::exception(regstate* regs) {
             log_printf("[irq_timer] Timer fired at tick %ld, waking wheel %p (ind. %d)\n", 
                 cur_tick, &time_wheel[cur_tick%NUM_WQS], cur_tick%NUM_WQS);
         }
-        time_wheel[cur_tick%NUM_WQS].wake_all(); // CHANGEMADE
+        // Wake up all the relevant processes in case any need to stop sleeping.
+        time_wheel[cur_tick%NUM_WQS].wake_all();
 
         yield_noreturn();
         break;                  /* will not be reached */
@@ -276,7 +281,6 @@ uintptr_t proc::syscall(regstate* regs) {
         return 0;
 
     case SYSCALL_PAGE_ALLOC: {
-        log_printf("[SYSCALL_PAGE_ALLOC] NEW page allocation. Transferring to [kalloc]\n");
         uintptr_t addr = regs->reg_rdi;
         if (addr >= VA_LOWEND || addr & 0xFFF) {
             return -1;
@@ -939,15 +943,10 @@ void proc::syscall_exit(regstate* regs) {
         log_printf("]\n");
     }
 
-    // Mark the process as free, but don't clear its entry on pagetable.
+    // Mark the process as transitioning, but don't clear its entry on pagetable.
     // (that's for waitpid to do!)
-    p->pstate_ = ps_blank;
+    p->pstate_ = ps_transition;
     p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
-
-    // Wake up the parent process to notify them of an exit // CHANGEMADE
-    if (!USING_PSEUDO_BLOCKING) {
-        parent_child_queue.wake_one(ptable[ppid_]); 
-    }
 
     if (EXIT_PARANOIA >= 1) {
         log_printf("[exit] Finished turning process PID=%d into a zombie\n", this->id_);
@@ -963,7 +962,11 @@ int proc::syscall_msleep(regstate* regs) {
     // Zero out the interrupt flag before sleeping, which is allowed by the inherent
     // child interrupt signaling race condition discussed on the pset handout.
     e_intr = 0;
+
     unsigned long wakeup_time = ticks + (regs->reg_rdi + 9) / 10;
+    // Make sure there's no overflow
+    assert(wakeup_time > ticks, "Invalid sleep request, reboot Chickadee or make sleep time smaller");
+
     if (USING_PSEUDO_BLOCKING && TRUEBLOCK_TESTING) {
         log_printf("[msleep] [TRUE BLOCK TESTING] msleep called by PID=%d, to wake at ticks=%lu\n", 
             id_, wakeup_time);
