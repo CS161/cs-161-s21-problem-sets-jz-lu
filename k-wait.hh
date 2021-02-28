@@ -204,10 +204,6 @@ inline hwaiter::~hwaiter() {
     // optional error-checking code
 }
 
-inline void hwaiter::wake() {
-    p_->wake();
-}
-
 inline void hwaiter::prepare(wait_heap& wh, uint64_t wakeup_time) {
     // Mark the waiter as serving the current process
     if (WAITH_PARANOIA >= 3) {
@@ -276,7 +272,7 @@ inline void hwaiter::clear() {
         if (WAITH_PARANOIA >= 2) {
             log_printf("[HEAP-clear] Found this waiter on heap, clearing it\n");
         }
-        hwaiter* temps[NPROC] = {0};
+        hwaiter* temps[WAITNPROC] = {0};
         int ntemps = 0;
         for (int i = 0; i < wh_->size(); ++i) {
             hwaiter* hw = wh_->pop(false);
@@ -301,8 +297,11 @@ inline void hwaiter::clear() {
     wh_->lock_.unlock(irqs);
 }
 
+inline void hwaiter::wake() {
+    p_->wake();
+}
 
-// waiter::block_until(wq, predicate)
+// hwaiter::block_until(wh, wakeup_time, predicate)
 //    Block on `wq` until `predicate()` returns true.
 template <typename F>
 inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicate) {
@@ -328,7 +327,27 @@ inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicat
     clear();
 }
 
-// waiter::block_until(wq, predicate, guard)
+// hwaiter::block_until(wh, wakeup_time, predicate, lock, irqs)
+//    Block on `wq` until `predicate()` returns true. The `lock`
+//    must be locked; it is unlocked before blocking (if blocking
+//    is necessary). All calls to `predicate` have `lock` locked,
+//    and `lock` is locked on return.
+template <typename F>
+inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicate,
+                                spinlock& lock, irqstate& irqs) {
+    while (true) {
+        prepare(wh, wakeup_time);
+        if (predicate()) {
+            break;
+        }
+        lock.unlock(irqs);
+        block();
+        irqs = lock.lock();
+    }
+    clear();
+}
+
+// hwaiter::block_until(wh, wakeup_time, predicate, guard)
 //    Block on `wq` until `predicate()` returns true. The `guard`
 //    must be locked on entry; it is unlocked before blocking (if
 //    blocking is necessary) and locked on return.
@@ -337,6 +356,8 @@ inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicat
                                 spinlock_guard& guard) {
     block_until(wh, wakeup_time, predicate, guard.lock_, guard.irqs_);
 }
+
+
 
 
 // swap(w1, w2)
@@ -349,7 +370,7 @@ void wait_heap::swap(hwaiter** w1, hwaiter** w2) {
 
 // wait_heap::size()
 //    Returns num waiters on heap
-int wait_heap::size() {
+inline int wait_heap::size() {
     return nwaiters_;
 }
 
@@ -363,55 +384,28 @@ inline void wait_heap::show() {
     log_printf("] <-- LEAVES\n");
 }
 
-// wait_heap::insert(w)
-//    Inserts a new waiter into the heap.
-void wait_heap::insert(hwaiter *hw) {
-    assert(nwaiters_ < NPROC); 
-  
-    // Add the new waiter.
-    int i = nwaiters_++;
-    waiter_arr_[i] = hw;
-  
-    // Move new node up until heap is consistent.
-    while (i != 0 && waiter_arr_[parent(i)]->wakeup_time_ > waiter_arr_[i]->wakeup_time_) { 
-       swap(&waiter_arr_[i], &waiter_arr_[parent(i)]);
-       i = parent(i);
-    } 
-} 
-
 // wait_heap::left(int parent)
 //    Returns left child index of parent.
-int wait_heap::left(int parent) {
+inline int wait_heap::left(int parent) {
     return 2*parent + 1;
 }
 
 // wait_heap::right(int parent)
 //    Returns right child index of parent.
-int wait_heap::right(int parent) {
+inline int wait_heap::right(int parent) {
     return 2*parent + 2;
 }
 
 // wait_heap::parent(int child)
 //     Returns parent index of a node.
-int wait_heap::parent(int child) {
+inline int wait_heap::parent(int child) {
     return (child - 1)/2;
-}
-
-// is_on_heap(hwaiter* w)
-//    Checks if a particular waiter is on the heap.
-bool wait_heap::is_on_heap(hwaiter* hw) {
-    for (int i = 0; i < nwaiters_; ++i) {
-        if (waiter_arr_[i] == hw) {
-            return true;
-        }
-    }
-    return false;
 }
 
 // wait_heap::heapify(i)
 //    Heapify the wait_heap with respect to index i.
 //    The heap algorithm assumes children of i are min-heaped.
-void wait_heap::heapify(int i) { 
+inline void wait_heap::heapify(int i) { 
     assert(i >= 0 && i < nwaiters_);
     int l = left(i); 
     int r = right(i); 
@@ -428,9 +422,45 @@ void wait_heap::heapify(int i) {
     } 
 }
 
+// wait_heap::insert(w)
+//    Inserts a new waiter into the heap.
+inline void wait_heap::insert(hwaiter *hw) {
+    assert(nwaiters_ < WAITNPROC); 
+  
+    // Add the new waiter.
+    int i = nwaiters_++;
+    waiter_arr_[i] = hw;
+  
+    // Move new node up until heap is consistent.
+    while (i != 0 && waiter_arr_[parent(i)]->wakeup_time_ > waiter_arr_[i]->wakeup_time_) { 
+       swap(&waiter_arr_[i], &waiter_arr_[parent(i)]);
+       i = parent(i);
+    } 
+}
+
+// is_on_heap(hwaiter* w)
+//    Checks if a particular waiter is on the heap.
+inline bool wait_heap::is_on_heap(hwaiter* hw) {
+    for (int i = 0; i < nwaiters_; ++i) {
+        if (waiter_arr_[i] == hw) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// wait_heap::top_waketime()
+//    Gets the wakeup time of the top of the heap.
+inline uint64_t wait_heap::top_waketime() {
+    if (!nwaiters_) {
+        return 0;
+    }
+    return waiter_arr_[0]->wakeup_time_;
+}
+
 // wait_heap::wake_top()
 //    Pops off the top waiter and calls wake.
-hwaiter* wait_heap::pop(bool wake) {
+inline hwaiter* wait_heap::pop(bool wake) {
     spinlock_guard guard(lock_);
     assert(nwaiters_ > 0);
   
