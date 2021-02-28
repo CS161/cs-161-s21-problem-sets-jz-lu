@@ -162,6 +162,7 @@ inline void wait_queue::wake_all() {
     if (WAITQ_PARANOIA >= 2) {
         log_printf("[wake_all] [%s] Waking all now.\n", 
             this == &parent_child_queue ? "PCQ" : "TW");
+        show();
     }
     while (auto w = q_.pop_front()) {
         w->wake();
