@@ -184,7 +184,7 @@ extern wait_heap time_heap; // Wait heap
 // Debugging and testing flags
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
 const uint64_t BALLOC_PARANOIA = 0; 
-const uint64_t SALLOC_PARANOIA = 2; // 0 = do nothing, 1 = checking
+const uint64_t SALLOC_PARANOIA = 0; // 0 = do nothing, 1 = checking
 const uint64_t FORK_PARANOIA = 0;
 const uint64_t EXIT_PARANOIA = 0;
 const uint64_t PPID_PARANOIA = 0;
