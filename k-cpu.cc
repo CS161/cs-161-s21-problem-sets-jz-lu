@@ -95,7 +95,7 @@ void cpustate::schedule(proc* yielding_from) {
         yielding_from = idle_task_;
     }
 
-    // Wake up the parent process to notify them of an exit
+    // Wake up the parent process to notify them of an exit.
     if (!USING_PSEUDO_BLOCKING && yielding_from->pstate_ == proc::ps_transition) {
         parent_child_queue.wake_one(ptable[yielding_from->ppid_]); 
         yielding_from->pstate_ = proc::ps_blank;

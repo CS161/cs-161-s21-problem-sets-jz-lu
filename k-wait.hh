@@ -249,11 +249,14 @@ inline void hwaiter::prepare(wait_heap& wh, uint64_t wakeup_time) {
 
     // Push the waiter onto the wait heap.
     if (WAITH_PARANOIA >= 3) {
-        log_printf("[HEAP-waiter] About to enqueue into the wait queue\n");
+        log_printf("[HEAP-waiter] Inserting process PID=%d into wait heap\n", p_->id_);
     }
     wh_->insert(this);
 
     // Unlock the wait heap.
+    if (WAITH_PARANOIA >= 3) {
+        log_printf("[HEAP-waiter] unlocking\n");
+    }
     wh_->lock_.unlock(irqs);
 }
 
@@ -290,7 +293,7 @@ inline void hwaiter::clear() {
     // (This is for design completeness--in practice this is never taken.)
     if (wh_->is_on_heap(this)) {
         if (WAITH_PARANOIA >= 2) {
-            log_printf("[HEAP-clear] Found this waiter on heap, clearing it\n");
+            log_printf("[HEAP-clear] Found this waiter (PID=%d) on heap, clearing it\n", p_->id_);
         }
         hwaiter* temps[WAITNPROC] = {0};
         int ntemps = 0;
@@ -327,21 +330,33 @@ template <typename F>
 inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicate) {
     while (true) {
         if (WAITQ_PARANOIA >= 3) {
-            log_printf("[HEAP-waiter] About to prepare\n");
+            log_printf("[HEAP-waiter] About to prepare process PID=%d\n", p_->id_);
         }
         prepare(wh, wakeup_time);
         if (WAITH_PARANOIA >= 3) {
-            log_printf("[HEAP-waiter] Prepared. Predicate VA=%p\n", predicate);
+            log_printf("[HEAP-waiter] Prepared PID=%d. Predicate VA=%p\n", p_->id_, predicate);
         }
         if (predicate()) {
+            // if (p_->e_intr != 0) {
+            //     log_printf("[HEAP-waiter] [Predcheck] Signal to parent PID=%d with children [", p_->id_);
+            //     for (int i = 0; i < p_->nchildren_; ++i) {
+            //         log_printf("%d ", p_->childpids_[i]);
+            //     }
+            //     log_printf("]\n");
+            //     wh.erase(this, true);
+            // }
+            if (p_->e_intr != 0) {
+                log_printf("[HEAP-waiter] Predcheck passed. Signal to parent PID=%d", p_->id_);
+            }
             break;
         }
         if (WAITH_PARANOIA >= 3) {
-            log_printf("[HEAP-waiter] About to block\n");
+            log_printf("[HEAP-waiter] Predcheck failed: e_intr = %d. About to block PID=%d\n", 
+                p_->e_intr, p_->id_);
         }
         block();
         if (WAITH_PARANOIA >= 3) {
-            log_printf("[HEAP-waiter] Blocked\n");
+            log_printf("[HEAP-waiter] Blocked PID=%d\n", p_->id_);
         }
     }
     clear();
@@ -572,10 +587,14 @@ inline hwaiter* wait_heap::lock_and_pop(bool wake) {
 //    Empties entire heap, waking processes if desired.
 inline void wait_heap::flush(bool wake) {
     spinlock_guard guard(lock_);
-    while (nwaiters_) {
-        pop(wake);
+    if (!wake) {
+        nwaiters_ = 0;
+        return;
     }
-    assert(!size());
+    for (int i = 0; i < nwaiters_; ++i) {
+        waiter_arr_[i]->wake();
+    }
+    nwaiters_ = 0;
 }
 
 #endif

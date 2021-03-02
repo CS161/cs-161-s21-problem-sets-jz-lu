@@ -960,6 +960,13 @@ void proc::syscall_exit(regstate* regs) {
     p->pstate_ = USING_PSEUDO_BLOCKING ? ps_blank : ps_transition;
     p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
 
+    if (USING_TIME_HEAP) {
+        if (WAITH_PARANOIA >= 2) {
+            log_printf("[exit] Flushing time heap to wake all time-sleeping processes\n");
+        }
+        time_heap.flush(true);
+    }
+
     if (EXIT_PARANOIA >= 1) {
         log_printf("[exit] Finished turning process PID=%d into a zombie\n", this->id_);
     }

@@ -179,6 +179,7 @@ extern int ncpu;
 inline cpustate* this_cpu();
 
 extern wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
+extern wait_heap time_heap; // Wait heap
 
 // Debugging and testing flags
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
@@ -189,7 +190,7 @@ const uint64_t EXIT_PARANOIA = 0;
 const uint64_t PPID_PARANOIA = 0;
 const uint64_t WAITPID_PARANOIA = 0;
 const uint64_t WAITQ_PARANOIA = 0;
-const uint64_t WAITH_PARANOIA = 0; // (Wait heap)
+const uint64_t WAITH_PARANOIA = 0; // Wait heap
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_
@@ -201,7 +202,7 @@ const uint64_t TRUEBLOCK_TESTING = 0;
 const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
 const uint64_t USING_PSEUDO_BLOCKING = 0;
 extern uint64_t BLOCK_NUM_RESUMES; // Testing number of calls to resume
-const uint64_t USING_TIME_HEAP = 0;
+const uint64_t USING_TIME_HEAP = 1; // Turn on to use heap, off to use time wheel
 
 // Buddy allocator orders.
 #define MIN_ORDER 12
@@ -558,14 +559,14 @@ inline bool proc::resumable() const {
 // proc::wake()
 //    Sets a proc pstate from blocked to runnable.
 inline void proc::wake() {
-    if (WAITQ_PARANOIA >= 1) {
+    if (WAITQ_PARANOIA >= 1 || WAITH_PARANOIA >= 1) {
         log_printf("[p::wake] wakey wakey from process PID=%d, parent PID=%d\n", id_, ppid_);
     }
     // This already holds a lock from waiter, so just go ahead and check pstate
     int s = ps_blocked;
     if (pstate_.compare_exchange_strong(s, ps_runnable)) {
-        if (WAITQ_PARANOIA >= 2) {
-            log_printf("[p::wake] Process runnable? %s\n", pstate_ == ps_runnable ? "YUHHHH" : "Naww");
+        if (WAITQ_PARANOIA >= 2 || WAITH_PARANOIA >= 2) {
+            log_printf("[p::wake] Process runnable? %s\n", pstate_ == ps_runnable ? "Yes" : "No");
         }
         int cpu_ = 0;
         if (id_ != 1) {
