@@ -346,7 +346,7 @@ inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicat
             //     wh.erase(this, true);
             // }
             if (p_->e_intr != 0) {
-                log_printf("[HEAP-waiter] Predcheck passed. Signal to parent PID=%d", p_->id_);
+                log_printf("[HEAP-waiter] Predcheck passed. Signal to parent PID=%d\n", p_->id_);
             }
             break;
         }

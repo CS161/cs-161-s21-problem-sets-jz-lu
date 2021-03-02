@@ -184,7 +184,7 @@ extern wait_heap time_heap; // Wait heap
 // Debugging and testing flags
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
 const uint64_t BALLOC_PARANOIA = 0; 
-const uint64_t SALLOC_PARANOIA = 0; // 0 = do nothing, 1 = checking
+const uint64_t SALLOC_PARANOIA = 2; // 0 = do nothing, 1 = checking
 const uint64_t FORK_PARANOIA = 0;
 const uint64_t EXIT_PARANOIA = 0;
 const uint64_t PPID_PARANOIA = 0;
@@ -199,10 +199,10 @@ const uint64_t FORK_TESTING = 0;
 const uint64_t TRUEBLOCK_TESTING = 0;
 
 // "Using" flags
-const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
+const uint64_t USING_SLAB_ALLOCATOR = 1; // 0 = turn off slab allocation, 1 = turn on
 const uint64_t USING_PSEUDO_BLOCKING = 0;
 extern uint64_t BLOCK_NUM_RESUMES; // Testing number of calls to resume
-const uint64_t USING_TIME_HEAP = 1; // Turn on to use heap, off to use time wheel
+const uint64_t USING_TIME_HEAP = 0; // Turn on to use heap, off to use time wheel
 
 // Buddy allocator orders.
 #define MIN_ORDER 12
