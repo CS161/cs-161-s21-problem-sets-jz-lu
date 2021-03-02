@@ -21,6 +21,7 @@ inline void waiter::prepare(wait_queue& wq) {
     // Mark the waiter as serving the current process
     if (WAITQ_PARANOIA >= 3) {
         log_printf("[waiter] [prepare] wq VA=%p, PA=0x%x\n", &wq, kptr2pa(&wq));
+        wq.show();
     }
     p_ = current();
     wq_ = &wq;
@@ -39,10 +40,11 @@ inline void waiter::prepare(wait_queue& wq) {
     }
 
     // Push the waiter onto the wait queue.
-    if (WAITQ_PARANOIA >= 3) {
-        log_printf("[waiter] About to enqueue into the wait queue\n");
-    }
     wq.q_.push_back(this);
+    if (WAITQ_PARANOIA >= 3) {
+        log_printf("[waiter] Enqueued into the wait queue\n");
+        wq.show();
+    }
 
     // Unlock the wait queue.
     wq.lock_.unlock(irqs);
@@ -53,12 +55,12 @@ inline void waiter::block() {
 
     if (p_->pstate_ == proc::ps_blocked) {
         if (WAITQ_PARANOIA >= 3) {
-            log_printf("[block] yielding, ticks=%ld\n", (unsigned long) ticks);
+            log_printf("[block] State blocked, yielding, ticks=%ld\n", (unsigned long) ticks);
         } 
         p_->yield();
     }
     if (WAITQ_PARANOIA >= 3) {
-        log_printf("[block] clearing\n");
+        log_printf("[block] State ready to clear, clearing\n");
     }
     clear();
 }
@@ -81,6 +83,10 @@ inline void waiter::clear() {
     for (waiter *it = wq_->q_.front(); it; it = wq_->q_.next(it)) {
         if (it == this) {
             wq_->q_.erase(it);
+            if (WAITQ_PARANOIA >= 2) {
+                log_printf("[Clear] Found this waiter with PID=%d on queue, popping off\n",
+                    this->p_->id_);
+            }
             break;
         }
     }
@@ -105,21 +111,24 @@ template <typename F>
 inline void waiter::block_until(wait_queue& wq, F predicate) {
     while (true) {
         if (WAITQ_PARANOIA >= 3) {
-            log_printf("[k-wait] About to prepare\n");
+            log_printf("[waiter] [block_until] About to prepare\n");
         }
         prepare(wq);
         if (WAITQ_PARANOIA >= 3) {
-            log_printf("[k-wait] Prepared. Predicate VA=%p\n", predicate);
+            log_printf("[k-wait] [block_until] Prepared. Predicate VA=%p\n", predicate);
         }
         if (predicate()) {
+            if (WAITQ_PARANOIA >= 3) {
+                log_printf("[k-wait] [block_until] Predicate immediately passed without block() called\n");
+            }
             break;
         }
         if (WAITQ_PARANOIA >= 3) {
-            log_printf("[k-wait] About to block\n");
+            log_printf("[k-wait] [block_until] About to block\n");
         }
         block();
         if (WAITQ_PARANOIA >= 3) {
-            log_printf("[k-wait] Blocked\n");
+            log_printf("[k-wait] [block_until] Blocked\n");
         }
     }
     clear();
@@ -167,6 +176,10 @@ inline void wait_queue::wake_all() {
     while (auto w = q_.pop_front()) {
         w->wake();
     }
+    if (WAITQ_PARANOIA >= 2) {
+        log_printf("[wake_all] Everyone woken up\n");
+        show();
+    }
 }
 
 // wait_queue::wake_one(p)
@@ -176,6 +189,7 @@ inline void wait_queue::wake_one(proc* p) {
     spinlock_guard guard(lock_);
     if (WAITQ_PARANOIA >= 2) {
         log_printf("[wake_all] [%p] Waking process VA=%p, pid=%d now\n", this, p, p->id_);
+        show();
     }
     for (auto it = q_.front(); it; it = q_.next(it)) {
         if (it->p_ == p) {
@@ -183,6 +197,9 @@ inline void wait_queue::wake_one(proc* p) {
             it->wake();
             break;
         }
+    }
+    if (WAITQ_PARANOIA >= 2) {
+        show();
     }
 }
 
@@ -192,12 +209,13 @@ inline void wait_queue::wake_one(proc* p) {
 inline void wait_queue::show() {
     log_printf("WaitQ State: HEAD --> [");
     for (auto it = q_.front(); it; it = q_.next(it)) {
-        log_printf("%i ", it->p_->id_);
+        log_printf("%d ", it->p_->id_);
     }
     log_printf("] <-- TAIL\n");
 }
 
 // ====== TIME HEAP STUFF ====== //
+
 inline hwaiter::hwaiter() {
 }
 
@@ -215,7 +233,8 @@ inline void hwaiter::prepare(wait_heap& wh, uint64_t wakeup_time) {
     wh_ = &wh;
     wakeup_time_ = wakeup_time;
     if (WAITH_PARANOIA >= 3) {
-        log_printf("[HEAP-waiter] Set p_ to current(), VA=%p, PA=0x%x\n", p_, kptr2pa(p_));
+        log_printf("[HEAP-waiter] Set p_ to current(), with PID=%d and wakeup time %lu\n", 
+            p_->id_, wakeup_time_);
     }
 
     // Lock the wait heap.
@@ -228,13 +247,13 @@ inline void hwaiter::prepare(wait_heap& wh, uint64_t wakeup_time) {
         log_printf("[HEAP-waiter] Set p_->pstate_\n");
     }
 
-    // Push the waiter onto the wait queue.
+    // Push the waiter onto the wait heap.
     if (WAITH_PARANOIA >= 3) {
         log_printf("[HEAP-waiter] About to enqueue into the wait queue\n");
     }
     wh_->insert(this);
 
-    // Unlock the wait queue.
+    // Unlock the wait heap.
     wh_->lock_.unlock(irqs);
 }
 
@@ -254,7 +273,7 @@ inline void hwaiter::block() {
 }
 
 inline void hwaiter::clear() {
-    // Lock the wait queue.
+    // Lock the wait heap.
     if (WAITH_PARANOIA >= 3) {
         log_printf("[HEAP-clear] Clearing for process PID=%d\n", p_->id_);
     }
@@ -294,7 +313,7 @@ inline void hwaiter::clear() {
         wh_->show();
     }
 
-    // Unlock the wait queue.
+    // Unlock the wait heap.
     wh_->lock_.unlock(irqs);
 }
 
@@ -362,52 +381,73 @@ inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicat
 
 
 // swap(w1, w2)
-//   Helper function. Swaps heap waiter pointers.
+//   Helper function. Swaps heap waiter pointers. Assumes locked.
 void wait_heap::swap(hwaiter** w1, hwaiter** w2) {
+    assert(lock_.is_locked());
     hwaiter* temp = *w1; 
     *w1 = *w2; 
     *w2 = temp; 
 }
 
 // wait_heap::size()
-//    Returns num waiters on heap
+//    Returns num waiters on heap. Assumes locked.
 inline int wait_heap::size() {
+    assert(lock_.is_locked());
+    return nwaiters_;
+}
+
+// wait_heap::size_under_lock()
+//    Returns num waiters on heap.
+inline int wait_heap::size_under_lock() {
+    spinlock_guard guard(lock_);
     return nwaiters_;
 }
 
 // wait_heap::show()
-//  Shows current state of the heap, in array representation.
+//  Shows current state of the heap, in array representation. Assumes locked.
 inline void wait_heap::show() {
-    log_printf("WaitH State: ROOT --> [");
+    if (WAITH_PARANOIA < 3) {
+        return;
+    }
+    assert(lock_.is_locked());
+    log_printf("WaitH State (PID:waketime) :: ROOT --> [");
     for (int i = 0; i < nwaiters_; ++i) {
-        log_printf("%i ", waiter_arr_[i]);
+        log_printf("%d:%d ", waiter_arr_[i]->p_->id_, waiter_arr_[i]->wakeup_time_);
     }
     log_printf("] <-- LEAVES\n");
 }
 
 // wait_heap::left(int parent)
-//    Returns left child index of parent.
+//    Returns left child index of parent. Assumes locked.
 inline int wait_heap::left(int parent) {
+    assert(lock_.is_locked());
     return 2*parent + 1;
 }
 
 // wait_heap::right(int parent)
-//    Returns right child index of parent.
+//    Returns right child index of parent. Assumes locked.
 inline int wait_heap::right(int parent) {
+    assert(lock_.is_locked());
     return 2*parent + 2;
 }
 
 // wait_heap::parent(int child)
-//     Returns parent index of a node.
+//     Returns parent index of a node. Assumes locked.
 inline int wait_heap::parent(int child) {
+    assert(lock_.is_locked());
     return (child - 1)/2;
 }
 
 // wait_heap::heapify(i)
 //    Heapify the wait_heap with respect to index i.
-//    The heap algorithm assumes children of i are min-heaped.
-inline void wait_heap::heapify(int i) { 
-    assert(i >= 0 && i < nwaiters_);
+//    The heap algorithm assumes children of i are min-heaped. Assumes locked.
+inline void wait_heap::heapify(int i) {
+    assert(lock_.is_locked());
+    if (WAITH_PARANOIA >= 3) {
+        log_printf("[wait_heap] Heapifying on index %d. %d waiters total,\n", i, nwaiters_);
+        show();
+    }
+    assert(i >= 0);
     int l = left(i); 
     int r = right(i); 
     int smallest = i; 
@@ -420,13 +460,18 @@ inline void wait_heap::heapify(int i) {
     if (smallest != i) { 
         swap(&waiter_arr_[i], &waiter_arr_[smallest]); 
         heapify(smallest); 
-    } 
+    }
 }
 
 // wait_heap::insert(w)
-//    Inserts a new waiter into the heap.
+//    Inserts a new waiter into the heap. Assumes locked.
 inline void wait_heap::insert(hwaiter *hw) {
+    assert(lock_.is_locked());
     assert(nwaiters_ < WAITNPROC); 
+    if (WAITH_PARANOIA >= 3) {
+        log_printf("[wait_heap] Inserting waiter with wakeup time %lu\n", hw->wakeup_time_);
+        show();
+    }
   
     // Add the new waiter.
     int i = nwaiters_++;
@@ -437,11 +482,17 @@ inline void wait_heap::insert(hwaiter *hw) {
        swap(&waiter_arr_[i], &waiter_arr_[parent(i)]);
        i = parent(i);
     } 
+
+    if (WAITH_PARANOIA >= 3) {
+        log_printf("[wait_heap] Insertion complete. New heap state below.\n");
+        show();
+    }
 }
 
 // is_on_heap(hwaiter* w)
-//    Checks if a particular waiter is on the heap.
+//    Checks if a particular waiter is on the heap. Assumes locked.
 inline bool wait_heap::is_on_heap(hwaiter* hw) {
+    assert(lock_.is_locked());
     for (int i = 0; i < nwaiters_; ++i) {
         if (waiter_arr_[i] == hw) {
             return true;
@@ -453,17 +504,33 @@ inline bool wait_heap::is_on_heap(hwaiter* hw) {
 // wait_heap::top_waketime()
 //    Gets the wakeup time of the top of the heap.
 inline uint64_t wait_heap::top_waketime() {
+    spinlock_guard guard(lock_);
     if (!nwaiters_) {
+        if (WAITH_PARANOIA >= 2) {
+            log_printf("[wait-heap] top_waketime called but no waiters are on the heap\n");
+        }
         return 0;
+    }
+    if (WAITH_PARANOIA >= 2) {
+        log_printf("[wait_heap] Showing top wakeup time: proc PID=%d, time=%d\n",
+            waiter_arr_[0]->p_->id_, waiter_arr_[0]->wakeup_time_);
+        show();
     }
     return waiter_arr_[0]->wakeup_time_;
 }
 
-// wait_heap::wake_top()
-//    Pops off the top waiter and calls wake.
+// wait_heap::pop()
+//    Pops off the top waiter and calls wake. Assumes locked.
 inline hwaiter* wait_heap::pop(bool wake) {
-    spinlock_guard guard(lock_);
-    assert(nwaiters_ > 0);
+    assert(lock_.is_locked());
+    if (!nwaiters_) {
+        return nullptr;
+    }
+    if (WAITH_PARANOIA >= 2) {
+        log_printf("[wait_heap] Popping process PID=%d with wakeup time %d now\n", 
+            waiter_arr_[0]->p_->id_, waiter_arr_[0]->wakeup_time_);
+        show();
+    }
   
     // Pop off the min.
     hwaiter *root = waiter_arr_[0];
@@ -471,17 +538,44 @@ inline hwaiter* wait_heap::pop(bool wake) {
         --nwaiters_;
     }
     else {
-        waiter_arr_[0] = waiter_arr_[--nwaiters_]; 
-        nwaiters_--; 
+        waiter_arr_[0] = waiter_arr_[--nwaiters_];
+        if (WAITH_PARANOIA >= 3) {
+            log_printf("[wait_heap] [pop] Heapifying on 0 with %d remaining waiters\n", nwaiters_);
+        }
         heapify(0); 
     }
 
     // Wake the process.
     if (wake) {
+        if (WAITH_PARANOIA >= 2) {
+            log_printf("[wait_heap] Waking process PID=%d with wakeup time %d now\n",
+            root->p_->id_, root->wakeup_time_);
+        }
         root->wake();
     }
+
+    if (WAITH_PARANOIA >= 2) {
+        show();
+    }
+
     return root;
 }
 
+// wait_heap::lock_and_pop()
+//    Pops off the top waiter and calls wake.
+inline hwaiter* wait_heap::lock_and_pop(bool wake) {
+    spinlock_guard guard(lock_);
+    return pop(wake);
+}
+
+// wait_heap::flush()
+//    Empties entire heap, waking processes if desired.
+inline void wait_heap::flush(bool wake) {
+    spinlock_guard guard(lock_);
+    while (nwaiters_) {
+        pop(wake);
+    }
+    assert(!size());
+}
 
 #endif

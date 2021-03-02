@@ -188,7 +188,7 @@ const uint64_t FORK_PARANOIA = 0;
 const uint64_t EXIT_PARANOIA = 0;
 const uint64_t PPID_PARANOIA = 0;
 const uint64_t WAITPID_PARANOIA = 0;
-const uint64_t WAITQ_PARANOIA = 2;
+const uint64_t WAITQ_PARANOIA = 0;
 const uint64_t WAITH_PARANOIA = 0; // (Wait heap)
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
@@ -201,6 +201,7 @@ const uint64_t TRUEBLOCK_TESTING = 0;
 const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
 const uint64_t USING_PSEUDO_BLOCKING = 0;
 extern uint64_t BLOCK_NUM_RESUMES; // Testing number of calls to resume
+const uint64_t USING_TIME_HEAP = 0;
 
 // Buddy allocator orders.
 #define MIN_ORDER 12

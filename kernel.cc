@@ -18,6 +18,7 @@ std::atomic<unsigned long> ticks;
 std::atomic<int> kdisplay;
 const uint64_t NUM_WQS = 5;
 wait_queue time_wheel[NUM_WQS]; // Sleep wait wheel
+wait_heap time_heap; // Sleep wait heap
 wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 uint64_t BLOCK_NUM_RESUMES = 0;
 
@@ -179,13 +180,39 @@ void proc::exception(regstate* regs) {
         regs_ = regs; // Set the regs in the proc metadata for the return to process via resume regstate
         
         // Rise and shine! Wake up sleeping processes.
-        long cur_tick = (long) ticks;
-        if (WAITQ_PARANOIA >= 1) {
-            log_printf("[irq_timer] Timer fired at tick %ld, waking wheel %p (ind. %d)\n", 
-                cur_tick, &time_wheel[cur_tick%NUM_WQS], cur_tick%NUM_WQS);
+        // uint64_t cur_tick = (uint64_t) ticks;
+        if (WAITQ_PARANOIA >= 2 || WAITH_PARANOIA >= 2) {
+            log_printf("[irq_timer] Timer fired at tick %ld, transferring to heap\n", 
+                (uint64_t) ticks);
         }
         // Wake up all the relevant processes in case any need to stop sleeping.
-        time_wheel[cur_tick%NUM_WQS].wake_all();
+        if (!USING_TIME_HEAP) {
+            time_wheel[((uint64_t) ticks)%NUM_WQS].wake_all();
+        }
+        else {
+            // Wake up the process(es) with min wakeup time on heap.
+            bool woke_a_proc = false;
+            while (time_heap.size_under_lock()) {
+                uint64_t next_time = time_heap.top_waketime();
+                if (next_time > (uint64_t) ticks) {
+                    if (WAITH_PARANOIA >= 2) {
+                        log_printf("[irq_timer] Next process has wakeup time %lu, not waking it\n", 
+                            next_time);
+                    }
+                    break;
+                }
+                hwaiter* next_waiter = time_heap.lock_and_pop(true);
+                woke_a_proc = true;
+                if (WAITH_PARANOIA >= 2) {
+                    log_printf("[irq_timer] Next process has the right wakeup time %lu, waking it\n", 
+                        next_waiter->wakeup_time_);
+                }
+            }
+
+            if (WAITH_PARANOIA >= 3 && !woke_a_proc) {
+                log_printf("[irq_timer] No processes sleeping on wait heap. Yielding.\n");
+            }
+        }
 
         yield_noreturn();
         break;                  /* will not be reached */
@@ -967,30 +994,51 @@ int proc::syscall_msleep(regstate* regs) {
     // Make sure there's no overflow
     assert(wakeup_time > ticks, "Invalid sleep request, reboot Chickadee or make sleep time smaller");
 
-    if (USING_PSEUDO_BLOCKING && TRUEBLOCK_TESTING) {
-        log_printf("[msleep] [TRUE BLOCK TESTING] msleep called by PID=%d, to wake at ticks=%lu\n", 
+    if (USING_PSEUDO_BLOCKING) {
+        log_printf("[msleep] msleep called by PID=%d, to wake at ticks=%lu\n", 
             id_, wakeup_time);
         while (long(wakeup_time - ticks) > 0 && e_intr == 0) {
             yield();
         }
     }
     else {
-        if (WAITQ_PARANOIA >= 1) {
-            log_printf("[msleep] sleep called by process PID=%d to sleep until %lu\n", 
+        if (WAITQ_PARANOIA >= 1 || WAITH_PARANOIA >= 1) {
+            log_printf("[msleep] msleep called by process PID=%d to sleep until %lu\n", 
                 id_, wakeup_time);
         }
 
-        wait_queue* wq = &time_wheel[wakeup_time%NUM_WQS];
-        if (WAITQ_PARANOIA >= 2) {
-            log_printf("[msleep] wq VA=%p, PA=0x%x, ticks=%ld\n", wq, kptr2pa(wq), (unsigned long) ticks);
-        }
-        waiter().block_until(*wq, [&] () {
-            if (WAITQ_PARANOIA >= 2) {
-                log_printf("[predicate] waketime=%d\n", wakeup_time);
+        if (USING_TIME_HEAP) {
+            wait_heap* wh = &time_heap;
+            if (WAITH_PARANOIA >= 2) {
+                log_printf("[msleep] wh VA=%p, PA=0x%x, ticks=%ld\n",
+                    wh, kptr2pa(wh), (unsigned long) ticks);
             }
-            return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
-        });
+            hwaiter().block_until(*wh, wakeup_time, [&] () {
+                if (WAITH_PARANOIA >= 2) {
+                    log_printf("[predicate] waketime=%d\n", wakeup_time);
+                }
+                return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
+            });
+        }
+        else { // Using time wheel
+            wait_queue* wq = &time_wheel[wakeup_time%NUM_WQS];
+            if (WAITQ_PARANOIA >= 2) {
+                log_printf("[msleep] wq VA=%p, PA=0x%x, ticks=%ld\n", 
+                    wq, kptr2pa(wq), (unsigned long) ticks);
+            }
+            waiter().block_until(*wq, [&] () {
+                if (WAITQ_PARANOIA >= 2) {
+                    log_printf("[predicate] waketime=%d\n", wakeup_time);
+                }
+                return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
+            });
+        }
     }
+
+    if (WAITQ_PARANOIA >= 2 || WAITH_PARANOIA >= 2) {
+        log_printf("[msleep] SLEEP OVER from process PID=%d\n", id_);
+    }
+
     return e_intr;
 }
 

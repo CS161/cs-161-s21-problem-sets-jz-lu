@@ -77,6 +77,7 @@ struct wait_heap {
     hwaiter* waiter_arr_[WAITNPROC] = {0};
     inline void swap(hwaiter** w1, hwaiter **w2);
     inline int size();
+    inline int size_under_lock();
     inline void show(); // Debugging purposes only
     inline int left(int parent);
     inline int right(int parent);
@@ -87,6 +88,8 @@ struct wait_heap {
     inline bool is_on_heap(hwaiter* w);
     inline uint64_t top_waketime();
     inline hwaiter* pop(bool wake);
+    inline hwaiter* lock_and_pop(bool wake);
+    inline void flush(bool wake);
 };
 
 
