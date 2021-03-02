@@ -201,7 +201,7 @@ const uint64_t TRUEBLOCK_TESTING = 0;
 const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
 const uint64_t USING_PSEUDO_BLOCKING = 0;
 extern uint64_t BLOCK_NUM_RESUMES; // Testing number of calls to resume
-const uint64_t USING_TIME_HEAP = 1;
+const uint64_t USING_TIME_HEAP = 0;
 
 // Buddy allocator orders.
 #define MIN_ORDER 12
