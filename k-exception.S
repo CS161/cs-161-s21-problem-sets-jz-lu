@@ -32,7 +32,7 @@ kernel_entry:
         jmp 2f
 1:      movq $0, %rdi
 2:      // call kernel_start()
-        addq $0x8, %rsp         // Check alignment
+        addq $0x8, %rsp         // Check stack alignment
         testq $0xF, %rsp
         jnz panic_nonrunnable
         subq $0x8, %rsp         // Check rsp is 8 off 16 aligned

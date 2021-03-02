@@ -189,28 +189,7 @@ void proc::exception(regstate* regs) {
             time_wheel[((uint64_t) ticks)%NUM_WQS].wake_all();
         }
         else {
-            // Wake up the process(es) with min wakeup time on heap.
-            bool woke_a_proc = false;
-            while (time_heap.size_under_lock()) {
-                uint64_t next_time = time_heap.top_waketime();
-                if (next_time > (uint64_t) ticks) {
-                    if (WAITH_PARANOIA >= 2) {
-                        log_printf("[irq_timer] Next process has wakeup time %lu, not waking it\n", 
-                            next_time);
-                    }
-                    break;
-                }
-                hwaiter* next_waiter = time_heap.lock_and_pop(true);
-                woke_a_proc = true;
-                if (WAITH_PARANOIA >= 2) {
-                    log_printf("[irq_timer] Next process has the right wakeup time %lu, waking it\n", 
-                        next_waiter->wakeup_time_);
-                }
-            }
-
-            if (WAITH_PARANOIA >= 3 && !woke_a_proc) {
-                log_printf("[irq_timer] No processes sleeping on wait heap. Yielding.\n");
-            }
+            time_heap.flush(true);
         }
 
         yield_noreturn();
@@ -407,7 +386,7 @@ uintptr_t proc::syscall(regstate* regs) {
         if (addr > VA_LOWMAX || addr & 0xFFF) {
             return E_INVAL;
         }
-        vmiter(this, addr).map(CONSOLE_ADDR, PTE_PWU); // Map the given addr to the console addr
+        syscall_retval = vmiter(this, addr).try_map(CONSOLE_ADDR, PTE_PWU); // Map the given addr to the console addr
         break;
     }
 

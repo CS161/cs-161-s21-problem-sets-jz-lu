@@ -337,14 +337,6 @@ inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicat
             log_printf("[HEAP-waiter] Prepared PID=%d. Predicate VA=%p\n", p_->id_, predicate);
         }
         if (predicate()) {
-            // if (p_->e_intr != 0) {
-            //     log_printf("[HEAP-waiter] [Predcheck] Signal to parent PID=%d with children [", p_->id_);
-            //     for (int i = 0; i < p_->nchildren_; ++i) {
-            //         log_printf("%d ", p_->childpids_[i]);
-            //     }
-            //     log_printf("]\n");
-            //     wh.erase(this, true);
-            // }
             if (p_->e_intr != 0) {
                 log_printf("[HEAP-waiter] Predcheck passed. Signal to parent PID=%d\n", p_->id_);
             }
