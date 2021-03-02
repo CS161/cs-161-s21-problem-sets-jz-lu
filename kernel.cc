@@ -266,10 +266,9 @@ void proc::exception(regstate* regs) {
 //    process in `%rax`.
 
 uintptr_t proc::syscall(regstate* regs) {
-    //log_printf("proc %d: syscall %ld @%p\n", id_, regs->reg_rax, regs->reg_rip);
-
     // Record most recent user-mode %rip.
     recent_user_rip_ = regs->reg_rip;
+    uintptr_t syscall_retval = 0;
 
     switch (regs->reg_rax) {
 
@@ -278,33 +277,28 @@ uintptr_t proc::syscall(regstate* regs) {
             console_clear();
         }
         kdisplay = regs->reg_rdi;
-        assert(this->canary == CANARY_EV, "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return 0;
+        break;
 
     case SYSCALL_PANIC:
         panic_at(0, 0, 0, "process %d called sys_panic()", id_);
         break;                  // will not be reached
 
     case SYSCALL_GETPID:
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return id_;
+        syscall_retval = id_;
+        break;
     
     case SYSCALL_GETPPID: {
         spinlock_guard guard(ptable_lock);
-        assert(this->canary == CANARY_EV, 
-                "Kernel task stack overflow, detected change in canary\n"); // canary checker
         if (PPID_PARANOIA >= 1) {
             log_printf("[syscall_ppid] Process PID=%d has PPID=%d\n", id_, ppid_);
         }
-        return ppid_;
+        syscall_retval = ppid_;
+        break;
     }
 
     case SYSCALL_YIELD:
         yield();
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return 0;
+        break;
 
     case SYSCALL_PAGE_ALLOC: {
         uintptr_t addr = regs->reg_rdi;
@@ -315,9 +309,7 @@ uintptr_t proc::syscall(regstate* regs) {
         if (!pg || vmiter(this, addr).try_map(ka2pa(pg), PTE_PWU) < 0) {
             return -1;
         }
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return 0;
+        break;
     }
 
     case SYSCALL_VARALLOC: { // Variable allocations for buddy allocator
@@ -337,9 +329,7 @@ uintptr_t proc::syscall(regstate* regs) {
                 return -1;
             } // If there is no contiguous block available then it won't allocate anything.
         }
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return 0;
+        break;
     }
 
     case SYSCALL_FREE: { // Free dat mem (without exiting like a n00b)
@@ -351,25 +341,23 @@ uintptr_t proc::syscall(regstate* regs) {
         for (uint64_t off = 0; off < blk_sz; off += PAGESIZE, it += PAGESIZE) {
             it.kfree_page();
         }
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return 0;
+        break;
     }
 
     case SYSCALL_TESTKALLOC: 
-        return syscall_testkalloc(regs);
+        syscall_retval = syscall_testkalloc(regs);
+        break;
 
     case SYSCALL_WILDALLOC:
-        return syscall_wildalloc(regs);
+        syscall_retval = syscall_wildalloc(regs);
+        break;
 
     case SYSCALL_PAUSE: {
         sti();
         for (uintptr_t delay = 0; delay < 1000000; ++delay) {
             pause();
         }
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return 0;
+        break;
     }
 
     case SYSCALL_FORK: {
@@ -377,26 +365,27 @@ uintptr_t proc::syscall(regstate* regs) {
         if (FORK_PARANOIA >= 3) {
             log_printf("[syscall] fork returned a pid %d\n", pid);
         }
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return pid;
+        syscall_retval = pid;
+        break;
     }
     
     case SYSCALL_NASTY: {
-        long n =  syscall_nasty(regs);
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return n % 10;
+        long n = syscall_nasty(regs);
+        syscall_retval = n % 10;
+        break;
     }
 
     case SYSCALL_READ:
-        return syscall_read(regs);
+        syscall_retval = syscall_read(regs);
+        break;
 
     case SYSCALL_WRITE:
-        return syscall_write(regs);
+        syscall_retval = syscall_write(regs);
+        break;
 
     case SYSCALL_READDISKFILE:
-        return syscall_readdiskfile(regs);
+        syscall_retval = syscall_readdiskfile(regs);
+        break;
 
     case SYSCALL_SYNC: {
         int drop = regs->reg_rdi;
@@ -406,9 +395,8 @@ uintptr_t proc::syscall(regstate* regs) {
         if (drop > 1 && strncmp(CHICKADEE_FIRST_PROCESS, "test", 4) != 0) {
             drop = 1;
         }
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return bufcache::get().sync(drop);
+        syscall_retval = bufcache::get().sync(drop);
+        break;
     }
 
     case SYSCALL_MAP_CONSOLE: {
@@ -420,32 +408,29 @@ uintptr_t proc::syscall(regstate* regs) {
             return E_INVAL;
         }
         vmiter(this, addr).map(CONSOLE_ADDR, PTE_PWU); // Map the given addr to the console addr
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return 0;
+        break;
     }
 
     case SYSCALL_EXIT:
         syscall_exit(regs);
-        assert(this->canary == CANARY_EV, 
-                "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return 0;
+        break;
     
     case SYSCALL_MSLEEP:
-        return syscall_msleep(regs);
+        syscall_retval = syscall_msleep(regs);
+        break;
     
     case SYSCALL_WAITPID:
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return syscall_waitpid(regs);
+        syscall_retval = syscall_waitpid(regs);
+        break;
 
     default:
         // no such system call
         log_printf("Process PID=%d: no such system call num=%u\n", id_, regs->reg_rax);
-        assert(this->canary == CANARY_EV, 
-            "Kernel task stack overflow, detected change in canary\n"); // canary checker
-        return E_NOSYS;
+        syscall_retval = E_NOSYS;
+        break;
     }
+    assert(this->canary == CANARY_EV, "Kernel task stack overflow detected via canary corruption\n"); 
+    return syscall_retval;
 }
 
 // proc::copy_memory_(child)
@@ -709,6 +694,7 @@ int proc::syscall_nasty(regstate* regs) {
 
     return sum;
 }
+
 
 // proc::syscall_testkalloc() 
 //    Test cases for buddy allocator.

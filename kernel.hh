@@ -195,7 +195,7 @@ const uint64_t WAITH_PARANOIA = 0; // (Wait heap)
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_
 const uint64_t BALLOC_METRICS = 0; // Print allocation metric
 const uint64_t FORK_TESTING = 0; 
-const uint64_t TRUEBLOCK_TESTING = 1;
+const uint64_t TRUEBLOCK_TESTING = 0;
 
 // "Using" flags
 const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
