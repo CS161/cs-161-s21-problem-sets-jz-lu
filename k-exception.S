@@ -32,6 +32,10 @@ kernel_entry:
         jmp 2f
 1:      movq $0, %rdi
 2:      // call kernel_start()
+        addq $0x8, %rsp         // Check alignment
+        testq $0xF, %rsp
+        jnz panic_nonrunnable
+        subq $0x8, %rsp         // Check rsp is 8 off 16 aligned
         jmp _Z12kernel_startPKc
 
 
@@ -140,6 +144,9 @@ exception_entry_finish:
         movq %gs:(8), %rdi
         // the second argument, `regstate`, is the current `%rsp`
         movq %rsp, %rsi
+        // check stack alignment
+        testq $0xF, %rsp               // check rsp is 16 aligned (call adds 8 before entry)
+        jnz panic_nonrunnable
         call _ZN4proc9exceptionEP8regstate
 
 restore_and_iret:
@@ -225,6 +232,9 @@ syscall_entry:
 
         movq %gs:(8), %rdi
         movq %rsp, %rsi
+        // check stack alignment before calling, should be 16 aligned
+        testq $0xF, %rsp
+        jnz panic_nonrunnable
         call _ZN4proc7syscallEP8regstate
 
         // When `proc::syscall` returns, `%rax` holds the return value.
@@ -290,6 +300,10 @@ _ZN4proc14yield_noreturnEv:
         leaq CPUSTACK_SIZE(%rdi), %rsp
 
         // jump to scheduler
+        // check (AND FIX!) stack alignment first
+        testq $0xF, %rsp
+        jnz panic_nonrunnable
+        subq $0x8, %rsp                 // Since jmp instead of call should be 8 bytes off 16 aligned
         jmp _ZN8cpustate8scheduleEP4proc
 
 
@@ -483,6 +497,10 @@ ap_rest:
         // call `cpus[my_CPU_number].init_ap()`.
         // This two-stage jump switches to high virtual addresses.
         movabsq $_ZN8cpustate7init_apEv, %rbx
+        // check (AND FIX!) stack alignment before jumping
+        testq $0xF, %rsp
+        jnz panic_nonrunnable
+        subq $0x8, %rsp         // since jmp instead of call, should be 8 bytes off 16 aligned
         jmp *%rbx
 
 ap_entry_failed:

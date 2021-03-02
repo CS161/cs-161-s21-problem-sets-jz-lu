@@ -180,7 +180,6 @@ void proc::exception(regstate* regs) {
         regs_ = regs; // Set the regs in the proc metadata for the return to process via resume regstate
         
         // Rise and shine! Wake up sleeping processes.
-        // uint64_t cur_tick = (uint64_t) ticks;
         if (WAITQ_PARANOIA >= 2 || WAITH_PARANOIA >= 2) {
             log_printf("[irq_timer] Timer fired at tick %ld, transferring to heap\n", 
                 (uint64_t) ticks);
@@ -972,7 +971,7 @@ void proc::syscall_exit(regstate* regs) {
 
     // Mark the process as transitioning, but don't clear its entry on pagetable.
     // (that's for waitpid to do!)
-    p->pstate_ = ps_transition;
+    p->pstate_ = USING_PSEUDO_BLOCKING ? ps_blank : ps_transition;
     p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
 
     if (EXIT_PARANOIA >= 1) {
@@ -995,7 +994,7 @@ int proc::syscall_msleep(regstate* regs) {
     assert(wakeup_time > ticks, "Invalid sleep request, reboot Chickadee or make sleep time smaller");
 
     if (USING_PSEUDO_BLOCKING) {
-        log_printf("[msleep] msleep called by PID=%d, to wake at ticks=%lu\n", 
+        log_printf("[msleep] [PSEUDOBLOCK] msleep called by PID=%d, to wake at ticks=%lu\n", 
             id_, wakeup_time);
         while (long(wakeup_time - ticks) > 0 && e_intr == 0) {
             yield();
@@ -1003,7 +1002,7 @@ int proc::syscall_msleep(regstate* regs) {
     }
     else {
         if (WAITQ_PARANOIA >= 1 || WAITH_PARANOIA >= 1) {
-            log_printf("[msleep] msleep called by process PID=%d to sleep until %lu\n", 
+            log_printf("[msleep] [TRUEBLOCK] msleep called by process PID=%d to sleep until %lu\n", 
                 id_, wakeup_time);
         }
 
@@ -1113,7 +1112,9 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
         if (pid != 0) { // If a pid is specified then search for it.
             if (!options) { // Block
                 proc* child = ptable[pid];
-                if (USING_PSEUDO_BLOCKING && TRUEBLOCK_TESTING) {
+                if (USING_PSEUDO_BLOCKING) {
+                    log_printf("[waitpid] [PSEUDOBLOCK] PID=%d waiting on process PID=%d\n",
+                        id_, pid);
                     while (true) {
                         {
                         spinlock_guard guard(ptable_lock);
@@ -1123,6 +1124,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                         }
                         yield();
                     }
+                    log_printf("[waitpid] [PSEUDOBLOCK]  Child process PID=%d exited\n", pid);
                 }
                 else {
                     {
@@ -1176,7 +1178,9 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
         else { // If no pid is specified then walk through to find the first free one.
             if (!options) { // Block
                 int child_ind = -1;
-                if (USING_PSEUDO_BLOCKING && TRUEBLOCK_TESTING) {
+                if (USING_PSEUDO_BLOCKING) {
+                    log_printf("[waitpid] [PSEUDOBLOCK] PID=%d waiting on first process to exit\n",
+                        id_, pid);
                     while (true) {
                         {
                         spinlock_guard guard(ptable_lock);
@@ -1196,6 +1200,8 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                         }
 
                         if (child_ind != -1) {
+                            log_printf("[waitpid] [PSEUDOBLOCK] Child process PID=%d exited\n", 
+                                childpids_[child_ind]);
                             break;
                         }
                         if (WAITPID_PARANOIA && this->id_ != 1) {
