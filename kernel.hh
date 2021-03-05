@@ -208,7 +208,6 @@ const uint64_t USING_TIME_HEAP = 0; // Turn on to use heap, off to use time whee
 #define MIN_ORDER 12
 #define MAX_ORDER 21
 
-
 // yieldstate: callee-saved registers that must be preserved across
 // proc::yield()
 

@@ -22,6 +22,7 @@ struct keyboardstate {
     unsigned len_ = 0;      // number of characters in buffer
     unsigned eol_ = 0;      // position in buffer of most recent \n
     enum { boot, input, fail } state_ = boot;
+    wait_queue wq_;         // process wait queue for blocking I/O
 
     static keyboardstate& get() {
         return kbd;
