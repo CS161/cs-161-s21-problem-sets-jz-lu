@@ -1290,9 +1290,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
 
 
 // proc::syscall_read(regs), proc::syscall_write(regs),
-// proc::syscall_readdiskfile(regs)
 //    Handle read and write system calls.
-
 uintptr_t proc::syscall_read(regstate* regs) {
     // This is a slow system call, so allow interrupts by default
     sti();
@@ -1314,10 +1312,10 @@ uintptr_t proc::syscall_read(regstate* regs) {
 
     // yield until a line is available
     // (special case: do not block if the user wants to read 0 bytes)
-    while (sz != 0 && kbd.eol_ == 0) {
-        kbd.lock_.unlock(irqs);
-        yield();
-        irqs = kbd.lock_.lock();
+    if (sz) {
+        waiter().block_until(kbd.wq_, [&] () {
+            return (kbd.eol_);
+        }, kbd.lock_, irqs);
     }
 
     // read that line or lines
@@ -1363,6 +1361,7 @@ uintptr_t proc::syscall_write(regstate* regs) {
     return n;
 }
 
+// proc::syscall_readdiskfile(regs)
 uintptr_t proc::syscall_readdiskfile(regstate* regs) {
     // This is a slow system call, so allow interrupts by default
     sti();

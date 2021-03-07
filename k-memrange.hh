@@ -63,7 +63,7 @@ struct smallslab {
 
     // Allocate a chunk
     void* give() {
-        assert(state != SLAB_FULL, "Slab is full, clearly you did not implement the allocator correctly\n");
+        assert(state != SLAB_FULL, "Slab is full\n");
         uint64_t free_ind = 0;
         while (free_ind < NUM_SMALL_SLABS) {
             if (free_chunks[free_ind]) {
