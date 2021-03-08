@@ -328,6 +328,7 @@ inline bool is_error(uintptr_t r) {
 // sys_open() flags
 #define OF_READ                 1
 #define OF_WRITE                2
+#define OF_RDWR                 OF_READ | OF_WRITE
 #define OF_CREATE               4
 #define OF_CREAT                OF_CREATE     // ¯\_(ツ)_/¯
 #define OF_TRUNC                8

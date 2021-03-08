@@ -5,6 +5,9 @@ struct Base {
     Base(int i) {
         cout << "This is the Base speaking: " << i << endl;
     }
+    ~Base() {
+        cout << "Base is transcending\n";
+    }
 };
 
 struct Derived:public Base {

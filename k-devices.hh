@@ -78,6 +78,7 @@ struct memfile {
     unsigned char* data_;                // file data (nullptr if empty)
     size_t len_;                         // length of file data
     size_t capacity_;                    // # bytes available in `data_`
+    spinlock lock_;                      // locks the memfile for I/O
 
     inline memfile();
     inline memfile(const char* name, unsigned char* first,

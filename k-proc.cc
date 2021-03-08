@@ -11,6 +11,10 @@ spinlock ptable_lock;           // protects `ptable`
 proc::proc() {
 }
 
+// proc::~proc()
+//    The destructor closes all open file descriptors.
+proc::~proc() {
+}
 
 // proc::init_user(pid, pt)
 //    Initialize this `proc` as a new runnable user process with PID `pid`

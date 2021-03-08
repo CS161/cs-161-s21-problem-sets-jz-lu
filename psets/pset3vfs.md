@@ -23,20 +23,21 @@ struct proc {
 ```
 Each element of the fd table points to an inherited type of `vnode` structure, which holds all of the important information.
 ```c++
-#define O_RDONLY 0x1
-#define O_WRONLY 0x2
-#define O_RDWR   O_RDONLY | O_WRONLY
+#define OF_RDONLY 0x1
+#define OF_WRONLY 0x2
+#define OF_RDWR   O_RDONLY | O_WRONLY
 void* global_c_vnode;
 
 T kernel_start() {
-    // stuff...
+    // ...
     global_c_vnode = kalloc(sizeof(kb_c_vnode));
     assert(global_c_vnode);
-    // stuff...
+    // ...
 };
 
-// stuff...
+// ...
 
+// Generic parent class that everyone inherits from.
 struct vnode {
     int mode_ = 0; // Read, write, or both
     off_t offset_ = 0; // Offset from file, to be incremented on read/writes
@@ -46,19 +47,26 @@ struct vnode {
     vnode(int mode) {
         mode_ = mode;
     }
-    virtual write(uintptr_t addr, size_t sz);
-    virtual read(uintptr_t addr, size_t sz);
+
+    bool readable() {
+        return mode_ & O_RDONLY;
+    }
+    bool writeable() {
+        return mode_ & O_WRONLY;
+    }
+    virtual uintptr_t write(uintptr_t addr, size_t sz);
+    virtual uintptr_t read(uintptr_t addr, size_t sz);
 }
 
 struct kb_c_vnode:public vnode {
     // Note: we will not use inherited offset_ in this struct, 
     // the kbd has its own offset variable called pos_.
-    keyboardstate* cf_; // console file, lock defined in here
+    // The kbd and csl are global, so copies need not be made here.
 
     kb_c_vnode() : vnode(O_RDWR) {}
 
-    write(uintptr_t addr, size_t sz);
-    read(uintptr_t addr, size_t sz);
+    uintptr_t write(uintptr_t addr, size_t sz);
+    uintptr_t read(uintptr_t addr, size_t sz);
 };
 
 struct memfile_vnode:public vnode {
@@ -69,8 +77,8 @@ struct memfile_vnode:public vnode {
         mf_ = mf;
     }
 
-    write(uintptr_t addr, size_t sz);
-    read(uintptr_t addr, size_t sz);
+    uintptr_t write(uintptr_t addr, size_t sz);
+    uintptr_t read(uintptr_t addr, size_t sz);
 };
 
 #define BBUF_CAP    256
@@ -92,8 +100,8 @@ struct pipe_vnode:public vnode {
         }
     }
 
-    write(uintptr_t addr, size_t sz);
-    read(uintptr_t addr, size_t sz);
+    uintptr_t write(uintptr_t addr, size_t sz);
+    uintptr_t read(uintptr_t addr, size_t sz);
 };
 ```
 The per-process fd tables are of course dynamically allocated in `struct proc`; the constructor is to do work as described above and the destructor is to walk through the fd table and "free" the vnodes (that is, it should walk through the table, decrement the `refcount` of each non-null `vnode`, and subsequently call `kfree` if the refcount is updated to 0 and the vnode is not to terminal). `vnodes` is dynamically allocated and freed via the slab allocator created from PSet 1 Extra Credit. It is the job of `kernel_start()` to allocate the vnode for the console; it is stored in a global pointer `void* global_c_vnode` for easy access.
@@ -101,13 +109,13 @@ The per-process fd tables are of course dynamically allocated in `struct proc`; 
 2. VFS functionalities
 The constructors and destructors for the nodes are defined above. *All of the below read/write functions assume that validation was done by the corresponding `syscall`.* The specifics are below, but the end of every function will increment offset, and unlock before returning.
 
-Console `write(uintptr_t addr, size_t sz)`: locks the node and executes the current code in `syscall_write` with minor modifications.
+Console `write(uintptr_t addr, size_t sz)`: executes the current code in `syscall_write` with any minor modifications.
 
-Console `read(uintptr_t addr, size_t sz)`: locks the node and executes the current code in `syscall_read` with minor modifications (i.e. removing the intermediate locks). 
+Console `read(uintptr_t addr, size_t sz)`: executes the current code in `syscall_read` with any minor modifications.
 
 Memfile `write(uintptr_t addr, size_t sz)`: locks the node, using the `memfile` structure, computes the `wr_sz = min(capacity_ - len_, sz)`, and do a `memcpy` of `wr_sz` bytes from `addr` to `memfile::data_`. Increment `memfile::len_` by `wr_sz`.
 
-Memfile `read(uintptr_t addr, size_t sz)`: locks the node, using the `memfile` structure, computes the `rd_sz = min(capacity_ - ((unsigned char*) addr - data_), sz)`, and do a `memcpy` of `rd_sz` bytes from `memfile::data_` to `addr`.
+Memfile `read(uintptr_t addr, size_t sz)`: locks the node, using the `memfile` structure, computes the `rd_sz = min(memfile::len_ - offset_, sz)`, and do a `memcpy` of `rd_sz` bytes from `memfile::data_` to `addr`.
 
 Pipe `write(uintptr_t addr, size_t sz)`: locks the buffer, using the `pipe_bbuf` structure, compute the `wr_sz = min(capacity_ - len_, sz)`, and do a `memcpy` of `wr_sz` bytes from `addr` to `memfile::data_`. Increment `pipe_bbuf::len_` by `wr_sz`. TODO SLEEP?
 
@@ -133,9 +141,13 @@ Note that no additional per-`struct proc` locking is necessary here, even in the
 At the moment, accesses to `proc::fdtable[]` are not locked (see Future Work). Accesses to a `memfile` are locked at the `memfile` level, not the `memfile_vnode` level, since if the latter case were used it would be difficult to prevent multiple processes, each with their own `vnode` pointing to the same underlying `memfile*`, from racing a read/write. The `keyboardstate` structure has its own lock as well. The `pipe_vnode` locks via the bounded buffer lock, so that reads and writes to a pipe are serialized. Note that under this paradigm a `vnode` never holds any locks, since if it did it would not actually prevent any processes from racing as each process can own a `vnode` that all point to the same file structure.
 
 5. Future work
-Add a per-process lock to lock the `proc::fdtable[]` to support multithreaded processes sharing a `fdtable[]`. Any access to the `fdtable[]` will be under this lock. Since this lock is already there, it may be of interest, time permitting, to make some other locking strategies finer-grained to the per-process structure.
+Add a per-`struct proc` lock to lock the `proc::fdtable[]` to support multithreaded processes sharing a `fdtable[]`. Any access to the `fdtable[]` will be under this lock. As any access to a `vnode` must occur through the `fdtable[]` of a `struct proc`, it suffices to lock only the table and not the `vnode`, as only different threads of the same process have access to the same `vnode`. Since a per-process lock will eventually be put in use, it may be of interest, time permitting, to make some other locking strategies finer-grained to the per-process structure.
 
 6. Concerns
+
+Is a "read" just reading off the beginning of the data array plus the `vnode::offset_`? Or is there something else to it? Similarly, is a "write" to the end of the file, or to the beginning plus `vnode::offset_`? This does not apply for console, right, as every read/write is to the end and separated?
+
+How should `vnode::offset` work for a `vnode` that can do reads and writes? Should there be two different offsets, one for read and one for write, or should there just be one offset?
 
 If pipe is partially available, should we block immediately or write/read what we can and then block?
 
@@ -143,4 +155,4 @@ If multiple processes/threads are writing to the same file, should they have the
 
 Should we cast the vnode type dynamically by checking the `fd`, or is there a more elegant solution?
 
-
+How is the constructor and destructor called in `kalloc` and `kfree`? This is necessary for the `struct proc` and `pipe_bbuf` allocations.

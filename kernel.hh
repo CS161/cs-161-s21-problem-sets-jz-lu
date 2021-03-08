@@ -15,8 +15,10 @@ struct proc_loader;
 struct elf_program;
 #define PROC_RUNNABLE 1
 #define NPROC 16
-
 #define CANARY_EV 894753471348 // Expected canary value
+
+// File descriptor constants
+#define MAX_FD 8
 
 // kernel.hh
 //
@@ -35,10 +37,11 @@ struct __attribute__((aligned(4096))) proc {
     yieldstate* yields_ = nullptr;             // Process's current yield state
     std::atomic<int> pstate_ = ps_blank;       // Process state
     uint64_t retval = 0;                       // Return value of process
-    pid_t ppid_ = 1;                           // Parent ID, initialized to k_proc_init's ID.
+    pid_t ppid_ = 1;                           // Parent ID, initialized to k_proc_init's ID
     int nchildren_ = 0;                        // Number of children
     int e_intr = 0;                            // Interrupt code
     pid_t childpids_[NPROC] = {0};             // PID Array of children
+    void* fdtable[MAX_FD] = {0};               // Per-process (threads share) file descriptor table
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
     uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
@@ -51,6 +54,7 @@ struct __attribute__((aligned(4096))) proc {
 
     proc();
     NO_COPY_OR_ASSIGN(proc);
+    ~proc();
 
     inline bool contains(uintptr_t addr) const;
     inline bool contains(void* ptr) const;
