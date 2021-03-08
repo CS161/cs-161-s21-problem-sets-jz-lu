@@ -137,6 +137,8 @@ Add a per-process lock to lock the `proc::fdtable[]` to support multithreaded pr
 
 6. Concerns
 
+If pipe is partially available, should we block immediately or write/read what we can and then block?
+
 If multiple processes/threads are writing to the same file, should they have their own copy of a vnode, since the offsets can and should in the general case be different? In this case the locks wouldn't be the same unless we defined the lock at the memfs level and not the vnode level, and the two processes would race all over each other.
 
 Should we cast the vnode type dynamically by checking the `fd`, or is there a more elegant solution?

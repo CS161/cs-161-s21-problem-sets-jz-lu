@@ -1288,6 +1288,26 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
     }
 }
 
+// IO_invalid(p, start, end, check_writable)
+//    Helper function that ensures read/write is valid.
+//    Returns nonzero if invalid, due to bad memory or address integer overflow.
+static int IO_invalid(proc* p, uintptr_t start, uintptr_t end, bool check_writable=false) {
+    // Integer overflow check.
+    if (end < start) {
+        return E_FAULT;
+    }
+
+    // Permission range check.
+    for (vmiter it(p, start); it.va() < end; it.next()) {
+        if (!(it.present() && it.user())) {
+            return E_FAULT;
+        }
+        if (check_writable && !it.writable()) {
+            return E_FAULT;
+        }
+    }
+    return 0;
+}
 
 // proc::syscall_read(regs), proc::syscall_write(regs),
 //    Handle read and write system calls.
@@ -1300,7 +1320,12 @@ uintptr_t proc::syscall_read(regstate* regs) {
 
     // Your code here!
     // * Read from open file `fd` (reg_rdi), rather than `keyboardstate`.
-    // * Validate the read buffer.
+
+    // Validate the read buffer.
+    if (IO_invalid(this, addr, addr+sz, true)) {
+        return E_FAULT;
+    }
+
     auto& kbd = keyboardstate::get();
     auto irqs = kbd.lock_.lock();
 
@@ -1348,7 +1373,12 @@ uintptr_t proc::syscall_write(regstate* regs) {
 
     // Your code here!
     // * Write to open file `fd` (reg_rdi), rather than `consolestate`.
-    // * Validate the write buffer.
+
+    // Validate the write buffer.
+    if (IO_invalid(this, addr, addr+sz)) {
+        return E_FAULT;
+    }
+
     auto& csl = consolestate::get();
     spinlock_guard guard(csl.lock_);
     size_t n = 0;

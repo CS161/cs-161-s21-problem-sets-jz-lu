@@ -49,7 +49,8 @@ KERNEL_OBJS = $(OBJDIR)/k-exception.ko \
 	$(OBJDIR)/k-init.ko $(OBJDIR)/k-hardware.ko $(OBJDIR)/k-mpspec.ko \
 	$(OBJDIR)/crc32c.ko \
 	$(OBJDIR)/k-ahci.ko $(OBJDIR)/k-chkfs.ko $(OBJDIR)/k-chkfsiter.ko \
-	$(OBJDIR)/k-memviewer.ko $(OBJDIR)/lib.ko $(OBJDIR)/k-initfs.ko
+	$(OBJDIR)/k-memviewer.ko $(OBJDIR)/lib.ko $(OBJDIR)/k-initfs.ko \
+	$(OBJDIR)/k-vfs.ko
 
 PROCESSES ?= $(patsubst %.cc,%,$(wildcard p-*.cc))
 
