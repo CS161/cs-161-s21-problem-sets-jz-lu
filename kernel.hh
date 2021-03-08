@@ -81,23 +81,19 @@ struct __attribute__((aligned(4096))) proc {
 
     // A nasty allocation syscall that corrupts the kernel stack via resursive local variable
     int syscall_nasty(regstate* regs);
-
-    // Test the kalloc under buddy allocator framework
     int syscall_testkalloc(regstate* regs);
-
-    // Wild edge cases to test balloc under sanitizers
     int syscall_wildalloc(regstate* regs);
 
+    // Exit a process with a given exit status.
     void syscall_exit(regstate* regs);
-
-    // Sleep for some number of milliseconds
     int syscall_msleep(regstate *regs);
-
-    // Wait for a child process to exit and clean up.
     uint64_t syscall_waitpid(regstate *regs);
     
+    int syscall_open(regstate* regs);
+    int syscall_dup2(regstate* regs);
     uintptr_t syscall_read(regstate* reg);
     uintptr_t syscall_write(regstate* reg);
+    int syscall_close(regstate* regs);
     uintptr_t syscall_readdiskfile(regstate* reg);
 
     inline irqstate lock_pagetable_read();
@@ -112,6 +108,7 @@ struct __attribute__((aligned(4096))) proc {
 };
 
 extern proc* ptable[NPROC];
+extern void* global_cnode;
 extern spinlock ptable_lock;
 // extern proc *init_task;
 #define PROCSTACK_SIZE 4096UL
@@ -195,6 +192,8 @@ const uint64_t PPID_PARANOIA = 0;
 const uint64_t WAITPID_PARANOIA = 0;
 const uint64_t WAITQ_PARANOIA = 0;
 const uint64_t WAITH_PARANOIA = 0; // Wait heap
+const uint64_t VFS_KBC_PARANOIA = 1; // Console and Keyboard VFS
+const uint64_t VFS_MF_PARANOIA = 0; // Memfile VFS
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_

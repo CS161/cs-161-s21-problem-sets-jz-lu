@@ -9,11 +9,18 @@ spinlock ptable_lock;           // protects `ptable`
 // proc::proc()
 //    The constructor initializes the `proc` to empty.
 proc::proc() {
+    assert(global_cnode);
+    fdtable[0] = fdtable[1] = fdtable[2] = global_cnode;
 }
 
 // proc::~proc()
 //    The destructor closes all open file descriptors.
 proc::~proc() {
+    for (int fd = 3; fd < MAX_FD; ++fd) {
+        if (fdtable[fd]) {
+            syscall_close(fd);
+        }
+    }
 }
 
 // proc::init_user(pid, pt)

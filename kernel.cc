@@ -4,6 +4,7 @@
 #include "k-chkfs.hh"
 #include "k-chkfsiter.hh"
 #include "k-devices.hh"
+#include "k-vfs.hh"
 #include "k-vmiter.hh"
 #include "obj/k-firstprocess.h"
 
@@ -11,11 +12,16 @@
 //
 //    This is the kernel.
 
-// # timer interrupts so far on CPU 0
+// # timer interrupts so far on CPU 0.
 std::atomic<unsigned long> ticks;
 
-// display type; initially KDISPLAY_CONSOLE
+// Display type; initially KDISPLAY_CONSOLE.
 std::atomic<int> kdisplay;
+
+// Global Stdio vnode on VFS.
+void* global_cnode = nullptr;
+
+// Global blocking data.
 const uint64_t NUM_WQS = 5;
 wait_queue time_wheel[NUM_WQS]; // Sleep wait wheel
 wait_heap time_heap; // Sleep wait heap
@@ -87,6 +93,9 @@ void kernel_start(const char* command) {
         ptable[i] = nullptr;
     }
 
+    // Create the global STDIO vnode.
+    global_cnode = knew<kb_c_vnode>();
+
     proc *init_task = knew<proc>();
     init_task->ppid_ = 1;
     init_task->init_kernel(1, k_proc_init);
@@ -99,6 +108,7 @@ void kernel_start(const char* command) {
         } 
     }
     cpus[0].enqueue(init_task);
+
 
     // start first process, at pid = 2
     boot_process_start(2, CHICKADEE_FIRST_PROCESS);
@@ -354,12 +364,24 @@ uintptr_t proc::syscall(regstate* regs) {
         break;
     }
 
+    case SYSCALL_OPEN:
+        syscall_retval = syscall_open(regs);
+        break;
+
+    case SYSCALL_DUP2:
+        syscall_retval = syscall_dup2(regs);
+        break;
+
     case SYSCALL_READ:
         syscall_retval = syscall_read(regs);
         break;
 
     case SYSCALL_WRITE:
         syscall_retval = syscall_write(regs);
+        break;
+    
+    case SYSCALL_CLOSE:
+        syscall_retval = syscall_close(regs);
         break;
 
     case SYSCALL_READDISKFILE:
@@ -1288,6 +1310,20 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
     }
 }
 
+// proc::syscall_open(regs)
+//    Opens a file and returns the file descriptor, or an error.
+int proc::syscall_open(regstate* regs) {
+    // TODO
+    return 0;
+}
+
+// proc::syscall_dup2(regs)
+//    Copies vnodes from a file descriptor to another. Returns new fd if successful.
+int proc::syscall_dup2(regstate* regs) {
+    // TODO
+    return 0;
+}
+
 // IO_invalid(p, start, end, check_writable)
 //    Helper function that ensures read/write is valid.
 //    Returns nonzero if invalid, due to bad memory or address integer overflow.
@@ -1389,6 +1425,13 @@ uintptr_t proc::syscall_write(regstate* regs) {
         console_printf(0x0F00, "%c", ch);
     }
     return n;
+}
+
+// proc::syscall_close(regs)
+//    Closes a file descriptor.
+int syscall_close(regstate* regs) {
+    // TODO
+    return 0;
 }
 
 // proc::syscall_readdiskfile(regs)

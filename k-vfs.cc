@@ -29,6 +29,9 @@ size_t io_sz(size_t start, size_t cap, size_t sz) {
 kb_c_vnode::kb_c_vnode() : vnode(OF_RDWR) {
     assert(offset_ == 0);
     assert(refcount_ == 0);
+    if (VFS_KBC_PARANOIA >= 1) {
+        log_printf("[kb_c_vnode] Initialized Stdio vnode in constructor\n");
+    }
 }
 
 // TODO UPDATE THE OFFSETS OF THE VNODE! (ALL RD/WR FUNCTIONS!)
