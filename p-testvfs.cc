@@ -26,7 +26,7 @@ void process_main() {
 
     r = sys_close(3);
     assert_eq(r, 0);
-
+    
     r = dprintf(3, "Nope\n");
     assert_eq(r, E_BADF);
 
@@ -44,7 +44,7 @@ void process_main() {
     r = dprintf(3, "5 ");
     assert_gt(r, 0);
 
-    r = sys_dup2(3, 3);
+    r = sys_dup2(3, 3); // ERROR IS HERE!
     if (r != 0) {
         assert_eq(r, 3);
     }
@@ -57,6 +57,7 @@ void process_main() {
 
     r = sys_close(1);
     assert_eq(r, 0);
+    
 
     r = dprintf(0, "Nope\n");
     assert_eq(r, E_BADF);

@@ -615,7 +615,13 @@ int proc::syscall_fork(regstate* regs) {
         log_printf("[fork] Copied parent registers to child\n");
     }
 
-    // add to process table (requires lock in case another CPU is already
+    // Copy over parent's fdtable.
+    memcpy((void*) &(child->fdtable), (void*) &fdtable, MAX_FD*sizeof(vnode*));
+    if (FORK_PARANOIA >= 1) {
+        log_printf("[fork] Copied parent's fdtable to child\n");
+    }
+
+    // Add to process table (requires lock in case another CPU is already
     // running processes)
     assert(!ptable[pid]);
     ptable[pid] = child;

@@ -141,3 +141,77 @@ uintptr_t memfile_vnode::read(uintptr_t addr, size_t sz) {
     return rd_sz;
 }
 
+bool pipe_bbuf::pipe_empty() {
+    assert(len_ >= 0);
+    return len_;
+}
+
+bool pipe_bbuf::pipe_full() {
+    assert(len_ <= BBUF_CAP);
+    return (len_ == BBUF_CAP);
+}
+
+uintptr_t pipe_bbuf::write(uintptr_t addr, size_t sz) {
+    spinlock_guard guard(lock_);
+
+    // Block if pipe full.
+    if (pipe_full()) {
+        waiter().block_until(wrq_, [&] () {
+            return !pipe_full();
+        }, guard);
+    }
+    // TODO
+    return sz;
+}
+
+uintptr_t pipe_bbuf::read(uintptr_t addr, size_t sz) {
+    spinlock_guard guard(lock_);
+
+    // Block if pipe empty.
+    if (pipe_empty()) {
+        waiter().block_until(wrq_, [&] () {
+            return !pipe_empty();
+        }, guard);
+    }
+
+    // TODO
+    return sz;
+}
+
+pipe_vnode::pipe_vnode(int mode, pipe_bbuf* bbuf)
+    : vnode(mode) {
+    bool mode_valid = (mode == OF_READ || mode == OF_WRITE);
+    assert(mode_valid);
+    if (!bbuf) {
+        bbuf_ = knew<pipe_bbuf>();
+    } else {
+        bbuf_ = bbuf; // read end should use same buf as write end
+    }
+}
+
+pipe_vnode::~pipe_vnode() {
+    // Free the bounded buffer, if the node is a write.
+    if (mode_ == OF_WRITE) {
+        kfree(bbuf_);
+    }
+    bbuf_ = nullptr;
+}
+
+pipe_bbuf* pipe_vnode::get_bbuf() {
+    return bbuf_;
+}
+
+uintptr_t pipe_vnode::write(uintptr_t addr, size_t sz) {
+    if (!writeable()) {
+        return E_BADF;
+    }
+    return bbuf_->write(addr, sz);
+}
+
+uintptr_t pipe_vnode::read(uintptr_t addr, size_t sz) {
+    if (!readable()) {
+        return E_BADF;
+    }
+    return bbuf_->read(addr, sz);
+}
+

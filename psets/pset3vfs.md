@@ -6,17 +6,27 @@ The `struct proc` will have a new member `fdtable[MAX_FDT]` of `MAX_FDT = 8` ent
 ```c++
 struct proc {
     // Member variables...
-    void* fdtable[MAX_PFDT] = {0};
+    vnode* fdtable[MAX_PFDT] = {0};
     proc() {
-        if (!(fdtable[0] && fdtable[1] && fdtable[2])) {
-            // Initialize to the special keyboard-console nodes.
-            fdtable[0] = fdtable[1] = fdtable[2] = (void*) &global_cnode;
+        if (!global_cnode) {
+            // Create the global STDIO vnode.
+            kb_c_vnode* cn = knew<kb_c_vnode>();
+            global_cnode = reinterpret_cast<vnode*>(cn);
+        }
+        for (int fd = 0; fd <= 2; ++fd) {
+            if (fdtable[fd] != global_cnode) {
+                fdtable[fd] = global_cnode;
+                ++fdtable[fd]->refcount_;
+            }
         }
     }
     ~proc() {
         assert(cnode->refcount >= 0);
-        for (int i = 0; i < MAX_FDT; ++i) {
-            syscall_close(i); // Close all files on the way out
+        for (int fd = 3; fd < MAX_FD; ++fd) {
+            if (fdtable[fd]) {
+                fdtable[fd]->close();
+                fdtable[fd] = nullptr;
+            }
         }
     }
 }
@@ -26,14 +36,7 @@ Each element of the fd table points to an inherited type of `vnode` structure, w
 #define OF_RDONLY 0x1
 #define OF_WRONLY 0x2
 #define OF_RDWR   O_RDONLY | O_WRONLY
-void* global_c_vnode;
-
-T kernel_start() {
-    // ...
-    global_c_vnode = kalloc(sizeof(kb_c_vnode));
-    assert(global_c_vnode);
-    // ...
-};
+vnode* global_c_vnode;
 
 // ...
 
@@ -86,12 +89,16 @@ struct pipe_bbuf {
     char bbuf[BBUF_CAP];
     int len_ = 0; // buffer write length
     spinlock lock_;
-}
+
+    uintptr_t write(uintptr_t addr, size_t sz);
+    uintptr_t read(uintptr_t addr, size_t sz);
+};
 
 struct pipe_vnode:public vnode {
     pipe_bbuf* bbuf_ = nullptr;
+    wait_queue rdq_, wrq_; // Read and write queues.
     pipe_vnode(int mode, pipe_bbuf* bbuf)
-        : vnode(int mode) {
+        : vnode(mode) {
         assert(mode == O_RDONLY || mode == O_WRONLY);
         if (!bbuf) {
             bbuf_ = knew<pipe_bbuf>();
@@ -99,12 +106,15 @@ struct pipe_vnode:public vnode {
             bbuf_ = bbuf; // read end should use same buf as write end
         }
     }
+    ~pipe_vnode(); // Free the bounded buffer here
 
     uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
 };
 ```
-The per-process fd tables are of course dynamically allocated in `struct proc`; the constructor is to do work as described above and the destructor is to walk through the fd table and "free" the vnodes (that is, it should walk through the table, decrement the `refcount` of each non-null `vnode`, and subsequently call `kfree` if the refcount is updated to 0 and the vnode is not to terminal). `vnodes` is dynamically allocated and freed via the slab allocator created from PSet 1 Extra Credit. It is the job of `kernel_start()` to allocate the vnode for the console; it is stored in a global pointer `void* global_c_vnode` for easy access.
+The per-process fd tables are of course dynamically allocated in `struct proc`; the constructor is to do work as described above and the destructor is to walk through the fd table and "free" the vnodes (that is, it should walk through the table, decrement the `refcount` of each non-null `vnode`, and subsequently call `kfree` if the refcount is updated to 0 and the vnode is not to terminal). `vnodes` is dynamically allocated and freed via the slab allocator created from PSet 1 Extra Credit. It is the job of `proc::proc()` the constructor to allocate the vnode for the console, if it is not already allocated; it is stored in a global pointer `vnode* global_c_vnode` for easy access.
+
+Note that for pipes, there is a separate `vnode` for reads and writes that share a bounded buffer; we decree that the write end `vnode` shall allocate the buffer and the vnode shall share it. This decree resolves any ambiguity about whose responsibility it is to free the bounded buffer when the pipe is freed---in particular, the write `pipe_vnode` has the responsibility to free.
 
 2. VFS functionalities
 The constructors and destructors for the nodes are defined above. *All of the below read/write functions assume that validation was done by the corresponding `syscall`.* The specifics are below, but the end of every function will increment offset, and unlock before returning.
@@ -117,9 +127,11 @@ Memfile `write(uintptr_t addr, size_t sz)`: locks the node, using the `memfile` 
 
 Memfile `read(uintptr_t addr, size_t sz)`: locks the node, using the `memfile` structure, computes the `rd_sz = min(memfile::len_ - offset_, sz)`, and do a `memcpy` of `rd_sz` bytes from `memfile::data_` to `addr`.
 
-Pipe `write(uintptr_t addr, size_t sz)`: validates `sz <= BBUF_CAP` (return error if not) and locks the buffer, using the `pipe_bbuf` structure. Sleeps if the buffer is full. If the buffer empty space is insufficient, return error. Do a `memcpy` of `sz` bytes from `addr` to `memfile::data_`. Increment `pipe_bbuf::len_` by `wr_sz`.
+Pipe I/O functions just call the respective pipe bbuf functions (see below).
 
-Pipe `read(uintptr_t addr, size_t sz)`: locks the buffer, using the `pipe_bbuf` structure, compute the `rd_sz = min(capacity_ - ((unsigned char*) addr - data_), sz)`, and do a `memcpy` of `rd_sz` bytes from `memfile::data_` to `addr`. Sleeps if buffer is empty.
+Pipe bbuf `write(uintptr_t addr, size_t sz)`: validates `sz <= BBUF_CAP` (return error if not) and locks the buffer, using the `pipe_bbuf` structure. Sleeps if the buffer is full. If the buffer empty space is insufficient, return error. Do a `memcpy` of `sz` bytes from `addr` to `memfile::data_`. Increment `pipe_bbuf::len_` by `wr_sz`. At the end, wakes all processes on the read queue.
+
+Pipe bbuf `read(uintptr_t addr, size_t sz)`: locks the buffer, using the `pipe_bbuf` structure, compute the `rd_sz = min(capacity_ - ((unsigned char*) addr - data_), sz)`, and do a `memcpy` of `rd_sz` bytes from `memfile::data_` to `addr`. Sleeps if buffer is empty. At the end, wakes all processes on the write queue.
 
 3. Syscall functionalities and add-ins to current functions
 

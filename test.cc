@@ -17,5 +17,6 @@ struct Derived:public Base {
 };
 
 int main() {
-    Derived(10);
+    void* a[10];
+    cout << 10*sizeof(void*) << endl;
 }

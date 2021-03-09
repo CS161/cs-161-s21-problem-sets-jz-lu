@@ -9,6 +9,14 @@
         "type_traits": "cpp",
         "atomic": "cpp",
         "*.d": "cpp",
-        "*.ko": "cpp"
+        "*.ko": "cpp",
+        "array": "cpp",
+        "deque": "cpp",
+        "vector": "cpp",
+        "fstream": "cpp",
+        "istream": "cpp",
+        "sstream": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp"
     }
 }
