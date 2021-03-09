@@ -1332,6 +1332,11 @@ int proc::syscall_dup2(regstate* regs) {
         return E_BADF;
     } 
 
+    // Edge case: the fd's are the same. Do nothing.
+    if (oldfd == newfd) {
+        return newfd;
+    }
+
     if (fdtable[newfd]) { // Close newfd if open
         if (fdtable[newfd])
         fdtable[newfd] = nullptr;

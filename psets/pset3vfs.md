@@ -143,7 +143,7 @@ Pipe bbuf `read(uintptr_t addr, size_t sz)`: locks the buffer, using the `pipe_b
 
 `syscall_close(fd)` asserts that the fd indexes to a non-null, open file in the process `fdtable[]`. Supposing checks pass, decrement the refcount accordingly, and if the refcount hits zero afterwards, call `kfree()` on the `vnode` pointer. Set `fdtable[fd] = nullptr`.
 
-`syscall_dup2(oldfd, newfd)` checks that `newfd` and `oldfd` are acceptable numbers (i.e. not out of array index range) and that `oldfd` indexes to a non-null value; if either is the case return `E_BADF`. Check that `newfd` is null; if it is not, then call `syscall_close(newfd)` before proceeding. Sets `proc::fdtable[newfd] = proc::fdtable[oldfd]`. Returns `newfd` upon success.
+`syscall_dup2(oldfd, newfd)` checks that `newfd` and `oldfd` are acceptable numbers (i.e. not out of array index range) and that `oldfd` indexes to a non-null value; if either is the case return `E_BADF`. If `oldfd==newfd` return immediately. Check that `newfd` is null; if it is not, then call `syscall_close(newfd)` before proceeding. Sets `proc::fdtable[newfd] = proc::fdtable[oldfd]`. Returns `newfd` upon success.
 
 `syscall_fork()` updates to copy the per-process file descriptor table from parent to child. This is a set of pointers, so it will be a deep copy of the pointers.
 

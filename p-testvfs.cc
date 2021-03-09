@@ -44,7 +44,7 @@ void process_main() {
     r = dprintf(3, "5 ");
     assert_gt(r, 0);
 
-    r = sys_dup2(3, 3); // ERROR IS HERE!
+    r = sys_dup2(3, 3);
     if (r != 0) {
         assert_eq(r, 3);
     }
