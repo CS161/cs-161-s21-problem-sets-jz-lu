@@ -113,13 +113,13 @@ Console `write(uintptr_t addr, size_t sz)`: executes the current code in `syscal
 
 Console `read(uintptr_t addr, size_t sz)`: executes the current code in `syscall_read` with any minor modifications.
 
-Memfile `write(uintptr_t addr, size_t sz)`: locks the node, using the `memfile` structure, computes the `wr_sz = min(capacity_ - len_, sz)`, and do a `memcpy` of `wr_sz` bytes from `addr` to `memfile::data_`. Increment `memfile::len_` by `wr_sz`.
+Memfile `write(uintptr_t addr, size_t sz)`: locks the node, using the `memfile` structure, checks whether `sz` bytes of free memory is available, and increase the length of the file (and capacity, if needed, returning fail if out of space). Do a `memcpy` of `sz` bytes from `addr` to `memfile::data_`.
 
 Memfile `read(uintptr_t addr, size_t sz)`: locks the node, using the `memfile` structure, computes the `rd_sz = min(memfile::len_ - offset_, sz)`, and do a `memcpy` of `rd_sz` bytes from `memfile::data_` to `addr`.
 
-Pipe `write(uintptr_t addr, size_t sz)`: locks the buffer, using the `pipe_bbuf` structure, compute the `wr_sz = min(capacity_ - len_, sz)`, and do a `memcpy` of `wr_sz` bytes from `addr` to `memfile::data_`. Increment `pipe_bbuf::len_` by `wr_sz`. TODO SLEEP?
+Pipe `write(uintptr_t addr, size_t sz)`: validates `sz <= BBUF_CAP` (return error if not) and locks the buffer, using the `pipe_bbuf` structure. Sleeps if the buffer is full. If the buffer empty space is insufficient, return error. Do a `memcpy` of `sz` bytes from `addr` to `memfile::data_`. Increment `pipe_bbuf::len_` by `wr_sz`.
 
-Pipe `read(uintptr_t addr, size_t sz)`: locks the buffer, using the `pipe_bbuf` structure, compute the `rd_sz = min(capacity_ - ((unsigned char*) addr - data_), sz)`, and do a `memcpy` of `rd_sz` bytes from `memfile::data_` to `addr`. TODO SLEEP?
+Pipe `read(uintptr_t addr, size_t sz)`: locks the buffer, using the `pipe_bbuf` structure, compute the `rd_sz = min(capacity_ - ((unsigned char*) addr - data_), sz)`, and do a `memcpy` of `rd_sz` bytes from `memfile::data_` to `addr`. Sleeps if buffer is empty.
 
 3. Syscall functionalities and add-ins to current functions
 
@@ -151,7 +151,7 @@ How should `vnode::offset` work for a `vnode` that can do reads and writes? Shou
 
 If pipe is partially available, should we block immediately or write/read what we can and then block?
 
-If multiple processes/threads are writing to the same file, should they have their own copy of a vnode, since the offsets can and should in the general case be different? In this case the locks wouldn't be the same unless we defined the lock at the memfs level and not the vnode level, and the two processes would race all over each other.
+If multiple threads are sharing a `proc::fdtable[]` does the refcount increase by 1 for each thread or just 1 for all threads?
 
 Should we cast the vnode type dynamically by checking the `fd`, or is there a more elegant solution?
 

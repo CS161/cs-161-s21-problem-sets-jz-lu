@@ -9,8 +9,17 @@ spinlock ptable_lock;           // protects `ptable`
 // proc::proc()
 //    The constructor initializes the `proc` to empty.
 proc::proc() {
+    if (PROC_PARANOIA >= 1) {
+        log_printf("[proc] [constructor] Yodolydodoly from proc constructor!\n");
+    }
     assert(global_cnode);
-    fdtable[0] = fdtable[1] = fdtable[2] = global_cnode;
+    for (int fd = 0; fd <= 2; ++fd) {
+        if (fdtable[fd] != reinterpret_cast<vnode*>(global_cnode)) {
+            assert(!fdtable[fd]);
+            fdtable[fd] = reinterpret_cast<vnode*>(global_cnode);
+            ++fdtable[fd]->refcount_;
+        }
+    }
 }
 
 // proc::~proc()
@@ -18,7 +27,8 @@ proc::proc() {
 proc::~proc() {
     for (int fd = 3; fd < MAX_FD; ++fd) {
         if (fdtable[fd]) {
-            syscall_close(fd);
+            fdtable[fd]->close();
+            fdtable[fd] = nullptr;
         }
     }
 }

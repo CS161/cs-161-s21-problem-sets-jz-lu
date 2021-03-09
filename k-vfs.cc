@@ -17,6 +17,17 @@ bool vnode::writeable() {
     return mode_ & OF_WRITE;
 }
 
+void vnode::close() {
+    assert(refcount_ > 0);
+    if(--refcount_ == 0) {
+        if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+            log_printf("[Vfs-vnode] Freeing vnode at %p... *Closing time...one last call for alcohol*\n",
+                this);
+        }
+        kfree(reinterpret_cast<void*>(this));
+    }
+}
+
 size_t io_sz(size_t start, size_t cap, size_t sz) {
     assert(cap >= start);
     if (cap - start > sz) {
@@ -30,11 +41,10 @@ kb_c_vnode::kb_c_vnode() : vnode(OF_RDWR) {
     assert(offset_ == 0);
     assert(refcount_ == 0);
     if (VFS_KBC_PARANOIA >= 1) {
-        log_printf("[kb_c_vnode] Initialized Stdio vnode in constructor\n");
+        log_printf("[kb_c_vnode] Constructor of Stdio vnode called\n");
     }
 }
 
-// TODO UPDATE THE OFFSETS OF THE VNODE! (ALL RD/WR FUNCTIONS!)
 uintptr_t kb_c_vnode::write(uintptr_t addr, size_t sz) {
     auto& csl = consolestate::get();
     spinlock_guard guard(csl.lock_);
@@ -100,12 +110,20 @@ uintptr_t memfile_vnode::write(uintptr_t addr, size_t sz) {
         return E_BADF;
     }
     spinlock_guard guard(mf_->lock_);
-    size_t wr_sz = io_sz(mf_->len_, mf_->capacity_, sz);
-    void* mf_ptr = reinterpret_cast<void*>(mf_->data_ + mf_->len_);
-    memcpy(mf_ptr, reinterpret_cast<void*>(addr), wr_sz);
-    assert(mf_->len_ + wr_sz >= mf_->len_); // Detect overflow
-    mf_->len_ += wr_sz;
-    // TODO Offset update
+
+    // Compute the best size that can be written; attempt once to 
+    // increase the file size if the best size is not enough.
+    size_t best_sz = io_sz(offset_, mf_->capacity_, sz);
+    if (best_sz < sz) {
+        if (mf_->set_length(offset_ + sz) == E_NOSPC) {
+            return E_NOSPC;
+    }
+    void* mf_ptr = reinterpret_cast<void*>(mf_->data_ + offset_);
+    memcpy(mf_ptr, reinterpret_cast<void*>(addr), sz);
+    
+    // Update the offset, and if needed, the length of the memfile
+    offset_ += sz;
+    return sz;
 }
 
 uintptr_t memfile_vnode::read(uintptr_t addr, size_t sz) {
@@ -116,6 +134,9 @@ uintptr_t memfile_vnode::read(uintptr_t addr, size_t sz) {
     size_t rd_sz = io_sz(offset_, mf_->len_, sz);
     void* mf_ptr = reinterpret_cast<void*>(mf_->data_ + offset_);
     memcpy(reinterpret_cast<void*>(addr), mf_ptr, rd_sz);
-    // TODO check Offset update
+
+    // Update offset of node.
     offset_ += rd_sz;
+    return rd_sz;
 }
+

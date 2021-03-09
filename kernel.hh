@@ -6,6 +6,7 @@
 #include "k-lock.hh"
 #include "k-memrange.hh"
 #include "k-waitstruct.hh"
+#include "k-vfs.hh"
 #if CHICKADEE_PROCESS
 #error "kernel.hh should not be used by process code."
 #endif
@@ -41,7 +42,7 @@ struct __attribute__((aligned(4096))) proc {
     int nchildren_ = 0;                        // Number of children
     int e_intr = 0;                            // Interrupt code
     pid_t childpids_[NPROC] = {0};             // PID Array of children
-    void* fdtable[MAX_FD] = {0};               // Per-process (threads share) file descriptor table
+    vnode* fdtable[MAX_FD] = {0};               // Per-process (threads share) file descriptor table
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
     uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
@@ -194,6 +195,7 @@ const uint64_t WAITQ_PARANOIA = 0;
 const uint64_t WAITH_PARANOIA = 0; // Wait heap
 const uint64_t VFS_KBC_PARANOIA = 1; // Console and Keyboard VFS
 const uint64_t VFS_MF_PARANOIA = 0; // Memfile VFS
+const uint64_t PROC_PARANOIA = 1; // Struct proc constructor/destructor
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_

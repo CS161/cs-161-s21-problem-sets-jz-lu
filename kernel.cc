@@ -19,7 +19,7 @@ std::atomic<unsigned long> ticks;
 std::atomic<int> kdisplay;
 
 // Global Stdio vnode on VFS.
-void* global_cnode = nullptr;
+kb_c_vnode* global_cnode = nullptr;
 
 // Global blocking data.
 const uint64_t NUM_WQS = 5;
@@ -1314,13 +1314,29 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
 //    Opens a file and returns the file descriptor, or an error.
 int proc::syscall_open(regstate* regs) {
     // TODO
+    memfile_vnode* new_vn = (memfile_vnode*) kalloc(sizeof(vnode));
     return 0;
 }
 
 // proc::syscall_dup2(regs)
 //    Copies vnodes from a file descriptor to another. Returns new fd if successful.
 int proc::syscall_dup2(regstate* regs) {
-    // TODO
+    int oldfd = regs->reg_rdi;
+    int newfd = regs->reg_rsi;
+    if (oldfd < 0 || oldfd >= MAX_FD || newfd < 0 || newfd >= MAX_FD) { // Invalid fd
+        return E_BADF;
+    } else if (!fdtable[oldfd]) { // Non-open old fd
+        return E_BADF;
+    } 
+
+    if (fdtable[newfd]) { // Close newfd if open
+        if (fdtable[newfd])
+        fdtable[newfd] = nullptr;
+    }
+
+    // Set the old fd vnode ptr to the new one and increment refcount.
+    fdtable[newfd] = fdtable[oldfd];
+    ++fdtable[newfd]->refcount_;
     return 0;
 }
 
@@ -1345,92 +1361,63 @@ static int IO_invalid(proc* p, uintptr_t start, uintptr_t end, bool check_writab
     return 0;
 }
 
+
 // proc::syscall_read(regs), proc::syscall_write(regs),
 //    Handle read and write system calls.
 uintptr_t proc::syscall_read(regstate* regs) {
     // This is a slow system call, so allow interrupts by default
     sti();
-
+    int fd = regs->reg_rdi;
+    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+        if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+            log_printf("[VFS-read] fd %d invalid or not open\n", fd);
+        }
+        return E_BADF;
+    }
     uintptr_t addr = regs->reg_rsi;
     size_t sz = regs->reg_rdx;
-
-    // Your code here!
-    // * Read from open file `fd` (reg_rdi), rather than `keyboardstate`.
 
     // Validate the read buffer.
     if (IO_invalid(this, addr, addr+sz, true)) {
         return E_FAULT;
     }
 
-    auto& kbd = keyboardstate::get();
-    auto irqs = kbd.lock_.lock();
-
-    // mark that we are now reading from the keyboard
-    // (so `q` should not power off)
-    if (kbd.state_ == kbd.boot) {
-        kbd.state_ = kbd.input;
-    }
-
-    // yield until a line is available
-    // (special case: do not block if the user wants to read 0 bytes)
-    if (sz) {
-        waiter().block_until(kbd.wq_, [&] () {
-            return (kbd.eol_);
-        }, kbd.lock_, irqs);
-    }
-
-    // read that line or lines
-    size_t n = 0;
-    while (kbd.eol_ != 0 && n < sz) {
-        if (kbd.buf_[kbd.pos_] == 0x04) {
-            // Ctrl-D means EOF
-            if (n == 0) {
-                kbd.consume(1);
-            }
-            break;
-        } else {
-            *reinterpret_cast<char*>(addr) = kbd.buf_[kbd.pos_];
-            ++addr;
-            ++n;
-            kbd.consume(1);
-        }
-    }
-
-    kbd.lock_.unlock(irqs);
-    return n;
+    // Read from open file.
+    return fdtable[fd]->read(addr, sz);
 }
 
 uintptr_t proc::syscall_write(regstate* regs) {
     // This is a slow system call, so allow interrupts by default
     sti();
 
+    int fd = regs->reg_rdi;
+    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+        if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+            log_printf("[VFS-write] fd %d invalid or not open\n", fd);
+        }
+        return E_BADF;
+    }
     uintptr_t addr = regs->reg_rsi;
     size_t sz = regs->reg_rdx;
-
-    // Your code here!
-    // * Write to open file `fd` (reg_rdi), rather than `consolestate`.
 
     // Validate the write buffer.
     if (IO_invalid(this, addr, addr+sz)) {
         return E_FAULT;
     }
 
-    auto& csl = consolestate::get();
-    spinlock_guard guard(csl.lock_);
-    size_t n = 0;
-    while (n < sz) {
-        int ch = *reinterpret_cast<const char*>(addr);
-        ++addr;
-        ++n;
-        console_printf(0x0F00, "%c", ch);
-    }
-    return n;
+    // Write to the file.
+    return fdtable[fd]->write(addr, sz);
 }
 
 // proc::syscall_close(regs)
 //    Closes a file descriptor.
-int syscall_close(regstate* regs) {
-    // TODO
+int proc::syscall_close(regstate* regs) {
+    int fd = regs->reg_rdi;
+    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+        return E_BADF;
+    }
+    fdtable[fd]->close();
+    fdtable[fd] = nullptr;
     return 0;
 }
 
