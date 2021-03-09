@@ -19,7 +19,7 @@ std::atomic<unsigned long> ticks;
 std::atomic<int> kdisplay;
 
 // Global Stdio vnode on VFS.
-kb_c_vnode* global_cnode = nullptr;
+vnode* global_cnode = nullptr;
 
 // Global blocking data.
 const uint64_t NUM_WQS = 5;
@@ -92,9 +92,6 @@ void kernel_start(const char* command) {
     for (pid_t i = 0; i < NPROC; i++) {
         ptable[i] = nullptr;
     }
-
-    // Create the global STDIO vnode.
-    global_cnode = knew<kb_c_vnode>();
 
     proc *init_task = knew<proc>();
     init_task->ppid_ = 1;

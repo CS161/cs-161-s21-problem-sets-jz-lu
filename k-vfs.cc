@@ -1,7 +1,7 @@
 #include "k-vfs.hh"
 
 vnode::vnode(int mode) {
-    assert(mode == OF_READ || mode == OF_WRITE || mode == OF_RDWR);
+    // assert((mode >= OF_READ) && (mode <= OF_RDWR));
     mode_ = mode;
 }
 
@@ -117,6 +117,7 @@ uintptr_t memfile_vnode::write(uintptr_t addr, size_t sz) {
     if (best_sz < sz) {
         if (mf_->set_length(offset_ + sz) == E_NOSPC) {
             return E_NOSPC;
+        }
     }
     void* mf_ptr = reinterpret_cast<void*>(mf_->data_ + offset_);
     memcpy(mf_ptr, reinterpret_cast<void*>(addr), sz);

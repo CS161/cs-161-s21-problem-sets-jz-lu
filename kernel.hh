@@ -6,7 +6,6 @@
 #include "k-lock.hh"
 #include "k-memrange.hh"
 #include "k-waitstruct.hh"
-#include "k-vfs.hh"
 #if CHICKADEE_PROCESS
 #error "kernel.hh should not be used by process code."
 #endif
@@ -25,6 +24,36 @@ struct elf_program;
 //
 //    Functions, constants, and definitions for the kernel.
 
+// Virtual File System (VFS) basic structure. 
+// All declarations of children in k-vfs.hh.
+struct vnode {
+    int mode_ = 0; // Read, write, or both
+    off_t offset_ = 0; // Offset from file, to be incremented on read/writes
+    int refcount_ = 0; // Number of processes with entry in fd table pointing here
+    // Locks declared in inheriters.
+
+    vnode(int mode);
+    ~vnode();
+    bool readable();
+    bool writeable();
+
+    // Computes the actual I/O size as min of available size and desired size.
+    size_t io_sz(size_t start, size_t cap, size_t sz);
+
+    void close();
+
+    // To be defined in derived structs.
+    // * NOTE: validation is assumed to be done at the syscall level
+    // * so the VFS I/O functions assume valid input.
+
+    // Write sz bytes to the file. All-or-none paradigm: either write everything
+    // or fail.
+    virtual uintptr_t write(uintptr_t addr, size_t sz);
+
+    // Read at most sz bytes from the file. Best case paradigm: read as much
+    // as possible and return what is read. 
+    virtual uintptr_t read(uintptr_t addr, size_t sz);
+};
 
 // Process descriptor type
 struct __attribute__((aligned(4096))) proc {
@@ -109,9 +138,8 @@ struct __attribute__((aligned(4096))) proc {
 };
 
 extern proc* ptable[NPROC];
-extern void* global_cnode;
+extern vnode* global_cnode;
 extern spinlock ptable_lock;
-// extern proc *init_task;
 #define PROCSTACK_SIZE 4096UL
 
 
@@ -195,7 +223,7 @@ const uint64_t WAITQ_PARANOIA = 0;
 const uint64_t WAITH_PARANOIA = 0; // Wait heap
 const uint64_t VFS_KBC_PARANOIA = 1; // Console and Keyboard VFS
 const uint64_t VFS_MF_PARANOIA = 0; // Memfile VFS
-const uint64_t PROC_PARANOIA = 1; // Struct proc constructor/destructor
+const uint64_t PROC_PARANOIA = 2; // Struct proc constructor/destructor
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_

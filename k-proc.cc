@@ -2,6 +2,7 @@
 #include "elf.h"
 #include "k-vmiter.hh"
 #include "k-devices.hh"
+#include "k-vfs.hh"
 
 proc* ptable[NPROC];            // array of process descriptor pointers
 spinlock ptable_lock;           // protects `ptable`
@@ -9,14 +10,21 @@ spinlock ptable_lock;           // protects `ptable`
 // proc::proc()
 //    The constructor initializes the `proc` to empty.
 proc::proc() {
-    if (PROC_PARANOIA >= 1) {
-        log_printf("[proc] [constructor] Yodolydodoly from proc constructor!\n");
+    if (PROC_PARANOIA >= 2) {
+        log_printf("[proc] [constructor] struct proc constructor called\n");
     }
-    assert(global_cnode);
+    if (!global_cnode) {
+        // Create the global STDIO vnode.
+        if (PROC_PARANOIA >= 1) {
+            log_printf("[proc] [constructor] No global kb_c vnode found, allocating one\n");
+        }
+        kb_c_vnode* cn = knew<kb_c_vnode>();
+        global_cnode = reinterpret_cast<vnode*>(cn);
+    }
     for (int fd = 0; fd <= 2; ++fd) {
-        if (fdtable[fd] != reinterpret_cast<vnode*>(global_cnode)) {
+        if (fdtable[fd] != global_cnode) {
             assert(!fdtable[fd]);
-            fdtable[fd] = reinterpret_cast<vnode*>(global_cnode);
+            fdtable[fd] = global_cnode;
             ++fdtable[fd]->refcount_;
         }
     }
@@ -25,6 +33,9 @@ proc::proc() {
 // proc::~proc()
 //    The destructor closes all open file descriptors.
 proc::~proc() {
+    if (PROC_PARANOIA >= 2) {
+        log_printf("[proc] [destructor] proc destructor called\n");
+    }
     for (int fd = 3; fd < MAX_FD; ++fd) {
         if (fdtable[fd]) {
             fdtable[fd]->close();
