@@ -33,14 +33,13 @@ struct vnode {
     // Locks declared in inheriters.
 
     vnode(int mode);
-    virtual ~vnode();
     bool readable();
     bool writeable();
 
     // Computes the actual I/O size as min of available size and desired size.
     size_t io_sz(size_t start, size_t cap, size_t sz);
 
-    void close();
+    virtual int close(); // Returns refcount after close
 
     // To be defined in derived structs.
     // * NOTE: validation is assumed to be done at the syscall level
@@ -53,6 +52,7 @@ struct vnode {
     // Read at most sz bytes from the file. Best case paradigm: read as much
     // as possible and return what is read. 
     virtual uintptr_t read(uintptr_t addr, size_t sz);
+    virtual ~vnode();
 };
 
 // Process descriptor type

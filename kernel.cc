@@ -1505,14 +1505,16 @@ uintptr_t proc::syscall_write(regstate* regs) {
 }
 
 // proc::syscall_close(regs)
-//    Closes a file descriptor.
+//    Closes a file descriptor, freeing if necessary.
 int proc::syscall_close(regstate* regs) {
     // TODO [MULTITH] lock ftable access
     int fd = regs->reg_rdi;
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
         return E_BADF;
     }
-    fdtable[fd]->close();
+    if (!fdtable[fd]->close()) { // If refcount hits 0
+        delete fdtable[fd];
+    }
     fdtable[fd] = nullptr;
     return 0;
 }

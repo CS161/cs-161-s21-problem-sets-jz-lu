@@ -1,42 +1,9 @@
 #include "k-vfs.hh"
 
+// Helper functions.
 template <typename T>
 static T get_min(T a, T b) {
     return a < b ? a : b;
-}
-
-vnode::vnode(int mode) {
-    if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
-        log_printf("[vnode] Generic vnode constructor called\n");
-    }
-    // assert((mode >= OF_READ) && (mode <= OF_RDWR));
-    mode_ = mode;
-}
-
-vnode::~vnode() {
-    if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
-        log_printf("[vnode] Generic vnode destructor called\n");
-    }
-    assert(refcount_ == 0);
-}
-
-bool vnode::readable() {
-    return mode_ & OF_READ;
-}
-
-bool vnode::writeable() {
-    return mode_ & OF_WRITE;
-}
-
-void vnode::close() {
-    assert(refcount_ > 0);
-    if(--refcount_ == 0) {
-        if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
-            log_printf("[Vfs-vnode] Freeing vnode at %p... *Closing time...one last call for alcohol*\n",
-                this);
-        }
-        delete this;
-    }
 }
 
 size_t io_sz(size_t start, size_t cap, size_t sz) {
@@ -48,12 +15,52 @@ size_t io_sz(size_t start, size_t cap, size_t sz) {
     }
 }
 
+// Direct functions.
+vnode::vnode(int mode) {
+    if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+        log_printf("[vnode] Generic vnode constructor called\n");
+    }
+    // assert((mode >= OF_READ) && (mode <= OF_RDWR));
+    mode_ = mode;
+}
+
+// * By C++ decree, a struct that is delete'd with the parent class pointer type
+// * must have virtual destructor. A virtual structor must be defined. If a 
+// * single virtual function in a struct is defined, the struct is no longer pure virtual 
+// * and as such every virtual function must be defined. Hence the absurd 3 lines below.
+vnode::~vnode() {}
+uintptr_t vnode::write(uintptr_t addr, size_t sz) { return 0; }
+uintptr_t vnode::read(uintptr_t addr, size_t sz) { return 0; }
+
+bool vnode::readable() {
+    return mode_ & OF_READ;
+}
+
+bool vnode::writeable() {
+    return mode_ & OF_WRITE;
+}
+
+int vnode::close() {
+    assert(refcount_ > 0);
+    return --refcount_;
+}
+
 kb_c_vnode::kb_c_vnode() : vnode(OF_RDWR) {
     assert(offset_ == 0);
     assert(refcount_ == 0);
     if (VFS_KBC_PARANOIA >= 1) {
         log_printf("[kb_c_vnode] Stdio vnode constructor called\n");
     }
+}
+
+kb_c_vnode::~kb_c_vnode() {
+    
+}
+
+int kb_c_vnode::close() {
+    spinlock_guard guard(open_close_lock_); // May be contended for
+    assert(refcount_ > 0);
+    return --refcount_;
 }
 
 uintptr_t kb_c_vnode::write(uintptr_t addr, size_t sz) {
