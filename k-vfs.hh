@@ -4,6 +4,7 @@
 #include "k-wait.hh"
 
 #define BBUF_CAP    256 // Pipe bounded buffr capacity
+#define EOF         0
 
 struct kb_c_vnode:public vnode {
     // Note: we will not use inherited offset_ in this struct, 

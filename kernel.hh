@@ -17,8 +17,8 @@ struct elf_program;
 #define NPROC 16
 #define CANARY_EV 894753471348 // Expected canary value
 
-// File descriptor constants
-#define MAX_FD 8
+// VFS constants
+#define MAX_FD  8
 
 // kernel.hh
 //

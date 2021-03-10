@@ -14,9 +14,12 @@ struct Derived:public Base {
     Derived(int i) : Base(i) {
         cout << "This is the Derived speaking: " << i << endl;
     }
+
+    ~Derived() {
+        cout << "Derived is transcending\n";
+    }
 };
 
 int main() {
-    void* a[10];
-    cout << 10*sizeof(void*) << endl;
+    Derived(10);
 }

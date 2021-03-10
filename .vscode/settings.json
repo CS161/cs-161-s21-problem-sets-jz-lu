@@ -17,6 +17,7 @@
         "istream": "cpp",
         "sstream": "cpp",
         "functional": "cpp",
-        "tuple": "cpp"
+        "tuple": "cpp",
+        "iostream": "cpp"
     }
 }

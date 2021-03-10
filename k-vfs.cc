@@ -6,11 +6,17 @@ static T get_min(T a, T b) {
 }
 
 vnode::vnode(int mode) {
+    if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+        log_printf("[vnode] Generic vnode constructor called\n");
+    }
     // assert((mode >= OF_READ) && (mode <= OF_RDWR));
     mode_ = mode;
 }
 
 vnode::~vnode() {
+    if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+        log_printf("[vnode] Generic vnode destructor called\n");
+    }
     assert(refcount_ == 0);
 }
 
@@ -29,7 +35,7 @@ void vnode::close() {
             log_printf("[Vfs-vnode] Freeing vnode at %p... *Closing time...one last call for alcohol*\n",
                 this);
         }
-        kfree(reinterpret_cast<void*>(this));
+        delete this;
     }
 }
 
@@ -46,7 +52,7 @@ kb_c_vnode::kb_c_vnode() : vnode(OF_RDWR) {
     assert(offset_ == 0);
     assert(refcount_ == 0);
     if (VFS_KBC_PARANOIA >= 1) {
-        log_printf("[kb_c_vnode] Constructor of Stdio vnode called\n");
+        log_printf("[kb_c_vnode] Stdio vnode constructor called\n");
     }
 }
 
@@ -103,6 +109,9 @@ uintptr_t kb_c_vnode::read(uintptr_t addr, size_t sz) {
 }
 
 memfile_vnode::memfile_vnode(int mode, memfile* mf) : vnode(mode) {
+    if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+        log_printf("[memfile-vnode] memfile vnode destructor called\n");
+    }
     mf_ = mf;
     assert(mf);
     assert(offset_ == 0);
@@ -170,12 +179,18 @@ void pipe_bbuf::close_read() {
 
 uintptr_t pipe_bbuf::write(uintptr_t addr, size_t sz) {
     spinlock_guard guard(lock_);
+    assert(!write_closed_);
 
     // Block if pipe full.
     if (pipe_full()) {
         waiter().block_until(wrq_, [&] () {
-            return !pipe_full();
+            return (!pipe_full() || read_closed_);
         }, guard);
+    }
+
+    // Writing to a pipe with read end closed returns error.
+    if (read_closed_) {
+        return E_PIPE;
     }
 
     int pos = 0;
@@ -196,12 +211,18 @@ uintptr_t pipe_bbuf::write(uintptr_t addr, size_t sz) {
 
 uintptr_t pipe_bbuf::read(uintptr_t addr, size_t sz) {
     spinlock_guard guard(lock_);
+    assert(!read_closed_);
 
     // Block if pipe empty.
-    if (pipe_empty()) {
+    if (pipe_empty() && !write_closed_) {
         waiter().block_until(wrq_, [&] () {
-            return !pipe_empty();
+            return (!pipe_empty() || write_closed_);
         }, guard);
+    }
+
+    // A drained pipe with the write end closed should return EOF.
+    if (write_closed_ && len_ == 0) {
+        return EOF;
     }
 
     int pos = 0;
@@ -224,7 +245,7 @@ pipe_vnode::pipe_vnode(int mode, pipe_bbuf* bbuf)
     : vnode(mode) {
     bool mode_valid = (mode == OF_READ || mode == OF_WRITE);
     assert(mode_valid);
-    if (!bbuf) {
+    if (!bbuf) { // Only one (r XOR w) node should allocate, the other should pass in ptr
         bbuf_ = knew<pipe_bbuf>();
     } else {
         bbuf_ = bbuf; // read end should use same buf as write end
@@ -232,15 +253,22 @@ pipe_vnode::pipe_vnode(int mode, pipe_bbuf* bbuf)
 }
 
 pipe_vnode::~pipe_vnode() {
-    // Free the bounded buffer, if the node is a write.
+    // Tell the bounded buffer to close off the relevant end.
     spinlock_guard guard(bbuf_->lock_);
     if (mode_ == OF_READ) { // Read node
-        delete bbuf_;
+        bbuf_->close_read();
+        bbuf_->wrq_.wake_all();
     } else {
         bbuf_->close_write();
+        bbuf_->rdq_.wake_all();
     }
-    
-    bbuf_ = nullptr;
+
+    // If both ends are closed, free the buffer. Note that
+    // the desctructor is under bbuf lock, so there are no
+    // races for double frees.
+    if (bbuf_->write_closed_ && bbuf_->read_closed_) {
+        delete bbuf_;
+    }
 }
 
 pipe_bbuf* pipe_vnode::get_bbuf() {
