@@ -5,7 +5,7 @@ struct Base {
     Base(int i) {
         cout << "This is the Base speaking: " << i << endl;
     }
-    ~Base() {
+    virtual ~Base() {
         cout << "Base is transcending\n";
     }
 };

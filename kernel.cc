@@ -31,10 +31,6 @@ uint64_t BLOCK_NUM_RESUMES = 0;
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
 
-void panic_align() {
-    panic("Alignment issue detected!\n");
-}
-
 // k_proc_init()
 //    The almighty init process, holding PID = PPID = 1.
 //    Handles final zombie waitpid-ing.
@@ -367,6 +363,10 @@ uintptr_t proc::syscall(regstate* regs) {
 
     case SYSCALL_DUP2:
         syscall_retval = syscall_dup2(regs);
+        break;
+    
+    case SYSCALL_PIPE:
+        syscall_retval = syscall_pipe(regs);
         break;
 
     case SYSCALL_READ:
@@ -1313,6 +1313,19 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
     }
 }
 
+// proc::find_open_fd()
+//    Returns first available open file descriptor, i.e. null entry.
+//    Returns error if none open.
+int proc::find_open_fd() {
+    // TODO [MULTITH] lock this function.
+    for (int fd = 0; fd < MAX_FD; ++fd) {
+        if (!fdtable[fd]) {
+            return fd;
+        }
+    }
+    return E_MFILE;
+}
+
 // proc::syscall_open(regs)
 //    Opens a file and returns the file descriptor, or an error.
 int proc::syscall_open(regstate* regs) {
@@ -1324,6 +1337,7 @@ int proc::syscall_open(regstate* regs) {
 // proc::syscall_dup2(regs)
 //    Copies vnodes from a file descriptor to another. Returns new fd if successful.
 int proc::syscall_dup2(regstate* regs) {
+    // TODO [MULTITH] lock fdtable accesses
     int oldfd = regs->reg_rdi;
     int newfd = regs->reg_rsi;
     if (oldfd < 0 || oldfd >= MAX_FD || newfd < 0 || newfd >= MAX_FD) { // Invalid fd
@@ -1346,6 +1360,75 @@ int proc::syscall_dup2(regstate* regs) {
     fdtable[newfd] = fdtable[oldfd];
     ++fdtable[newfd]->refcount_;
     return 0;
+}
+
+// proc::syscall_pipe(regs)
+//    Creates a read and write pipe and writes fd's into a single long as rfd | (wfd << 32).
+uintptr_t proc::syscall_pipe(regstate* regs) {
+    // Examine the fd table and ensure that there are at least 2 available spots.
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[pipe] Pipe called by process PID=%d\n", id_);
+    }
+
+    long rfd = find_open_fd();
+    long wfd = find_open_fd();
+    if (rfd == E_MFILE || wfd == E_MFILE) {
+        if (PIPE_PARANOIA >= 2) {
+            log_printf("[pipe] Insufficient open fdtable entries: rfd=%d, wfd=%d\n",
+                rfd, wfd);
+        }
+        return E_MFILE;
+    }
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[pipe] Successfully found file descriptors READ=%d, WRITE=%d\n",
+            rfd, wfd);
+    }
+
+    // Create a write node, get the allocated bbuf, and create the read node.
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[pipe] PID=%d allocating a new WRITE pipe\n", id_);
+    }
+    pipe_vnode* wr_vn = knew<pipe_vnode>(OF_WRITE, nullptr);
+
+    // Perform checks on allocation.
+    if (!wr_vn) {
+        if (PIPE_PARANOIA >= 1) {
+            log_printf("[pipe] Failed to allocate a new WRITE pipe vnode, returning to user\n");
+        }
+        return E_NOMEM;
+    }
+    if (!wr_vn->bbuf_) {
+        if (PIPE_PARANOIA >= 1) {
+            log_printf("[pipe] Syscall detected failed allocation of pipe bbuf, returning to user\n");
+        }
+        delete wr_vn;
+        return E_NOMEM;
+    }
+
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[pipe] PID=%d allocating a new READ pipe\n", id_);
+    }
+    pipe_vnode* rd_vn = knew<pipe_vnode>(OF_READ, wr_vn->get_bbuf());
+    if (!rd_vn) {
+        if (PIPE_PARANOIA >= 1) {
+            log_printf("[pipe] Failed to allocate a new READ pipe vnode, returning to user\n");
+        }
+
+        // wr_vn destructor cannot delete the buffer unless the reader is successfully
+        // allocated, so we have to manually do it here.
+        delete wr_vn->bbuf_;
+        wr_vn->bbuf_ = nullptr;
+        delete wr_vn;
+        return E_NOMEM; // TODO change these to goto statements like fork fail handling
+    }
+
+    // At this points all allocations have been successfully made.
+    // TODO [MULTITH] lock accesses here.
+    fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
+    fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
+
+    uintptr_t catfd = rfd | (wfd << 32); // concatenated fd, see title comment of function
+    return catfd;
 }
 
 // IO_invalid(p, start, end, check_writable)
@@ -1376,6 +1459,7 @@ uintptr_t proc::syscall_read(regstate* regs) {
     // This is a slow system call, so allow interrupts by default
     sti();
     int fd = regs->reg_rdi;
+    // TODO [MULTITH] lock ftable access
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[VFS-read] fd %d invalid or not open\n", fd);
@@ -1391,6 +1475,7 @@ uintptr_t proc::syscall_read(regstate* regs) {
     }
 
     // Read from open file.
+    // TODO [MULTITH] lock ftable access
     return fdtable[fd]->read(addr, sz);
 }
 
@@ -1399,6 +1484,7 @@ uintptr_t proc::syscall_write(regstate* regs) {
     sti();
 
     int fd = regs->reg_rdi;
+    // TODO [MULTITH] lock ftable access
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[VFS-write] fd %d invalid or not open\n", fd);
@@ -1414,12 +1500,14 @@ uintptr_t proc::syscall_write(regstate* regs) {
     }
 
     // Write to the file.
+    // TODO [MULTITH] lock ftable access
     return fdtable[fd]->write(addr, sz);
 }
 
 // proc::syscall_close(regs)
 //    Closes a file descriptor.
 int proc::syscall_close(regstate* regs) {
+    // TODO [MULTITH] lock ftable access
     int fd = regs->reg_rdi;
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
         return E_BADF;

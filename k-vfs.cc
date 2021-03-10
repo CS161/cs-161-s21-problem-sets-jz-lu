@@ -221,7 +221,7 @@ uintptr_t pipe_bbuf::read(uintptr_t addr, size_t sz) {
     }
 
     // A drained pipe with the write end closed should return EOF.
-    if (write_closed_ && len_ == 0) {
+    if (write_closed_ && pipe_empty()) {
         return EOF;
     }
 
@@ -247,12 +247,20 @@ pipe_vnode::pipe_vnode(int mode, pipe_bbuf* bbuf)
     assert(mode_valid);
     if (!bbuf) { // Only one (r XOR w) node should allocate, the other should pass in ptr
         bbuf_ = knew<pipe_bbuf>();
+        if (!bbuf_) {
+            if (PIPE_PARANOIA >= 1) {
+                log_printf("[pipe-bbuf] Failed to allocate memory for a bbuf, returning to syscall\n");
+            }
+        }
     } else {
         bbuf_ = bbuf; // read end should use same buf as write end
     }
 }
 
 pipe_vnode::~pipe_vnode() {
+    // If one or more initial allocations failed the destructor does nothing.
+    if (!bbuf_) return;
+
     // Tell the bounded buffer to close off the relevant end.
     spinlock_guard guard(bbuf_->lock_);
     if (mode_ == OF_READ) { // Read node
@@ -265,22 +273,15 @@ pipe_vnode::~pipe_vnode() {
 
     // If both ends are closed, free the buffer. Note that
     // the desctructor is under bbuf lock, so there are no
-    // races for double frees.
+    // races for double frees. The last node to transcend frees bbuf.
     if (bbuf_->write_closed_ && bbuf_->read_closed_) {
         delete bbuf_;
     }
+    return;
 }
 
 pipe_bbuf* pipe_vnode::get_bbuf() {
     return bbuf_;
-}
-
-int pipe_vnode::set_partner(pipe_vnode* p) {
-    if (p) {
-        partner_ = p;
-        return 0;
-    }
-    return -1;
 }
 
 uintptr_t pipe_vnode::write(uintptr_t addr, size_t sz) {

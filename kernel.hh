@@ -33,7 +33,7 @@ struct vnode {
     // Locks declared in inheriters.
 
     vnode(int mode);
-    ~vnode();
+    virtual ~vnode();
     bool readable();
     bool writeable();
 
@@ -57,6 +57,7 @@ struct vnode {
 
 // Process descriptor type
 struct __attribute__((aligned(4096))) proc {
+    // TODO [MULTITH] Add per-process lock to lock accesses to fdtable, see other flagged TODOs
     enum pstate_t {
         ps_blank = 0, ps_runnable = PROC_RUNNABLE, ps_broken, ps_blocked, ps_transition
     };
@@ -120,6 +121,7 @@ struct __attribute__((aligned(4096))) proc {
     uint64_t syscall_waitpid(regstate *regs);
     
     int syscall_open(regstate* regs);
+    uintptr_t syscall_pipe(regstate* regs);
     int syscall_dup2(regstate* regs);
     uintptr_t syscall_read(regstate* reg);
     uintptr_t syscall_write(regstate* reg);
@@ -133,6 +135,7 @@ struct __attribute__((aligned(4096))) proc {
     static int load_segment(const elf_program& ph, proc_loader& ld);
 
     // Copies all of the user memory from parent to child.
+    int find_open_fd(); // TODO [MULTITH] lock this function
     int copy_memory_(proc* child);
     uint64_t canary = CANARY_EV;
 };
@@ -214,16 +217,17 @@ extern wait_heap time_heap; // Wait heap
 // Debugging and testing flags
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
 const uint64_t BALLOC_PARANOIA = 0; 
-const uint64_t SALLOC_PARANOIA = 0; // 0 = do nothing, 1 = checking
+const uint64_t SALLOC_PARANOIA = 0;         // 0 = do nothing, 1 = checking
 const uint64_t FORK_PARANOIA = 0;
 const uint64_t EXIT_PARANOIA = 0;
 const uint64_t PPID_PARANOIA = 0;
 const uint64_t WAITPID_PARANOIA = 0;
 const uint64_t WAITQ_PARANOIA = 0;
-const uint64_t WAITH_PARANOIA = 0; // Wait heap
-const uint64_t VFS_KBC_PARANOIA = 1; // Console and Keyboard VFS
-const uint64_t VFS_MF_PARANOIA = 0; // Memfile VFS
-const uint64_t PROC_PARANOIA = 2; // Struct proc constructor/destructor
+const uint64_t WAITH_PARANOIA = 0;          // Wait heap
+const uint64_t VFS_KBC_PARANOIA = 1;        // Console and Keyboard VFS
+const uint64_t VFS_MF_PARANOIA = 0;         // Memfile VFS
+const uint64_t PROC_PARANOIA = 2;           // Struct proc constructor/destructor
+const uintptr_t PIPE_PARANOIA = 2;
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_
