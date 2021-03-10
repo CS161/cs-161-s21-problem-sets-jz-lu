@@ -25,23 +25,33 @@ struct memfile_vnode:public vnode {
 
 // Bounded buffer data structure for pipe.
 struct pipe_bbuf {
-    char bbuf[BBUF_CAP];
-    int len_ = 0;                               // Num meaningful chars in buffer
+    char bbuf_[BBUF_CAP];
+    int pos_ = 0;                               // Offset of next char to read
+    int len_ = 0;                               // Num unread chars in buf
+    bool write_closed_ = false;                 // Whether or not the buffer is writeable
+    bool read_closed_ = false;                  // Whether or not the buffer is readable
     spinlock lock_;
     wait_queue rdq_, wrq_;                      // Read and write wait queues
 
+    // The below assumes locked.
     bool pipe_empty();
     bool pipe_full();
+    void close_write();
+    void close_read();
+
+    // The below does not assume locked.
     uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
 };
 
 struct pipe_vnode:public vnode {
     pipe_bbuf* bbuf_ = nullptr;                 // Shared bounded buffer
+    pipe_vnode* partner_ = nullptr;             // Partner vnode (e.g. read's partner is write node)
     pipe_vnode(int mode, pipe_bbuf* bbuf);      // Write end allocates bbuf
     ~pipe_vnode();                              // Write end frees bbuf
 
     pipe_bbuf* get_bbuf();
+    int set_partner(pipe_vnode* p);
     uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
 };

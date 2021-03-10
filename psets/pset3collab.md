@@ -3,8 +3,10 @@ CS 161 Problem Set 3 Collaboration
 
 Collaborators
 -------------
-(Other students you worked with)
+Aakash Mishra (partner)
 
 Citations
 ---------
 (Other sources consulted)
+
+Linux manpage

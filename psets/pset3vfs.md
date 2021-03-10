@@ -129,7 +129,7 @@ Memfile `read(uintptr_t addr, size_t sz)`: locks the node, using the `memfile` s
 
 Pipe I/O functions just call the respective pipe bbuf functions (see below).
 
-Pipe bbuf `write(uintptr_t addr, size_t sz)`: validates `sz <= BBUF_CAP` (return error if not) and locks the buffer, using the `pipe_bbuf` structure. Sleeps if the buffer is full. If the buffer empty space is insufficient, return error. Do a `memcpy` of `sz` bytes from `addr` to `memfile::data_`. Increment `pipe_bbuf::len_` by `wr_sz`. At the end, wakes all processes on the read queue.
+Pipe bbuf `write(uintptr_t addr, size_t sz)`: validates `sz <= BBUF_CAP` (return error if not) and locks the buffer, using the `pipe_bbuf` structure. Sleeps if the buffer is full. Do a `memcpy` of up to `sz` bytes from `addr` to `memfile::data_`. Increment `pipe_bbuf::len_` by `wr_sz`. At the end, wakes all processes on the read queue.
 
 Pipe bbuf `read(uintptr_t addr, size_t sz)`: locks the buffer, using the `pipe_bbuf` structure, compute the `rd_sz = min(capacity_ - ((unsigned char*) addr - data_), sz)`, and do a `memcpy` of `rd_sz` bytes from `memfile::data_` to `addr`. Sleeps if buffer is empty. At the end, wakes all processes on the write queue.
 
