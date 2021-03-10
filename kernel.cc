@@ -365,9 +365,9 @@ uintptr_t proc::syscall(regstate* regs) {
         syscall_retval = syscall_dup2(regs);
         break;
     
-    case SYSCALL_PIPE:
-        syscall_retval = syscall_pipe(regs);
-        break;
+    // case SYSCALL_PIPE:
+    //     syscall_retval = syscall_pipe(regs);
+    //     break;
 
     case SYSCALL_READ:
         syscall_retval = syscall_read(regs);
@@ -1330,7 +1330,7 @@ int proc::find_open_fd() {
 //    Opens a file and returns the file descriptor, or an error.
 int proc::syscall_open(regstate* regs) {
     // TODO
-    memfile_vnode* new_vn = (memfile_vnode*) kalloc(sizeof(vnode));
+    // memfile_vnode* new_vn = (memfile_vnode*) kalloc(sizeof(vnode));
     return 0;
 }
 
@@ -1364,72 +1364,72 @@ int proc::syscall_dup2(regstate* regs) {
 
 // proc::syscall_pipe(regs)
 //    Creates a read and write pipe and writes fd's into a single long as rfd | (wfd << 32).
-uintptr_t proc::syscall_pipe(regstate* regs) {
-    // Examine the fd table and ensure that there are at least 2 available spots.
-    if (PIPE_PARANOIA >= 2) {
-        log_printf("[pipe] Pipe called by process PID=%d\n", id_);
-    }
+// uintptr_t proc::syscall_pipe(regstate* regs) {
+//     // Examine the fd table and ensure that there are at least 2 available spots.
+//     if (PIPE_PARANOIA >= 2) {
+//         log_printf("[pipe] Pipe called by process PID=%d\n", id_);
+//     }
 
-    long rfd = find_open_fd();
-    long wfd = find_open_fd();
-    if (rfd == E_MFILE || wfd == E_MFILE) {
-        if (PIPE_PARANOIA >= 2) {
-            log_printf("[pipe] Insufficient open fdtable entries: rfd=%d, wfd=%d\n",
-                rfd, wfd);
-        }
-        return E_MFILE;
-    }
-    if (PIPE_PARANOIA >= 2) {
-        log_printf("[pipe] Successfully found file descriptors READ=%d, WRITE=%d\n",
-            rfd, wfd);
-    }
+//     long rfd = find_open_fd();
+//     long wfd = find_open_fd();
+//     if (rfd == E_MFILE || wfd == E_MFILE) {
+//         if (PIPE_PARANOIA >= 2) {
+//             log_printf("[pipe] Insufficient open fdtable entries: rfd=%d, wfd=%d\n",
+//                 rfd, wfd);
+//         }
+//         return E_MFILE;
+//     }
+//     if (PIPE_PARANOIA >= 2) {
+//         log_printf("[pipe] Successfully found file descriptors READ=%d, WRITE=%d\n",
+//             rfd, wfd);
+//     }
 
-    // Create a write node, get the allocated bbuf, and create the read node.
-    if (PIPE_PARANOIA >= 2) {
-        log_printf("[pipe] PID=%d allocating a new WRITE pipe\n", id_);
-    }
-    pipe_vnode* wr_vn = knew<pipe_vnode>(OF_WRITE, nullptr);
+//     // Create a write node, get the allocated bbuf, and create the read node.
+//     if (PIPE_PARANOIA >= 2) {
+//         log_printf("[pipe] PID=%d allocating a new WRITE pipe\n", id_);
+//     }
+//     pipe_vnode* wr_vn = knew<pipe_vnode>(OF_WRITE, nullptr);
 
-    // Perform checks on allocation.
-    if (!wr_vn) {
-        if (PIPE_PARANOIA >= 1) {
-            log_printf("[pipe] Failed to allocate a new WRITE pipe vnode, returning to user\n");
-        }
-        return E_NOMEM;
-    }
-    if (!wr_vn->bbuf_) {
-        if (PIPE_PARANOIA >= 1) {
-            log_printf("[pipe] Syscall detected failed allocation of pipe bbuf, returning to user\n");
-        }
-        delete wr_vn;
-        return E_NOMEM;
-    }
+//     // Perform checks on allocation.
+//     if (!wr_vn) {
+//         if (PIPE_PARANOIA >= 1) {
+//             log_printf("[pipe] Failed to allocate a new WRITE pipe vnode, returning to user\n");
+//         }
+//         return E_NOMEM;
+//     }
+//     if (!wr_vn->bbuf_) {
+//         if (PIPE_PARANOIA >= 1) {
+//             log_printf("[pipe] Syscall detected failed allocation of pipe bbuf, returning to user\n");
+//         }
+//         delete wr_vn;
+//         return E_NOMEM;
+//     }
 
-    if (PIPE_PARANOIA >= 2) {
-        log_printf("[pipe] PID=%d allocating a new READ pipe\n", id_);
-    }
-    pipe_vnode* rd_vn = knew<pipe_vnode>(OF_READ, wr_vn->get_bbuf());
-    if (!rd_vn) {
-        if (PIPE_PARANOIA >= 1) {
-            log_printf("[pipe] Failed to allocate a new READ pipe vnode, returning to user\n");
-        }
+//     if (PIPE_PARANOIA >= 2) {
+//         log_printf("[pipe] PID=%d allocating a new READ pipe\n", id_);
+//     }
+//     pipe_vnode* rd_vn = knew<pipe_vnode>(OF_READ, wr_vn->get_bbuf());
+//     if (!rd_vn) {
+//         if (PIPE_PARANOIA >= 1) {
+//             log_printf("[pipe] Failed to allocate a new READ pipe vnode, returning to user\n");
+//         }
 
-        // wr_vn destructor cannot delete the buffer unless the reader is successfully
-        // allocated, so we have to manually do it here.
-        delete wr_vn->bbuf_;
-        wr_vn->bbuf_ = nullptr;
-        delete wr_vn;
-        return E_NOMEM; // TODO change these to goto statements like fork fail handling
-    }
+//         // wr_vn destructor cannot delete the buffer unless the reader is successfully
+//         // allocated, so we have to manually do it here.
+//         delete wr_vn->bbuf_;
+//         wr_vn->bbuf_ = nullptr;
+//         delete wr_vn;
+//         return E_NOMEM; // TODO change these to goto statements like fork fail handling
+//     }
 
-    // At this points all allocations have been successfully made.
-    // TODO [MULTITH] lock accesses here.
-    fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
-    fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
+//     // At this points all allocations have been successfully made.
+//     // TODO [MULTITH] lock accesses here.
+//     fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
+//     fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
 
-    uintptr_t catfd = rfd | (wfd << 32); // concatenated fd, see title comment of function
-    return catfd;
-}
+//     uintptr_t catfd = rfd | (wfd << 32); // concatenated fd, see title comment of function
+//     return catfd;
+// }
 
 // IO_invalid(p, start, end, check_writable)
 //    Helper function that ensures read/write is valid.
