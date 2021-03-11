@@ -299,21 +299,21 @@ void* kalloc(uint64_t sz) {
         // defer the request to standard buddy allocation.
         if (alloc_type == SMALL_SLAB) { // Walk small slabs and set ptr if possible
             for (int i = 0; i < STATIC_SMALL_SLABS; ++i) {
-                if (SALLOC_PARANOIA >= 1) {
+                if (SALLOC_PARANOIA >= 2) {
                     log_printf("[slab_kalloc] Now searching small slab %ld\n", i);
                 }
 
                 if (smallslabs[i].state != SLAB_FULL) {
-                    if (SALLOC_PARANOIA >= 1) {
+                    if (SALLOC_PARANOIA >= 2) {
                         log_printf("[slab_kalloc] Small slab index %ld is available\n", smallslabs[i].ind);
                     }
                     ptr = smallslabs[i].give();
-                    if (SALLOC_PARANOIA >= 1) {
+                    if (SALLOC_PARANOIA >= 2) {
                         log_printf("[slab_kalloc] Grabbed ptr %p from small slab\n", ptr);
                     }
                     // We add 8 to cover the metadata at the beginning of the struct.
                     ptr = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
-                    if (SALLOC_PARANOIA >= 1) {
+                    if (SALLOC_PARANOIA >= 2) {
                         check_salloc(ptr);
                     }
                     if (SALLOC_PARANOIA >= 2 || BALLOC_PARANOIA >= 2) {
@@ -330,24 +330,24 @@ void* kalloc(uint64_t sz) {
         }
 
         for (int i = 0; i < STATIC_BIG_SLABS; ++i) {
-            if (SALLOC_PARANOIA >= 1) {
+            if (SALLOC_PARANOIA >= 2) {
                 log_printf("[slab_kalloc] Now searching big slab index %ld\n", bigslabs[i].ind);
             }
 
             if (bigslabs[i].state != SLAB_FULL) {
-                if (SALLOC_PARANOIA >= 1) {
+                if (SALLOC_PARANOIA >= 2) {
                     log_printf("[slab_kalloc] Big slab index %ld is available\n", bigslabs[i].ind);
                 }
                 ptr = bigslabs[i].give();
-                if (SALLOC_PARANOIA >= 1) {
+                if (SALLOC_PARANOIA >= 2) {
                     log_printf("[slab_kalloc] Grabbed ptr %p from big slab\n", ptr);
                 }
                 // We add 8 to cover the metadata at the beginning of the struct.
                 ptr = reinterpret_cast<void*>(reinterpret_cast<uint64_t>(ptr) + 8);
-                if (SALLOC_PARANOIA >= 1) {
+                if (SALLOC_PARANOIA >= 2) {
                     check_salloc(ptr);
                 }
-                if (SALLOC_PARANOIA >= 2 || BALLOC_PARANOIA >= 2) {
+                if (SALLOC_PARANOIA >= 3 || BALLOC_PARANOIA >= 3) {
                     log_printf("[kalloc/slab_kalloc] UNLOCK grabbed by process %d\n", current()->id_);
                 }
                 page_lock.unlock(irqs);

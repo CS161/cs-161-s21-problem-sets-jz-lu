@@ -1400,6 +1400,9 @@ static int IO_invalid(proc* p, uintptr_t start, uintptr_t end, bool check_writab
 // filename_invalid(pathname)
 //    Returns 0 if a path name of valid length and in accessible memory. Fails otherwise.
 static int pathname_invalid(proc* p, const char* pathname) {
+    if (VFS_MF_PARANOIA >= 2) {
+        log_printf("[pathname_invalid] Validating pathname\n");
+    }
     if (!pathname) { // nullptr check
         if (VFS_MF_PARANOIA >= 1) {
             log_printf("[pathname_invalid] Error: nullptr passed in as path name\n");
@@ -1409,9 +1412,23 @@ static int pathname_invalid(proc* p, const char* pathname) {
     uintptr_t pos = 0;
 
     // Generate the size, checking memory as we go. // TODO
+    vmiter it(p, reinterpret_cast<uintptr_t>(pathname));
+    if (!(it.present() && it.user())) { // Special case for first char
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[pathname_invalid] Invalid filename, entire string not in user-accessible memory\n");
+        }
+        return E_FAULT;
+    }
     for (char* c = (char*) pathname; 
         *c && pos <= MAX_FILENAME_LEN; 
         ++c, ++pos) {
+        it += 1;
+        if (!(it.present() && it.user())) {
+            if (VFS_MF_PARANOIA >= 1) {
+                log_printf("[pathname_invalid] Invalid filename, part of string not in user-accessible memory\n");
+            }
+            return E_FAULT;
+        }
     }
 
     if (pos == MAX_FILENAME_LEN) {
@@ -1419,15 +1436,8 @@ static int pathname_invalid(proc* p, const char* pathname) {
             log_printf("[pathname_invalid] Invalid file name: too long. Ensure buf ptr is correct\n");
         }
         return E_FAULT;
-    } else {
-        if (VFS_MF_PARANOIA >= 2) {
-            log_printf("[pathname_invalid] Confirmed pathname '%s' is a valid string, checking mem\n",
-                pathname);
-        }
-        uintptr_t start = reinterpret_cast<uintptr_t>(pathname);
-        // The end is noninvlusive, so we add 1 to the final position (offset).
-        return IO_invalid(p, start, start+pos+1);
-    }
+    } 
+    return 0;
 }
 
 // proc::syscall_open(regs)
