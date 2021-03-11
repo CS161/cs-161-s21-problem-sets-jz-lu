@@ -6,7 +6,7 @@ static T get_min(T a, T b) {
     return a < b ? a : b;
 }
 
-size_t io_sz(size_t start, size_t cap, size_t sz) {
+static size_t io_sz(size_t start, size_t cap, size_t sz) {
     assert(cap >= start);
     if (cap - start > sz) {
         return sz;
@@ -126,60 +126,80 @@ uintptr_t kb_c_vnode::read(uintptr_t addr, size_t sz) {
     return n;
 }
 
-memfile_vnode::memfile_vnode(int mode, memfile* mf=nullptr) : vnode(mode) {
+// mf can be a nullptr, but then set_mf(mf) must be called before any I/O.
+// syscall_open() uses this feature to prevent memory leaks.
+memfile_vnode::memfile_vnode(int mode, memfile* mf) : vnode(mode) {
     if (VFS_MF_PARANOIA >= 1) {
         log_printf("[memfile-vnode-constructor] memfile vnode constructor called\n");
     }
     mf_ = mf;
-    assert(mf);
     assert(offset_ == 0);
     assert(refcount_ == 0);
-    assert(!mf_->empty());
 }
 
 memfile_vnode::~memfile_vnode() {
-    spinlock_guard guard(open_close_lock_);
     if (VFS_MF_PARANOIA >= 1) {
         log_printf("[memfile_vnode-destructor] *Closing time...one last call for alcohol*\n");
     }
     assert(refcount_ == 0);
 }
 
-memfile_vnode::set_mf(memfile* mf) {
-    spinlock_guard guard(open_close_lock_); // This is technically part of opening
+void memfile_vnode::set_mf(memfile* mf) {
     assert(mf);
     assert(!mf_); // Can only set this once
     mf_ = mf;
 }
 
+int memfile_vnode::close() {
+    if (VFS_MF_PARANOIA >= 2) {
+        log_printf("[memfile_vnode-close] memfile close called\n");
+    }
+    if (!refcount_) {
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[memfile_vnode-close] Failed to close: file not open\n");
+        }
+        return E_BADF;
+    }
+    return --refcount_;
+}
+
 uintptr_t memfile_vnode::write(uintptr_t addr, size_t sz) {
     if (!writeable()) {
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[memfile_vnode-write] Rejected attempted write on read-only node\n");
+        }
         return E_BADF;
     }
     spinlock_guard guard(mf_->lock_);
 
     // Compute the best size that can be written; attempt once to 
     // increase the file size if the best size is not enough.
-    size_t best_sz = io_sz(offset_, mf_->capacity_, sz);
+    size_t best_sz = ::io_sz(offset_, mf_->len_, sz);
     if (best_sz < sz) {
         if (mf_->set_length(offset_ + sz) == E_NOSPC) {
+            if (VFS_MF_PARANOIA >= 1) {
+                log_printf("[memfile_vnode-write] No space remaining in file\n");
+            }
             return E_NOSPC;
         }
     }
     void* mf_ptr = reinterpret_cast<void*>(mf_->data_ + offset_);
     memcpy(mf_ptr, reinterpret_cast<void*>(addr), sz);
     
-    // Update the offset, and if needed, the length of the memfile
+    // Update the offset.
     offset_ += sz;
     return sz;
 }
 
 uintptr_t memfile_vnode::read(uintptr_t addr, size_t sz) {
     if (!readable()) {
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[memfile_vnode-write] Rejected attempted read on write-only node\n");
+        }
         return E_BADF;
     }
     spinlock_guard guard(mf_->lock_);
-    size_t rd_sz = io_sz(offset_, mf_->len_, sz);
+    size_t rd_sz = ::io_sz(offset_, mf_->len_, sz);
     void* mf_ptr = reinterpret_cast<void*>(mf_->data_ + offset_);
     memcpy(reinterpret_cast<void*>(addr), mf_ptr, rd_sz);
 
@@ -360,7 +380,6 @@ pipe_bbuf* pipe_vnode::get_bbuf() {
 }
 
 int pipe_vnode::close() {
-    spinlock_guard guard(open_close_lock_);
     if (PIPE_PARANOIA >= 1) {
         log_printf("[pipe_vnode-close] pipe close called\n");
     }
@@ -370,7 +389,7 @@ int pipe_vnode::close() {
 
 uintptr_t pipe_vnode::write(uintptr_t addr, size_t sz) {
     if (!writeable()) {
-        if (PIPE_PARANOIA >= 2) {
+        if (PIPE_PARANOIA >= 1) {
             log_printf("[pipe] Rejected attempted write to read end of pipe\n");
         }
         return E_BADF;
@@ -383,7 +402,7 @@ uintptr_t pipe_vnode::write(uintptr_t addr, size_t sz) {
 
 uintptr_t pipe_vnode::read(uintptr_t addr, size_t sz) {
     if (!readable()) {
-        if (PIPE_PARANOIA >= 2) {
+        if (PIPE_PARANOIA >= 1) {
             log_printf("[pipe] Rejected attempted read to write end of pipe\n");
         }
         return E_BADF;

@@ -79,7 +79,6 @@ struct memfile {
     size_t len_;                         // length of file data
     size_t capacity_;                    // # bytes available in `data_`
     spinlock lock_;                      // locks the memfile for I/O
-    static spinlock initfs_lock_;        // TODO single lock of initfs
 
     inline memfile();
     inline memfile(const char* name, unsigned char* first,
@@ -128,7 +127,7 @@ inline bool memfile::empty() const {
 
 // memfile::loader: loads a `proc` from a `memfile`
 
-struct memfile_loader : public proc_loader {
+struct memfile_loader : public proc_loader { // TODO lock access to initfs
     memfile* memfile_;
     inline memfile_loader(memfile* mf, x86_64_pagetable* pt)
         : proc_loader(pt), memfile_(mf) {

@@ -244,7 +244,7 @@ void consolestate::cursor(bool show) {
 
 
 // memfile functions
-
+spinlock initfs_lock_;        // single lock of initfs
 // memfile::initfs_lookup(name, namelen, create)
 //    Search `memfile::initfs` for a file named `name`. Return the
 //    index of that `memfile` if found; this will be >= 0 and <
@@ -255,6 +255,8 @@ int memfile::initfs_lookup(const char* name, bool create) {
     memfile* empty = nullptr;
     size_t namelen = min(strlen(name), size_t(namesize) - 1);
 
+    // Lock access to initfs
+    spinlock_guard guard(initfs_lock_);
     // search for a file named `name`
     for (memfile* f = initfs; f != initfs + initfs_size; ++f) {
         if (!f->empty()
@@ -269,14 +271,24 @@ int memfile::initfs_lookup(const char* name, bool create) {
 
     if (!create) {
         // file not found
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[initfs_lookup] File not found, no create flag given\n");
+        }
         return E_NOENT;
     } else if (!empty) {
         // no space in directory
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[initfs_lookup] No space remaining in directory\n");
+        }
         return E_NOSPC;
     } else if (namelen >= namesize) {
         // name too long for `memfile::name_`
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[initfs_lookup] Name too long\n");
+        }
         return E_NAMETOOLONG;
     } else { // build a pre-constructed memfile in the static array
+        // The lock on initfs has to extend to here, when the spot is taken up.
         memcpy(empty->name_, name, namelen);
         empty->name_[namelen] = 0;
         empty->data_ = nullptr;

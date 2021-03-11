@@ -1399,7 +1399,7 @@ static int IO_invalid(proc* p, uintptr_t start, uintptr_t end, bool check_writab
 
 // filename_invalid(pathname)
 //    Returns 0 if a path name of valid length and in accessible memory. Fails otherwise.
-static int filename_invalid(proc* p, const char* pathname) {
+static int pathname_invalid(proc* p, const char* pathname) {
     uintptr_t pos = 0;
 
     // Generate the size.
@@ -1430,39 +1430,40 @@ int proc::syscall_open(regstate* regs) {
         return E_MFILE;
     }
     const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
-    if (filename_invalid(this, pathname)) { // Check filename
+    if (pathname_invalid(this, pathname)) { // Check filename
         return E_FAULT;
     }
     int flags = regs->reg_rsi;
-    bool create = flags & OF_CREAT;
-    bool trunc = flags & OF_TRUNC;
-    bool mode = flags & OF_RDWR;
+    bool create = (flags & OF_CREAT);
+    bool trunc = (flags & OF_TRUNC);
+    bool mode = flags & (OF_RDWR);
+    if (!mode) { // Check for null read/write mode flag
+        return E_INVAL;
+    }
 
-    memfile_vnode* mf_vn = knew<memfile_vnode>(mode);
+    memfile_vnode* mf_vn = knew<memfile_vnode>(mode, nullptr); // Set memfile ptr after fs lookup
     if (!mf_vn) { // Error!
         if (VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_open] Failed to k-alloc memfile vnode\n");
         }
         return E_NOMEM;
     }
-    int initfs_index = memfile::initfs_lookup(pathname, create); // TODO lock initfs_lookup
+    int initfs_index = memfile::initfs_lookup(pathname, create);
     if (initfs_index < 0) { // Error code was returned
         return initfs_index;
     }
-    assert(initfs_index < memfile::namesize);
+    assert(initfs_index < (int) memfile::namesize);
     mf_vn->set_mf(memfile::initfs + initfs_index); // Set memfile* ptr in vnode
-
+    ++mf_vn->refcount_;
+    fdtable[fd] = reinterpret_cast<vnode*>(mf_vn);
     //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
+
     if (trunc) { // Truncate if requested
         int retstat = memfile::initfs[initfs_index].set_length(0);
         assert(retstat == 0);
     }
-
-    // TODO 
-    // * Check over read and write to ensure everything locks properly
-    // * Figure out how to free the memfile using the memfile struct driver code at closing
-
-    return 0;
+    
+    return fd;
 }
 
 // proc::syscall_dup2(regs)
@@ -1505,15 +1506,17 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
     if (PIPE_PARANOIA >= 2) {
         log_printf("[syscall_pipe] Pipe called by process PID=%d\n", id_);
     }
+    long rfd, wfd;
+    pipe_vnode *wr_vn = nullptr, *rd_vn = nullptr;
 
-    long rfd = find_open_fd(false);
+    rfd = find_open_fd(false);
     if (rfd == E_MFILE) {
         if (PIPE_PARANOIA >= 2) {
             log_printf("[syscall_pipe] No open READ entry: rfd=%d\n", rfd);
         }
         return E_MFILE;
     }
-    long wfd = find_open_fd(true, rfd);
+    wfd = find_open_fd(true, rfd);
     if (wfd == E_MFILE) {
         if (PIPE_PARANOIA >= 2) {
             log_printf("[syscall_pipe] No open WRITE entry: rfd=%d, wfd=5d\n", rfd, wfd);
@@ -1529,38 +1532,31 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
     if (PIPE_PARANOIA >= 2) {
         log_printf("[syscall_pipe] PID=%d allocating a new WRITE pipe\n", id_);
     }
-    pipe_vnode* wr_vn = knew<pipe_vnode>(OF_WRITE, nullptr);
+    wr_vn = knew<pipe_vnode>(OF_WRITE, nullptr);
 
     // Perform checks on allocation.
     if (!wr_vn) {
         if (PIPE_PARANOIA >= 1) {
             log_printf("[syscall_pipe] Failed to allocate a new WRITE pipe vnode, returning to user\n");
         }
-        return E_NOMEM;
+        goto emem;
     }
     if (!wr_vn->bbuf_) {
         if (PIPE_PARANOIA >= 1) {
             log_printf("[syscall_pipe] Syscall detected failed allocation of pipe bbuf, returning to user\n");
         }
-        delete wr_vn;
-        return E_NOMEM;
+        goto free_wr;
     }
 
     if (PIPE_PARANOIA >= 2) {
         log_printf("[syscall_pipe] PID=%d allocating a new READ pipe\n", id_);
     }
-    pipe_vnode* rd_vn = knew<pipe_vnode>(OF_READ, wr_vn->get_bbuf());
+    rd_vn = knew<pipe_vnode>(OF_READ, wr_vn->get_bbuf());
     if (!rd_vn) {
         if (PIPE_PARANOIA >= 1) {
             log_printf("[syscall_pipe] Failed to allocate a new READ pipe vnode, returning to user\n");
         }
-
-        // wr_vn destructor cannot delete the buffer unless the reader is successfully
-        // allocated, so we have to manually do it here.
-        delete wr_vn->bbuf_;
-        wr_vn->bbuf_ = nullptr;
-        delete wr_vn;
-        return E_NOMEM; // TODO change these to goto statements like fork fail handling
+        goto free_bbuf;
     }
 
     // At this points all allocations have been successfully made.
@@ -1575,8 +1571,15 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
         show_fdtable_();
     }
 
-    uintptr_t catfd = rfd | (wfd << 32); // concatenated fd, see title comment of function
-    return catfd;
+    return rfd | (wfd << 32); // concatenated fd, see title comment of function
+
+    free_bbuf:
+        delete wr_vn->bbuf_;
+        wr_vn->bbuf_ = nullptr;
+    free_wr:
+        delete wr_vn;
+    emem:
+        return E_NOMEM;
 }
 
 
@@ -1659,7 +1662,7 @@ int proc::syscall_close(regstate* regs) {
     }
     if (!fdtable[fd]->close()) { // If refcount hits 0
         if (VFS_PARANOIA >= 1) {
-            log_printf("[syscall_close] Closed node fd=%d empty, freeing\n", fd);
+            log_printf("[syscall_close] Closed node at fd=%d empty, freeing\n", fd);
         }
         delete fdtable[fd];
     }
