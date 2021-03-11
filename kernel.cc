@@ -1400,18 +1400,30 @@ static int IO_invalid(proc* p, uintptr_t start, uintptr_t end, bool check_writab
 // filename_invalid(pathname)
 //    Returns 0 if a path name of valid length and in accessible memory. Fails otherwise.
 static int pathname_invalid(proc* p, const char* pathname) {
+    if (!pathname) { // nullptr check
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[pathname_invalid] Error: nullptr passed in as path name\n");
+        }
+        return E_FAULT;
+    }
     uintptr_t pos = 0;
 
-    // Generate the size.
-    for (char* c = (char*) pathname; c && pos <= MAX_FILENAME_LEN; ++c, ++pos) {
+    // Generate the size, checking memory as we go. // TODO
+    for (char* c = (char*) pathname; 
+        *c && pos <= MAX_FILENAME_LEN; 
+        ++c, ++pos) {
     }
-    assert(pos <= MAX_FILENAME_LEN);
+
     if (pos == MAX_FILENAME_LEN) {
-        if (VFS_MF_PARANOIA >= 2) {
-            log_printf("[filename_invalid] Invalid file name: too long. Ensure buf ptr is correct\n");
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[pathname_invalid] Invalid file name: too long. Ensure buf ptr is correct\n");
         }
         return E_FAULT;
     } else {
+        if (VFS_MF_PARANOIA >= 2) {
+            log_printf("[pathname_invalid] Confirmed pathname '%s' is a valid string, checking mem\n",
+                pathname);
+        }
         uintptr_t start = reinterpret_cast<uintptr_t>(pathname);
         // The end is noninvlusive, so we add 1 to the final position (offset).
         return IO_invalid(p, start, start+pos+1);
@@ -1421,16 +1433,16 @@ static int pathname_invalid(proc* p, const char* pathname) {
 // proc::syscall_open(regs)
 //    Opens a file and returns the file descriptor, or an error.
 int proc::syscall_open(regstate* regs) {
-    // TODO [MULTITH] lock access to fdtable until red comment.
-    long fd = find_open_fd(false);
-    if (fd == E_MFILE) { // Handle no open fdtable entries
-        if (VFS_MF_PARANOIA >= 1) {
-            log_printf("[syscall_open] No open fdtable entry: fd=%d\n", fd);
-        }
-        return E_MFILE;
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[syscall_open] Open called\n");
     }
+
+    // First, validate arguments.
     const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
     if (pathname_invalid(this, pathname)) { // Check filename
+        if (VFS_PARANOIA >= 1) {
+            log_printf("[syscall_open] Invalid pathname\n");
+        }
         return E_FAULT;
     }
     int flags = regs->reg_rsi;
@@ -1439,6 +1451,18 @@ int proc::syscall_open(regstate* regs) {
     bool mode = flags & (OF_RDWR);
     if (!mode) { // Check for null read/write mode flag
         return E_INVAL;
+    }
+
+    // Attempt to open the file.
+    // TODO [MULTITH] lock access to fdtable until red comment.
+    long fd = find_open_fd(false);
+    if (fd == E_MFILE) { // Handle no open fdtable entries
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[syscall_open] No open fdtable entry: fd=%d\n", fd);
+        }
+        return E_MFILE;
+    } else if (VFS_PARANOIA >= 2) {
+        log_printf("[syscall_open] Found valid fd=%d for new open\n", fd);
     }
 
     memfile_vnode* mf_vn = knew<memfile_vnode>(mode, nullptr); // Set memfile ptr after fs lookup
@@ -1462,7 +1486,7 @@ int proc::syscall_open(regstate* regs) {
         int retstat = memfile::initfs[initfs_index].set_length(0);
         assert(retstat == 0);
     }
-    
+
     return fd;
 }
 

@@ -17,7 +17,6 @@ void process_main() {
     assert_eq(n, 3);
     assert_memeq(buf, "n p", 3);
 
-
     int f2 = sys_open("emerson.txt", OF_READ);
     assert(f2 > 2 && f2 != f);
 
@@ -63,7 +62,6 @@ void process_main() {
     assert_eq(n, 10);
     assert_memeq(buf, "polite, a ", 10);
 
-
     n = sys_read(f3, buf, sizeof(buf));
     assert_eq(n, 79);
     assert_memeq(buf, "cheerful cry,\n", 14);
@@ -81,7 +79,6 @@ void process_main() {
 
     r = sys_close(f3);
     assert_eq(r, 0);
-
 
     r = sys_open(nullptr, OF_READ);
     assert_eq(r, E_FAULT);
