@@ -276,7 +276,7 @@ int memfile::initfs_lookup(const char* name, bool create) {
     } else if (namelen >= namesize) {
         // name too long for `memfile::name_`
         return E_NAMETOOLONG;
-    } else {
+    } else { // build a pre-constructed memfile in the static array
         memcpy(empty->name_, name, namelen);
         empty->name_[namelen] = 0;
         empty->data_ = nullptr;

@@ -79,6 +79,7 @@ struct memfile {
     size_t len_;                         // length of file data
     size_t capacity_;                    // # bytes available in `data_`
     spinlock lock_;                      // locks the memfile for I/O
+    static spinlock initfs_lock_;        // TODO single lock of initfs
 
     inline memfile();
     inline memfile(const char* name, unsigned char* first,
@@ -96,7 +97,7 @@ struct memfile {
     static memfile initfs[initfs_size];
 
     // look up the memfile named `name`, creating it if it does not exist
-    // and `create == true`. Return an index into `initfs` or an error code.
+    // if `create == true`. Return an index into `initfs` or an error code.
     static int initfs_lookup(const char* name, bool create = false);
 };
 

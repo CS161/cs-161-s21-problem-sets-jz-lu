@@ -18,7 +18,8 @@ struct elf_program;
 #define CANARY_EV 894753471348 // Expected canary value
 
 // VFS constants
-#define MAX_FD  8
+#define MAX_FD              8
+#define MAX_FILENAME_LEN    64
 
 // kernel.hh
 //

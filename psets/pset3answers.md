@@ -8,7 +8,7 @@ Answers to written questions
 ## Changes to the design document
 ### Part B
 1. We neglected to mention that `fork()` should also increment the `refcount` of each copied `vnode`.
-2. At the time of design we did not think about process VFS cleanup upon exit. `syscall_exit()` must walk through the `proc::fdtable[]` and close all.
+2. At the time of design we did not think about process VFS cleanup upon exit. `syscall_exit()` must walk through the `proc::fdtable[]` and close all open file descriptors in the same way `syscall_close()` does it.
 
 ### Part C
 The bounded buffer implementation follows closely the implementation from CS 61 linked on the problem set statement; as such, we refrain from restating all of the logic for the bounded buffer. We built the pipe `vnode` system in our design document early on, so any updates are below.
@@ -16,7 +16,10 @@ The bounded buffer implementation follows closely the implementation from CS 61 
 2. In the document we declared that the `close` syscall would call `kfree()`. Since we need destructors to be called, `delete` will be used instead. Due to the specifications of the C++ linker, the destructor of the base `vnode` struct is declared as virtual and all virtual functions in the base struct are subsequently defined, as the struct is no longer pure virtual.
 
 ### Part D
-Locking strategy: TODO.
+Updates to the design:
+1. Validation of the filename string is a priori ambiguous because the size of the string isn't passed explicitly. If the user gives a gigantic string that has no end (probably on accident by passing in a pointer to unintended chunks of memory) we should fail. As such we set the maximum filename size to `MAX_FILENAME_LEN = 64` in `kernel.hh` to match that of `memfile::namesize`. We then compute the size by walking through the string until we find the null terminator or if we determine the string is too long. Given a size from there, we can call the I/O validator from Part A to finish validation.
+
+**Locking strategy**: TODO.
 
 Grading notes
 -------------

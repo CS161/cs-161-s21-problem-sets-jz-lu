@@ -908,6 +908,7 @@ void proc::syscall_exit(regstate* regs) {
     if (EXIT_PARANOIA >= 2 || VFS_PARANOIA >= 2) {
         log_printf("[exit] Closing all open file descriptors\n");
     }
+    // TODO [MULTITH] lock fdtable accesses.
     for (int fd = 0; fd < MAX_FD; ++fd) {
         if (fdtable[fd]) {
             if (!fdtable[fd]->close()) { // If refcount hits 0
@@ -1342,7 +1343,8 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
 //    Can exclude one fd if necessary (e.g. if it were temporarily taken but not yet assigned).
 //    If exclude_one is turned on then taken_fd must be passed in.
 int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
-    // TODO [MULTITH] lock this function.
+    // TODO [MULTITH] DO NOT LOCK THIS! Lock places that call this, as lock usually
+    // TODO needed until after mem alloc successful.
     for (int fd = 3; fd < MAX_FD; ++fd) {
         if (!fdtable[fd] && (!exclude_one || fd != taken_fd)) {
             return fd;
@@ -1362,11 +1364,104 @@ void proc::show_fdtable_() {
     log_printf("%d:%s] <-- TAIL\n", MAX_FD-1, fdtable[MAX_FD-1] ? "T" : "F");
 }
 
+// IO_invalid(p, start, end, check_writable)
+//    Helper function that ensures read/write is valid. end is noninclusive.
+//    Returns nonzero if invalid, due to bad memory or address integer overflow.
+static int IO_invalid(proc* p, uintptr_t start, uintptr_t end, bool check_writable=false) {
+    // Integer overflow check.
+    if (end < start) {
+        if (VFS_PARANOIA >= 2) {
+            log_printf("[IO_invalid] Invalid I/O addr, range causes integer overflow\n");
+        }
+        return E_FAULT;
+    }
+
+    // Permission range check.
+    for (vmiter it(p, start); it.va() < end; it.next()) {
+        if (!(it.present() && it.user())) {
+            if (VFS_PARANOIA >= 2) {
+                log_printf("[IO_invalid] Invalid I/O addr, not user-accessible memory\n");
+            }
+            return E_FAULT;
+        }
+        if (check_writable && !it.writable()) {
+            if (VFS_PARANOIA >= 2) {
+                log_printf("[IO_invalid] Invalid read-to addr, not writeable memory\n");
+            }
+            return E_FAULT;
+        }
+    }
+    if (VFS_PARANOIA >= 3) {
+        log_printf("[IO_invalid] Validated addr 0x%x of sz %lu\n", start, end-start);
+    }
+    return 0;
+}
+
+// filename_invalid(pathname)
+//    Returns 0 if a path name of valid length and in accessible memory. Fails otherwise.
+static int filename_invalid(proc* p, const char* pathname) {
+    uintptr_t pos = 0;
+
+    // Generate the size.
+    for (char* c = (char*) pathname; c && pos <= MAX_FILENAME_LEN; ++c, ++pos) {
+    }
+    assert(pos <= MAX_FILENAME_LEN);
+    if (pos == MAX_FILENAME_LEN) {
+        if (VFS_MF_PARANOIA >= 2) {
+            log_printf("[filename_invalid] Invalid file name: too long. Ensure buf ptr is correct\n");
+        }
+        return E_FAULT;
+    } else {
+        uintptr_t start = reinterpret_cast<uintptr_t>(pathname);
+        // The end is noninvlusive, so we add 1 to the final position (offset).
+        return IO_invalid(p, start, start+pos+1);
+    }
+}
+
 // proc::syscall_open(regs)
 //    Opens a file and returns the file descriptor, or an error.
 int proc::syscall_open(regstate* regs) {
-    // TODO
-    // memfile_vnode* new_vn = (memfile_vnode*) kalloc(sizeof(vnode));
+    // TODO [MULTITH] lock access to fdtable until red comment.
+    long fd = find_open_fd(false);
+    if (fd == E_MFILE) { // Handle no open fdtable entries
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[syscall_open] No open fdtable entry: fd=%d\n", fd);
+        }
+        return E_MFILE;
+    }
+    const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
+    if (filename_invalid(this, pathname)) { // Check filename
+        return E_FAULT;
+    }
+    int flags = regs->reg_rsi;
+    bool create = flags & OF_CREAT;
+    bool trunc = flags & OF_TRUNC;
+    bool mode = flags & OF_RDWR;
+
+    memfile_vnode* mf_vn = knew<memfile_vnode>(mode);
+    if (!mf_vn) { // Error!
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[syscall_open] Failed to k-alloc memfile vnode\n");
+        }
+        return E_NOMEM;
+    }
+    int initfs_index = memfile::initfs_lookup(pathname, create); // TODO lock initfs_lookup
+    if (initfs_index < 0) { // Error code was returned
+        return initfs_index;
+    }
+    assert(initfs_index < memfile::namesize);
+    mf_vn->set_mf(memfile::initfs + initfs_index); // Set memfile* ptr in vnode
+
+    //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
+    if (trunc) { // Truncate if requested
+        int retstat = memfile::initfs[initfs_index].set_length(0);
+        assert(retstat == 0);
+    }
+
+    // TODO 
+    // * Check over read and write to ensure everything locks properly
+    // * Figure out how to free the memfile using the memfile struct driver code at closing
+
     return 0;
 }
 
@@ -1482,27 +1577,6 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
 
     uintptr_t catfd = rfd | (wfd << 32); // concatenated fd, see title comment of function
     return catfd;
-}
-
-// IO_invalid(p, start, end, check_writable)
-//    Helper function that ensures read/write is valid.
-//    Returns nonzero if invalid, due to bad memory or address integer overflow.
-static int IO_invalid(proc* p, uintptr_t start, uintptr_t end, bool check_writable=false) {
-    // Integer overflow check.
-    if (end < start) {
-        return E_FAULT;
-    }
-
-    // Permission range check.
-    for (vmiter it(p, start); it.va() < end; it.next()) {
-        if (!(it.present() && it.user())) {
-            return E_FAULT;
-        }
-        if (check_writable && !it.writable()) {
-            return E_FAULT;
-        }
-    }
-    return 0;
 }
 
 

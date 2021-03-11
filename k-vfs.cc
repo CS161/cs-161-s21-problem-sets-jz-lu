@@ -126,15 +126,30 @@ uintptr_t kb_c_vnode::read(uintptr_t addr, size_t sz) {
     return n;
 }
 
-memfile_vnode::memfile_vnode(int mode, memfile* mf) : vnode(mode) {
-    if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
-        log_printf("[memfile-vnode] memfile vnode destructor called\n");
+memfile_vnode::memfile_vnode(int mode, memfile* mf=nullptr) : vnode(mode) {
+    if (VFS_MF_PARANOIA >= 1) {
+        log_printf("[memfile-vnode-constructor] memfile vnode constructor called\n");
     }
     mf_ = mf;
     assert(mf);
     assert(offset_ == 0);
     assert(refcount_ == 0);
     assert(!mf_->empty());
+}
+
+memfile_vnode::~memfile_vnode() {
+    spinlock_guard guard(open_close_lock_);
+    if (VFS_MF_PARANOIA >= 1) {
+        log_printf("[memfile_vnode-destructor] *Closing time...one last call for alcohol*\n");
+    }
+    assert(refcount_ == 0);
+}
+
+memfile_vnode::set_mf(memfile* mf) {
+    spinlock_guard guard(open_close_lock_); // This is technically part of opening
+    assert(mf);
+    assert(!mf_); // Can only set this once
+    mf_ = mf;
 }
 
 uintptr_t memfile_vnode::write(uintptr_t addr, size_t sz) {

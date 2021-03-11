@@ -1,6 +1,8 @@
 #include<iostream>
 using namespace std;
 
+#define MAX_FILENAME_LEN            128
+
 struct Base {
     int n = 0;
     Base(int i) {
@@ -42,8 +44,6 @@ struct Sibling:public Base {
 };
 
 int main() {
-    Derived d = Derived(10);
-    cout << d.pie() << endl;
-    Sibling s = Sibling(10);
-    cout << s.pie() << endl;
+    int arr[5] = {1, 4, 9, 16, 25};
+    cout << *(arr+4) << endl;
 }

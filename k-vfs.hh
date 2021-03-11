@@ -20,9 +20,12 @@ struct kb_c_vnode:public vnode {
 
 struct memfile_vnode:public vnode {
     memfile* mf_;                               // in-memory file, lock defined in here
+    spinlock open_close_lock_;
 
     memfile_vnode(int mode, memfile* mf);
+    ~memfile_vnode();
 
+    void set_mf(memfile* mf);
     uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
 };
