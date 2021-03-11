@@ -21,7 +21,7 @@ proc::proc() {
         kb_c_vnode* cn = knew<kb_c_vnode>();
         global_cnode = reinterpret_cast<vnode*>(cn);
     }
-    for (int fd = 0; fd <= 2; ++fd) {
+    for (int fd = 0; fd <= 2; ++fd) { // TODO [MULTITH] lock fdtable accesses
         if (fdtable[fd] != global_cnode) {
             assert(!fdtable[fd]);
             fdtable[fd] = global_cnode;

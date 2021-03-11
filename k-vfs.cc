@@ -67,6 +67,9 @@ kb_c_vnode::~kb_c_vnode() {
 
 int kb_c_vnode::close() {
     spinlock_guard guard(open_close_lock_); // May be contended for
+    if (VFS_KBC_PARANOIA >= 1) {
+        log_printf("[kb_c_vnode-close] KBC close called\n");
+    }
     assert(refcount_ > 0);
     return --refcount_;
 }
@@ -184,11 +187,13 @@ bool pipe_bbuf::pipe_full() {
 
 // Assumes lock held.
 void pipe_bbuf::close_write() {
+    assert(!write_closed_);
     write_closed_ = true;
 }
 
 // Assumes lock held.
 void pipe_bbuf::close_read() {
+    assert(!read_closed_);
     read_closed_ = true;
 }
 
@@ -196,6 +201,9 @@ uintptr_t pipe_bbuf::write(uintptr_t addr, size_t sz) {
     spinlock_guard guard(lock_);
     if (PIPE_PARANOIA >= 2) {
         log_printf("[pipe_bbuf-write] Pipe bbuf now handling a WRITE of %lu size\n", sz);
+    } 
+    if (PIPE_PARANOIA >= 3) {
+        log_printf("[pipe_bbuf-write] Buf dump (to be written): '%s'\n", reinterpret_cast<char*>(addr));
     }
     assert(!write_closed_);
 
@@ -249,7 +257,7 @@ uintptr_t pipe_bbuf::read(uintptr_t addr, size_t sz) {
         if (PIPE_PARANOIA >= 2) {
             log_printf("[pipe_bbuf-read] Pipe bbuf empty, blocking\n");
         }
-        waiter().block_until(wrq_, [&] () {
+        waiter().block_until(rdq_, [&] () {
             return (!pipe_empty() || write_closed_);
         }, guard);
     }
@@ -301,12 +309,17 @@ pipe_vnode::pipe_vnode(int mode, pipe_bbuf* bbuf)
     }
 }
 
-pipe_vnode::~pipe_vnode() {
+pipe_vnode::~pipe_vnode() {    
+    spinlock_guard guard(bbuf_->lock_);
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[pipe] pipe %s end destructor called\n",
+            mode_ == OF_READ ? "READ" : "WRITE");
+    }
+
     // If one or more initial allocations failed the destructor does nothing.
     if (!bbuf_) return;
 
     // Tell the bounded buffer to close off the relevant end.
-    spinlock_guard guard(bbuf_->lock_);
     if (mode_ == OF_READ) { // Read node
         bbuf_->close_read();
         bbuf_->wrq_.wake_all();
@@ -319,6 +332,9 @@ pipe_vnode::~pipe_vnode() {
     // the desctructor is under bbuf lock, so there are no
     // races for double frees. The last node to transcend frees bbuf.
     if (bbuf_->write_closed_ && bbuf_->read_closed_) {
+        if (PIPE_PARANOIA >= 1) {
+            log_printf("[pipe] Both ends of pipe closed, deleting buffer\n");
+        }
         delete bbuf_;
     }
     return;
@@ -326,6 +342,15 @@ pipe_vnode::~pipe_vnode() {
 
 pipe_bbuf* pipe_vnode::get_bbuf() {
     return bbuf_;
+}
+
+int pipe_vnode::close() {
+    spinlock_guard guard(open_close_lock_);
+    if (PIPE_PARANOIA >= 1) {
+        log_printf("[pipe_vnode-close] pipe close called\n");
+    }
+    assert(refcount_ > 0);
+    return --refcount_;
 }
 
 uintptr_t pipe_vnode::write(uintptr_t addr, size_t sz) {

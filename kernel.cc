@@ -610,15 +610,23 @@ int proc::syscall_fork(regstate* regs) {
     }
 
     // Copy over parent's registers.
-    memcpy(child->regs_, regs, sizeof(regstate)); 
+    memcpy(child->regs_, regs, sizeof(regstate));
     if (FORK_PARANOIA >= 2) {
         log_printf("[fork] Copied parent registers to child\n");
     }
 
-    // Copy over parent's fdtable.
+    // Copy over parent's fdtable and increment refcount.
+    // TODO [MULTITH] lock access to fdtable
     memcpy((void*) &(child->fdtable), (void*) &fdtable, MAX_FD*sizeof(vnode*));
-    if (FORK_PARANOIA >= 1) {
-        log_printf("[fork] Copied parent's fdtable to child\n");
+    for (int fd = 0; fd < MAX_FD; ++fd) {
+        if (fdtable[fd]) {
+            ++fdtable[fd]->refcount_;
+        }
+    }
+    if (FORK_PARANOIA >= 1 || VFS_PARANOIA >= 2) {
+        log_printf("[fork] Copied parent's (PID=%d) fdtable to child (PID=%d), new state:\n",
+            id_, pid);
+        child->show_fdtable_();
     }
 
     // Add to process table (requires lock in case another CPU is already
@@ -896,6 +904,22 @@ void proc::syscall_exit(regstate* regs) {
     }
     auto irqs = this->lock_pagetable_read();
 
+    // Close all open file descriptors.
+    if (EXIT_PARANOIA >= 2 || VFS_PARANOIA >= 2) {
+        log_printf("[exit] Closing all open file descriptors\n");
+    }
+    for (int fd = 0; fd < MAX_FD; ++fd) {
+        if (fdtable[fd]) {
+            if (!fdtable[fd]->close()) { // If refcount hits 0
+                if (VFS_PARANOIA >= 1 || EXIT_PARANOIA >= 2) {
+                    log_printf("[exit] Closing node fd=%d empty, freeing\n", fd);
+                }
+                delete fdtable[fd];
+            }
+        }
+    }
+
+    // Free all allocated pages.
     for (vmiter itc(p); itc.va() < MEMSIZE_VIRTUAL; ) {
         if (itc.va() == CONSOLE_ADDR) {
             itc.next(); // Ignore the console
@@ -1331,7 +1355,7 @@ int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
 //   Prints state of the fdtable
 void proc::show_fdtable_() {
     // TODO lock this function
-    log_printf("[show_fdtable_] Process PID=%d fdtable HEAD --> [");
+    log_printf("[show_fdtable_] Process PID=%d fdtable HEAD --> [", id_);
     for (int fd = 0; fd < MAX_FD-1; ++fd) {
         log_printf("%d:%s | ", fd, fdtable[fd] ? "T" : "F"); // T is taken, F is free
     }
@@ -1448,6 +1472,8 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
     // TODO [MULTITH] lock accesses here.
     fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
     fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
+    ++fdtable[wfd]->refcount_;
+    ++fdtable[rfd]->refcount_;
 
     if (PIPE_PARANOIA >= 2) {
         log_printf("[syscall_pipe] Successfully made pipe, updated state below\n");
@@ -1489,7 +1515,7 @@ uintptr_t proc::syscall_read(regstate* regs) {
     // TODO [MULTITH] lock ftable access
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
-            log_printf("[VFS-read] fd %d invalid or not open\n", fd);
+            log_printf("[syscall_read] fd %d invalid or not open\n", fd);
         }
         return E_BADF;
     }
@@ -1498,11 +1524,17 @@ uintptr_t proc::syscall_read(regstate* regs) {
 
     // Validate the read buffer.
     if (IO_invalid(this, addr, addr+sz, true)) {
+        if (VFS_PARANOIA >= 1) {
+            log_printf("[syscall_read] INVALID read request for PID=%d, fd=%d\n", id_, fd);
+        }
         return E_FAULT;
     }
 
     // Read from open file.
     // TODO [MULTITH] lock ftable access
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[syscall_read] NEW read request for PID=%d, fd=%d\n", id_, fd);
+    }
     return fdtable[fd]->read(addr, sz);
 }
 
@@ -1514,7 +1546,7 @@ uintptr_t proc::syscall_write(regstate* regs) {
     // TODO [MULTITH] lock ftable access
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
-            log_printf("[VFS-write] fd %d invalid or not open\n", fd);
+            log_printf("[syscall_write] fd %d invalid or not open\n", fd);
         }
         return E_BADF;
     }
@@ -1542,16 +1574,26 @@ uintptr_t proc::syscall_write(regstate* regs) {
 int proc::syscall_close(regstate* regs) {
     // TODO [MULTITH] lock ftable access
     int fd = regs->reg_rdi;
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[syscall_close] Closing fd=%d for process PID=%d\n", fd, id_);
+    }
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+        if (VFS_PARANOIA >= 2) {
+            log_printf("[syscall_close] fd=%d invalid, returning\n", fd);
+        }
         return E_BADF;
     }
     if (!fdtable[fd]->close()) { // If refcount hits 0
         if (VFS_PARANOIA >= 1) {
-            log_printf("[syscall_close] Freeing empty node at fd=%d\n", fd);
+            log_printf("[syscall_close] Closed node fd=%d empty, freeing\n", fd);
         }
         delete fdtable[fd];
     }
     fdtable[fd] = nullptr;
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[syscall_close] Close successful, new state:\n");
+        show_fdtable_();
+    }
     return 0;
 }
 

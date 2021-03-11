@@ -51,6 +51,7 @@ struct pipe_bbuf {
 // All locks used by pipe vnodes are done via the bbuf lock shared between
 // read and write pipe vnodes via the shared bbuf.
 struct pipe_vnode:public vnode {
+    spinlock open_close_lock_;
     pipe_bbuf* bbuf_ = nullptr;                 // Shared bounded buffer
     pipe_vnode(int mode, pipe_bbuf* bbuf);      // Write end allocates bbuf
     ~pipe_vnode();                              // Write end frees bbuf
@@ -58,6 +59,7 @@ struct pipe_vnode:public vnode {
     pipe_bbuf* get_bbuf();
 
     // The below lock when called.
+    int close();
     uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
 };

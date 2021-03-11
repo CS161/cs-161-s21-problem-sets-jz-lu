@@ -220,7 +220,7 @@ extern wait_heap time_heap; // Wait heap
 const uint64_t BALLOC_PARANOIA = 0; 
 const uint64_t SALLOC_PARANOIA = 0;         // 0 = do nothing, 1 = checking
 const uint64_t FORK_PARANOIA = 0;
-const uint64_t EXIT_PARANOIA = 0;
+const uint64_t EXIT_PARANOIA = 1;
 const uint64_t PPID_PARANOIA = 0;
 const uint64_t WAITPID_PARANOIA = 0;
 const uint64_t WAITQ_PARANOIA = 0;
