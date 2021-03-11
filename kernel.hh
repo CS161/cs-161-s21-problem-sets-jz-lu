@@ -135,8 +135,9 @@ struct __attribute__((aligned(4096))) proc {
     static int load_segment(const elf_program& ph, proc_loader& ld);
 
     // Copies all of the user memory from parent to child.
-    int find_open_fd(); // TODO [MULTITH] lock this function
+    int find_open_fd(bool exclude_one, int taken); // TODO [MULTITH] lock this function
     int copy_memory_(proc* child);
+    void show_fdtable_();
     uint64_t canary = CANARY_EV;
 };
 
@@ -227,7 +228,8 @@ const uint64_t WAITH_PARANOIA = 0;          // Wait heap
 const uint64_t VFS_KBC_PARANOIA = 1;        // Console and Keyboard VFS
 const uint64_t VFS_MF_PARANOIA = 0;         // Memfile VFS
 const uint64_t PROC_PARANOIA = 2;           // Struct proc constructor/destructor
-const uintptr_t PIPE_PARANOIA = 2;
+const uintptr_t PIPE_PARANOIA = 3;
+const uint64_t VFS_PARANOIA = 3;            // General VFS, set to max of others usually
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_
@@ -236,7 +238,7 @@ const uint64_t FORK_TESTING = 0;
 const uint64_t TRUEBLOCK_TESTING = 0;
 
 // "Using" flags
-const uint64_t USING_SLAB_ALLOCATOR = 0; // 0 = turn off slab allocation, 1 = turn on
+const uint64_t USING_SLAB_ALLOCATOR = 1; // 0 = turn off slab allocation, 1 = turn on
 const uint64_t USING_PSEUDO_BLOCKING = 0;
 extern uint64_t BLOCK_NUM_RESUMES; // Testing number of calls to resume
 const uint64_t USING_TIME_HEAP = 0; // Turn on to use heap, off to use time wheel

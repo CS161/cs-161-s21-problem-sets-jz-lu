@@ -209,6 +209,11 @@ memrangeset<16> physical_ranges(0x100000000UL);
 
 void init_physical_ranges() {
     log_printf("Initializing physical ranges\n");
+    if (USING_SLAB_ALLOCATOR) {
+        log_printf("Slab allocator status: ON\n");
+    } else {
+        log_printf("Slab allocator status: OFF\n");
+    }
     // [0, MEMSIZE_PHYSICAL) starts out available
     physical_ranges.set(0, MEMSIZE_PHYSICAL, mem_available);
     // 0 page is reserved (because nullptr)

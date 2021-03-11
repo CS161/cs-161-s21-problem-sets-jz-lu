@@ -365,9 +365,9 @@ uintptr_t proc::syscall(regstate* regs) {
         syscall_retval = syscall_dup2(regs);
         break;
     
-    // case SYSCALL_PIPE:
-    //     syscall_retval = syscall_pipe(regs);
-    //     break;
+    case SYSCALL_PIPE:
+        syscall_retval = syscall_pipe(regs);
+        break;
 
     case SYSCALL_READ:
         syscall_retval = syscall_read(regs);
@@ -1315,15 +1315,27 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
 
 // proc::find_open_fd()
 //    Returns first available open file descriptor, i.e. null entry.
-//    Returns error if none open.
-int proc::find_open_fd() {
+//    Can exclude one fd if necessary (e.g. if it were temporarily taken but not yet assigned).
+//    If exclude_one is turned on then taken_fd must be passed in.
+int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
     // TODO [MULTITH] lock this function.
-    for (int fd = 0; fd < MAX_FD; ++fd) {
-        if (!fdtable[fd]) {
+    for (int fd = 3; fd < MAX_FD; ++fd) {
+        if (!fdtable[fd] && (!exclude_one || fd != taken_fd)) {
             return fd;
         }
     }
     return E_MFILE;
+}
+
+// proc::show_fdtable_()
+//   Prints state of the fdtable
+void proc::show_fdtable_() {
+    // TODO lock this function
+    log_printf("[show_fdtable_] Process PID=%d fdtable HEAD --> [");
+    for (int fd = 0; fd < MAX_FD-1; ++fd) {
+        log_printf("%d:%s | ", fd, fdtable[fd] ? "T" : "F"); // T is taken, F is free
+    }
+    log_printf("%d:%s] <-- TAIL\n", MAX_FD-1, fdtable[MAX_FD-1] ? "T" : "F");
 }
 
 // proc::syscall_open(regs)
@@ -1359,77 +1371,92 @@ int proc::syscall_dup2(regstate* regs) {
     // Set the old fd vnode ptr to the new one and increment refcount.
     fdtable[newfd] = fdtable[oldfd];
     ++fdtable[newfd]->refcount_;
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[syscall_dup2] Dup2 done, showing new fdtable state:\n");
+        show_fdtable_();
+    }
     return 0;
 }
 
 // proc::syscall_pipe(regs)
 //    Creates a read and write pipe and writes fd's into a single long as rfd | (wfd << 32).
-// uintptr_t proc::syscall_pipe(regstate* regs) {
-//     // Examine the fd table and ensure that there are at least 2 available spots.
-//     if (PIPE_PARANOIA >= 2) {
-//         log_printf("[pipe] Pipe called by process PID=%d\n", id_);
-//     }
+uintptr_t proc::syscall_pipe(regstate* regs) {
+    // Examine the fd table and ensure that there are at least 2 available spots.
+    // TODO [MULTITH] lock fdtable accesses
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[syscall_pipe] Pipe called by process PID=%d\n", id_);
+    }
 
-//     long rfd = find_open_fd();
-//     long wfd = find_open_fd();
-//     if (rfd == E_MFILE || wfd == E_MFILE) {
-//         if (PIPE_PARANOIA >= 2) {
-//             log_printf("[pipe] Insufficient open fdtable entries: rfd=%d, wfd=%d\n",
-//                 rfd, wfd);
-//         }
-//         return E_MFILE;
-//     }
-//     if (PIPE_PARANOIA >= 2) {
-//         log_printf("[pipe] Successfully found file descriptors READ=%d, WRITE=%d\n",
-//             rfd, wfd);
-//     }
+    long rfd = find_open_fd(false);
+    if (rfd == E_MFILE) {
+        if (PIPE_PARANOIA >= 2) {
+            log_printf("[syscall_pipe] No open READ entry: rfd=%d\n", rfd);
+        }
+        return E_MFILE;
+    }
+    long wfd = find_open_fd(true, rfd);
+    if (wfd == E_MFILE) {
+        if (PIPE_PARANOIA >= 2) {
+            log_printf("[syscall_pipe] No open WRITE entry: rfd=%d, wfd=5d\n", rfd, wfd);
+        }
+        return E_MFILE;
+    }
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[syscall_pipe] Successfully found file descriptors READ=%d, WRITE=%d\n",
+            rfd, wfd);
+    }
 
-//     // Create a write node, get the allocated bbuf, and create the read node.
-//     if (PIPE_PARANOIA >= 2) {
-//         log_printf("[pipe] PID=%d allocating a new WRITE pipe\n", id_);
-//     }
-//     pipe_vnode* wr_vn = knew<pipe_vnode>(OF_WRITE, nullptr);
+    // Create a write node, get the allocated bbuf, and create the read node.
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[syscall_pipe] PID=%d allocating a new WRITE pipe\n", id_);
+    }
+    pipe_vnode* wr_vn = knew<pipe_vnode>(OF_WRITE, nullptr);
 
-//     // Perform checks on allocation.
-//     if (!wr_vn) {
-//         if (PIPE_PARANOIA >= 1) {
-//             log_printf("[pipe] Failed to allocate a new WRITE pipe vnode, returning to user\n");
-//         }
-//         return E_NOMEM;
-//     }
-//     if (!wr_vn->bbuf_) {
-//         if (PIPE_PARANOIA >= 1) {
-//             log_printf("[pipe] Syscall detected failed allocation of pipe bbuf, returning to user\n");
-//         }
-//         delete wr_vn;
-//         return E_NOMEM;
-//     }
+    // Perform checks on allocation.
+    if (!wr_vn) {
+        if (PIPE_PARANOIA >= 1) {
+            log_printf("[syscall_pipe] Failed to allocate a new WRITE pipe vnode, returning to user\n");
+        }
+        return E_NOMEM;
+    }
+    if (!wr_vn->bbuf_) {
+        if (PIPE_PARANOIA >= 1) {
+            log_printf("[syscall_pipe] Syscall detected failed allocation of pipe bbuf, returning to user\n");
+        }
+        delete wr_vn;
+        return E_NOMEM;
+    }
 
-//     if (PIPE_PARANOIA >= 2) {
-//         log_printf("[pipe] PID=%d allocating a new READ pipe\n", id_);
-//     }
-//     pipe_vnode* rd_vn = knew<pipe_vnode>(OF_READ, wr_vn->get_bbuf());
-//     if (!rd_vn) {
-//         if (PIPE_PARANOIA >= 1) {
-//             log_printf("[pipe] Failed to allocate a new READ pipe vnode, returning to user\n");
-//         }
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[syscall_pipe] PID=%d allocating a new READ pipe\n", id_);
+    }
+    pipe_vnode* rd_vn = knew<pipe_vnode>(OF_READ, wr_vn->get_bbuf());
+    if (!rd_vn) {
+        if (PIPE_PARANOIA >= 1) {
+            log_printf("[syscall_pipe] Failed to allocate a new READ pipe vnode, returning to user\n");
+        }
 
-//         // wr_vn destructor cannot delete the buffer unless the reader is successfully
-//         // allocated, so we have to manually do it here.
-//         delete wr_vn->bbuf_;
-//         wr_vn->bbuf_ = nullptr;
-//         delete wr_vn;
-//         return E_NOMEM; // TODO change these to goto statements like fork fail handling
-//     }
+        // wr_vn destructor cannot delete the buffer unless the reader is successfully
+        // allocated, so we have to manually do it here.
+        delete wr_vn->bbuf_;
+        wr_vn->bbuf_ = nullptr;
+        delete wr_vn;
+        return E_NOMEM; // TODO change these to goto statements like fork fail handling
+    }
 
-//     // At this points all allocations have been successfully made.
-//     // TODO [MULTITH] lock accesses here.
-//     fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
-//     fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
+    // At this points all allocations have been successfully made.
+    // TODO [MULTITH] lock accesses here.
+    fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
+    fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
 
-//     uintptr_t catfd = rfd | (wfd << 32); // concatenated fd, see title comment of function
-//     return catfd;
-// }
+    if (PIPE_PARANOIA >= 2) {
+        log_printf("[syscall_pipe] Successfully made pipe, updated state below\n");
+        show_fdtable_();
+    }
+
+    uintptr_t catfd = rfd | (wfd << 32); // concatenated fd, see title comment of function
+    return catfd;
+}
 
 // IO_invalid(p, start, end, check_writable)
 //    Helper function that ensures read/write is valid.
@@ -1496,11 +1523,17 @@ uintptr_t proc::syscall_write(regstate* regs) {
 
     // Validate the write buffer.
     if (IO_invalid(this, addr, addr+sz)) {
+        if (VFS_PARANOIA >= 1) {
+            log_printf("[syscall_write] INVALID write request for PID=%d, fd=%d\n", id_, fd);
+        }
         return E_FAULT;
     }
 
     // Write to the file.
     // TODO [MULTITH] lock ftable access
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[syscall_write] NEW write request for PID=%d, fd=%d\n", id_, fd);
+    }
     return fdtable[fd]->write(addr, sz);
 }
 
@@ -1513,6 +1546,9 @@ int proc::syscall_close(regstate* regs) {
         return E_BADF;
     }
     if (!fdtable[fd]->close()) { // If refcount hits 0
+        if (VFS_PARANOIA >= 1) {
+            log_printf("[syscall_close] Freeing empty node at fd=%d\n", fd);
+        }
         delete fdtable[fd];
     }
     fdtable[fd] = nullptr;
