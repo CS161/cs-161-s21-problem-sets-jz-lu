@@ -244,7 +244,7 @@ uintptr_t pipe_bbuf::write(uintptr_t addr, size_t sz) {
     assert(!write_closed_);
 
     // Block if pipe full.
-    if (pipe_full()) {
+    if (pipe_full() && sz) {
         if (PIPE_PARANOIA >= 2) {
             log_printf("[pipe_bbuf-write] Pipe bbuf full, blocking\n");
         }
@@ -289,7 +289,7 @@ uintptr_t pipe_bbuf::read(uintptr_t addr, size_t sz) {
     assert(!read_closed_);
 
     // Block if pipe empty.
-    if (pipe_empty() && !write_closed_) {
+    if (pipe_empty() && !write_closed_ && sz) {
         if (PIPE_PARANOIA >= 2) {
             log_printf("[pipe_bbuf-read] Pipe bbuf empty, blocking\n");
         }

@@ -3,7 +3,7 @@
 #include "k-devices.hh"
 #include "k-wait.hh"
 
-#define BBUF_CAP    256 // Pipe bounded buffer capacity
+#define BBUF_CAP    256                        // Pipe bounded buffer capacity
 #define EOF         0
 
 struct kb_c_vnode:public vnode {

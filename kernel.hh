@@ -17,9 +17,16 @@ struct elf_program;
 #define NPROC 16
 #define CANARY_EV 894753471348 // Expected canary value
 
+#ifdef log_2f 
+#define log_2f log_printf 
+#else 
+#define log_2f(...) false 
+#endif 
+
 // VFS constants
 #define MAX_FD              8
 #define MAX_FILENAME_LEN    64
+#define MAX_ARGV_LEN        PAGESIZE >> 1
 
 // kernel.hh
 //
@@ -140,6 +147,9 @@ struct __attribute__((aligned(4096))) proc {
 
     // Copies all of the user memory from parent to child.
     int find_open_fd(bool exclude_one, int taken);
+    int argv_invalid(int argc, const char** argv);
+    void show_argv(int argc, const char** argv);
+    void copy_argv(void* stkpg_kptr, int argc, const char** argv, int total_length);
     int copy_memory_(proc* child);
     void show_fdtable_();
     void free_auto_allocs(proc* p);

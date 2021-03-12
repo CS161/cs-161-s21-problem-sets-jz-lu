@@ -4,11 +4,7 @@ Leave your name out of this file. Put collaboration notes and credit in
 `pset3collab.md`.
 
 ## Questions
-1. Do we ever set files on `initfs` to be empty? In other words, do we need to lock just the lookup function, or the operation of accessing an element of the array as well? One requires the lock to be declared in `k-devices.hh` and one requires it to be declared in `kernel.hh`.
-2. Why isn't the driver code `load_segment()` in `k-proc.cc` not a memory leak when it only frees the current page instead of all of them under a allocation failure?
-3. If a process fails to load, should we free exactly the same way we did in `sys_exit()`?
-4. Since everything is a new allocation, we shouldn't need to use a `ptable_lock` in `sys_execv()` like we did in `sys_exit()` and `sys_fork()` right?
-5. When we call `init_user` in `sys_execv()` the driver code just resets `proc::regs_`. Is it always the user process' responsibility to clean up all other things like children and file descriptors before calling `sys_execv()`? Is this standard kernel practice since it might be desirable to be able to set the `fdtable` before transferring to a new process?
+
 
 Answers to written questions
 ----------------------------

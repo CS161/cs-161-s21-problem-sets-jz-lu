@@ -1,49 +1,19 @@
-#include<iostream>
-using namespace std;
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
 
-#define MAX_FILENAME_LEN            128
-
-struct Base {
-    int n = 0;
-    Base(int i) {
-        n = i;
-        cout << "This is the Base speaking: " << i << endl;
+int main(int argc, char** argv) {
+    uintptr_t rsp;
+    asm volatile("movq %%rsp, %0" : "=r" (rsp));
+    printf("%%rsp 0x%lx\n", rsp);
+    printf("argc %d\n", argc);
+    printf("argv %p (%%rsp+0x%lx)\n",
+           argv, reinterpret_cast<uintptr_t>(argv) - rsp);
+    for (int i = 0; i < argc; ++i) {
+        printf("argv[%d] @%p: %p (%%rsp+0x%lx) \"%s\"\n", i, &argv[i],
+               argv[i], reinterpret_cast<uintptr_t>(argv[i]) - rsp,
+               argv[i]);
     }
-    virtual ~Base() {
-        cout << "Base is transcending\n";
-    }
-
-    virtual int pie() {
-        return 3*n;
-    }
-};
-
-struct Derived:public Base {
-    Derived(int i) : Base(i) {
-        cout << "This is the Derived speaking: " << i << endl;
-    }
-
-    ~Derived() {
-        cout << "Derived is transcending\n";
-    }
-};
-
-struct Sibling:public Base {
-    Sibling(int i) : Base(i) {
-        cout << "This is the Sibling speaking: " << i << endl;
-    }
-
-    ~Sibling() {
-        cout << "Sibling is transcending\n";
-    }
-
-    int pie() {
-        // cout << "HI, n = " << n << "\n";
-        return 5*n;
-    }
-};
-
-int main() {
-    int arr[5] = {1, 4, 9, 16, 25};
-    cout << *(arr+4) << endl;
+    char* s = "hi";
+    printf("%d\n", strlen(s));
 }

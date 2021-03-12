@@ -1477,7 +1477,7 @@ static int pathname_invalid(proc* p, const char* pathname) {
         }
     }
 
-    if (pos == MAX_FILENAME_LEN) {
+    if (pos >= MAX_FILENAME_LEN) {
         if (VFS_MF_PARANOIA >= 1) {
             log_printf("[pathname_invalid] Invalid file name: too long. Ensure buf ptr is correct\n");
         }
@@ -1770,6 +1770,99 @@ int proc::syscall_close(regstate* regs) {
     return 0;
 }
 
+
+// proc::show_argv()
+//    Prints argv. Don't call unless you know it's valid or for debugging.
+void proc::show_argv(int argc, const char** argv) {
+    log_printf("argv --> [");
+    for (int i = 0; i < argc-1; ++i) {
+        log_printf("'%s', ", argv[i]);
+    }
+    log_printf("'%s']\n", argv[argc-1]);
+}
+
+// argv_invalid(argc, argv)
+//    Checks whether a argv for execution is valid or not. 
+//    Returns negative error code upon detecting invalid string, and total length otherwise.
+int proc::argv_invalid(int argc, const char** argv) {
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[argv_invalid] Validating argv below with argc=%d\n", argc);
+        show_argv(argc, argv);
+    }
+    if (!argv || argc < 1 || argc >= (int) MAX_ARGV_LEN) {
+        if (VFS_PARANOIA >= 1) {
+            log_printf("[argv_invalid] Invalid (null) argv or invalid argc\n");
+        }
+        return E_FAULT;
+    }
+
+    int nchars = 0; // Total num chars read
+    int nstrs = 0; // Num strings (elements of argv) read
+    for (int i = 0; i < argc && nchars <= (int) MAX_ARGV_LEN; ++i) {
+        const char* arg = argv[i];
+        if (!arg) {
+            break;
+        }
+        int arg_invalid = pathname_invalid(this, arg);
+        if (arg_invalid) {
+            return arg_invalid;
+        }
+        ++nstrs;
+        nchars += strlen(arg) + 1; // Add 1 for null terminator
+    }
+    if (nchars >= (int) MAX_ARGV_LEN) {
+        if (VFS_PARANOIA >= 1) {
+            log_printf("[argv_invalid] Too many args and/or arg too long. Total length must be below %d\n",
+                MAX_ARGV_LEN);
+        }
+        return E_FAULT;
+    }
+    if (nstrs != argc) {
+        if (VFS_PARANOIA >= 1) {
+            log_printf("[argv_invalid] Number of strings in argv does not match argc\n");
+        }
+        return E_INVAL;
+    }
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[argv_invalid] argv of total length %d validated\n", nchars);
+    }
+    return nchars;
+}
+
+
+// proc::copy_argv(stkpg_kptr, argc, argv)
+//    Copies the arguments into a stack page passed in as a kptr.
+//    NOTE: Assumes argv has been validated and the stkpg is non-null.
+void proc::copy_argv(void* stkpg_kptr, int argc, const char** argv, int total_length) {
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[copy_argv] Copying argv below to stack page KVA=%p, PA=0x%x. Total length: %d\n",
+            stkpg_kptr, kptr2pa(stkpg_kptr), total_length);
+        show_argv(argc, argv);
+    }
+    assert(stkpg_kptr);
+
+    // Start the copy off from the top of the stack minus the total length 
+    // of all the arguments in the array when concatenated.
+    uintptr_t stkpg_top_addr = reinterpret_cast<uintptr_t>(stkpg_kptr) + PAGESIZE;
+    uintptr_t cur_addr = stkpg_top_addr - total_length;
+    assert(stkpg_top_addr - cur_addr < MAX_ARGV_LEN);
+
+    // One by one, copy in the strings (which have been assumed to be validated)
+    // and increment cur_addr.
+    for (int i = 0; i < argc; ++i) {
+        char* arg = (char*) argv[i];
+        int arglen = strlen(arg) + 1; // Must include null terminator
+        memcpy(reinterpret_cast<void*>(cur_addr), reinterpret_cast<void*>(arg), arglen);
+        cur_addr += arglen;
+        assert(cur_addr <= stkpg_top_addr);
+    }
+    assert(cur_addr == stkpg_top_addr);
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[copy_argv] argv copy successful\n");
+    }
+}
+
+
 // proc::syscall_execv(regs)
 //    Replaces current process image with a fresh binary given in args.
 int proc::syscall_execv(regstate* regs) {
@@ -1777,8 +1870,8 @@ int proc::syscall_execv(regstate* regs) {
         log_printf("[syscall_execv] Execv called by process PID=%d\n", id_);
     }
     const char* prgm_name = reinterpret_cast<const char*>(regs->reg_rdi);
-    const char* argv = reinterpret_cast<const char*>(regs->reg_rsi);
-    size_t argc = regs->reg_rdx;
+    const char** argv = reinterpret_cast<const char**>(regs->reg_rsi);
+    int argc = regs->reg_rdx;
     
     // Validate pathname.
     if (pathname_invalid(this, prgm_name)) { // Check filename
@@ -1786,6 +1879,16 @@ int proc::syscall_execv(regstate* regs) {
             log_printf("[syscall_execv] Invalid program name\n");
         }
         return E_FAULT;
+    }
+
+    // Validate argv and argc.
+    int total_length = argv_invalid(argc, argv);
+    assert(total_length);
+    if (total_length < 0) {
+        if (VFS_PARANOIA >= 1) {
+            log_printf("[syscall_execv] Invalid argv/argc\n");
+        }
+        return total_length;
     }
 
     // Look up the process name in memfiles.
@@ -1854,6 +1957,9 @@ int proc::syscall_execv(regstate* regs) {
             MEMSIZE_VIRTUAL-PAGESIZE, CONSOLE_ADDR);
     }
 
+    // Copy in the argv and argc.
+    copy_argv(stkpg, argc, argv, total_length);
+
     // At this point, the system call will succeeed. The next line stomps on regstate.
     // Initialize a new set of registers for the process.
     x86_64_pagetable* old_pt = pagetable_; // Store old pt before init user clears it out
@@ -1867,11 +1973,15 @@ int proc::syscall_execv(regstate* regs) {
 
     // Set instruction and stack ptr regs.
     regs_->reg_rip = mld.entry_rip_;
-    regs_->reg_rsp = MEMSIZE_VIRTUAL;
+    regs_->reg_rsp = MEMSIZE_VIRTUAL-total_length; // Start at where the arguments are
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
-        log_printf("[syscall_execv] \%rsp set to 0x%x, \%rip set to 0x%x\n",
+        log_printf("[syscall_execv] \%rsp set to 0x%x, \%rip set to 0x%x\n", 
             MEMSIZE_VIRTUAL, mld.entry_rip_);
     }
+
+    // Set functional argument regs to argc and argv.
+    regs_->reg_rdi = argc;
+    regs_->reg_rsi = reinterpret_cast<uintptr_t>(argv);
 
     // Set the pagetable and free the old one.
     set_pagetable(pt);
