@@ -26,7 +26,8 @@ struct elf_program;
 //    Functions, constants, and definitions for the kernel.
 
 // Virtual File System (VFS) basic structure. 
-// All declarations of children in k-vfs.hh.
+// All declarations of children in k-vfs.hh. This cannot be declared in 
+// because its a 
 struct vnode {
     int mode_ = 0; // Read, write, or both
     off_t offset_ = 0; // Offset from file, to be incremented on read/writes
@@ -225,7 +226,7 @@ extern wait_heap time_heap; // Wait heap
 const uint64_t BALLOC_PARANOIA = 0; 
 const uint64_t SALLOC_PARANOIA = 1;         // 0 = do nothing, 1 = checking
 const uint64_t FORK_PARANOIA = 0;
-const uint64_t EXIT_PARANOIA = 1;
+const uint64_t EXIT_PARANOIA = 0;
 const uint64_t PPID_PARANOIA = 0;
 const uint64_t WAITPID_PARANOIA = 0;
 const uint64_t WAITQ_PARANOIA = 0;

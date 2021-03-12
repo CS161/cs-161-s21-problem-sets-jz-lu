@@ -128,6 +128,7 @@ void boot_process_start(pid_t pid, const char* name) {
     proc* p = knew<proc>();
     p->init_user(pid, ld.pagetable_);
     p->regs_->reg_rip = ld.entry_rip_;
+    log_printf("[boot_process_start] \%rip set to 0x%x\n", ld.entry_rip_);
 
     void* stkpg = kalloc(PAGESIZE);
     assert(stkpg);
@@ -1569,8 +1570,15 @@ int proc::syscall_dup2(regstate* regs) {
     }
 
     if (fdtable[newfd]) { // Close newfd if open
-        if (fdtable[newfd])
-        fdtable[newfd] = nullptr;
+            if (VFS_PARANOIA >= 2) {
+                log_printf("[syscall_dup2] newfd=%d is open, closing\n", newfd);
+            }
+        if (!fdtable[newfd]->close()) { // If refcount hits 0
+            if (VFS_PARANOIA >= 1) {
+                log_printf("[syscall_dup2] Closed node at newfd=%d empty, freeing\n", newfd);
+            }
+            delete fdtable[newfd];
+        }
     }
 
     // Set the old fd vnode ptr to the new one and increment refcount.
@@ -1733,6 +1741,7 @@ uintptr_t proc::syscall_write(regstate* regs) {
     return fdtable[fd]->write(addr, sz);
 }
 
+
 // proc::syscall_close(regs)
 //    Closes a file descriptor, freeing if necessary.
 int proc::syscall_close(regstate* regs) {
@@ -1847,6 +1856,10 @@ int proc::syscall_execv(regstate* regs) {
 
     // At this point, the system call will succeeed. The next line stomps on regstate.
     // Initialize a new set of registers for the process.
+    x86_64_pagetable* old_pt = pagetable_; // Store old pt before init user clears it out
+    if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
+        log_printf("[syscall_execv] Old pagetable %p stored\n", old_pt);
+    }
     init_user(id_, pt); // Install pt, reset regs_
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] Process regs_ reset to initialized values\n");
@@ -1862,12 +1875,13 @@ int proc::syscall_execv(regstate* regs) {
 
     // Set the pagetable and free the old one.
     set_pagetable(pt);
-    free_auto_allocs(pagetable_);
-    kfree(pagetable_);
+    free_auto_allocs(old_pt);
+    kfree(old_pt);
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
-        log_printf("[syscall_execv] New pagetable set, old pagetable and mem freed\n");
+        log_printf("[syscall_execv] New pagetable %p set, old pagetable %p and mem freed\n",
+            pagetable_, old_pt);
     }
-
+    
     // yield_noreturn() so the scheduler treats resume() like a regstate
     // and uses regs_ as the resumption state regs.
     yield_noreturn();
