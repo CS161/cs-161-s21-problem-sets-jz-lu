@@ -1856,7 +1856,7 @@ int proc::syscall_execv(regstate* regs) {
     regs_->reg_rip = mld.entry_rip_;
     regs_->reg_rsp = MEMSIZE_VIRTUAL;
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
-        log_printf("[syscall_execv] \%rsp set to 0x%x, rip set to 0x%x\n",
+        log_printf("[syscall_execv] \%rsp set to 0x%x, \%rip set to 0x%x\n",
             MEMSIZE_VIRTUAL, mld.entry_rip_);
     }
 

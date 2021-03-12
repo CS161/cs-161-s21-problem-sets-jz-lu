@@ -151,6 +151,7 @@ void memfile_vnode::set_mf(memfile* mf) {
 }
 
 int memfile_vnode::close() {
+    spinlock_guard guard(open_close_lock_);
     if (VFS_MF_PARANOIA >= 2) {
         log_printf("[memfile_vnode-close] memfile close called\n");
     }
@@ -187,7 +188,7 @@ uintptr_t memfile_vnode::write(uintptr_t addr, size_t sz) {
     memcpy(mf_ptr, reinterpret_cast<void*>(addr), sz);
     
     // Update the offset.
-    offset_ += sz;
+    offset_ += sz; // No open close lock--the memfile lock is stronger
     return sz;
 }
 
@@ -380,6 +381,7 @@ pipe_bbuf* pipe_vnode::get_bbuf() {
 }
 
 int pipe_vnode::close() {
+    spinlock_guard guard(open_close_lock_);
     if (PIPE_PARANOIA >= 1) {
         log_printf("[pipe_vnode-close] pipe close called\n");
     }

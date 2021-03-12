@@ -9,7 +9,6 @@
 struct kb_c_vnode:public vnode {
     // Note: we will not use inherited offset_ in this struct, 
     // the kbd has its own offset variable called pos_.
-    spinlock open_close_lock_;
     kb_c_vnode();
     ~kb_c_vnode();
 

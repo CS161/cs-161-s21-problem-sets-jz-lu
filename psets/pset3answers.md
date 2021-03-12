@@ -16,6 +16,7 @@ Answers to written questions
 ### Part B
 1. We neglected to mention that `fork()` should also increment the `refcount` of each copied `vnode`.
 2. At the time of design we did not think about process VFS cleanup upon exit. `syscall_exit()` must walk through the `proc::fdtable[]` and close all open file descriptors in the same way `syscall_close()` does it.
+3. The `kb_c_vnode` does not require a pointer to the keyboard and console states as the document stated, as they are global singletons.
 
 ### Part C
 The bounded buffer implementation follows closely the implementation from CS 61 linked on the problem set statement; as such, we refrain from restating all of the logic for the bounded buffer. We built the pipe `vnode` system in our design document early on, so any updates are below.
