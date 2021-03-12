@@ -126,8 +126,8 @@ inline bool memfile::empty() const {
 
 
 // memfile::loader: loads a `proc` from a `memfile`
-
-struct memfile_loader : public proc_loader { // TODO lock access to initfs
+extern spinlock initfs_lock_;
+struct memfile_loader : public proc_loader { // TODO do we lock access to initfs here??
     memfile* memfile_;
     inline memfile_loader(memfile* mf, x86_64_pagetable* pt)
         : proc_loader(pt), memfile_(mf) {
@@ -135,7 +135,10 @@ struct memfile_loader : public proc_loader { // TODO lock access to initfs
     inline memfile_loader(int mf_index, x86_64_pagetable* pt)
         : proc_loader(pt) {
         assert(mf_index >= 0 && unsigned(mf_index) < memfile::initfs_size);
-        memfile_ = &memfile::initfs[mf_index];
+        {
+            // spinlock_guard guard(initfs_lock_); // TODO
+            memfile_ = &memfile::initfs[mf_index];
+        }
     }
     ssize_t get_page(uint8_t** pg, size_t off) override;
     void put_page() override;

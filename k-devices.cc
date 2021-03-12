@@ -272,7 +272,8 @@ int memfile::initfs_lookup(const char* name, bool create) {
     if (!create) {
         // file not found
         if (VFS_MF_PARANOIA >= 1) {
-            log_printf("[initfs_lookup] File not found, no create flag given\n");
+            log_printf("[initfs_lookup] File '%s' not found, no create flag given\n", 
+                name);
         }
         return E_NOENT;
     } else if (!empty) {

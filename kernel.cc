@@ -381,6 +381,10 @@ uintptr_t proc::syscall(regstate* regs) {
         syscall_retval = syscall_close(regs);
         break;
 
+    case SYSCALL_EXECV:
+        syscall_retval = syscall_execv(regs);
+        break;
+
     case SYSCALL_READDISKFILE:
         syscall_retval = syscall_readdiskfile(regs);
         break;
@@ -890,6 +894,64 @@ int proc::syscall_wildalloc(regstate* regs) {
 }
 
 
+// proc::free_auto_allocs()
+//    Frees all memory of a process except the struct proc and the L4 pt.
+//    If freeing a runnable process, assumes locked.
+void proc::free_auto_allocs(proc* p) {
+    // Free all allocated pages.
+    auto irqs = this->lock_pagetable_read();
+    for (vmiter itc(p); itc.va() < MEMSIZE_VIRTUAL; ) {
+        if (itc.va() == CONSOLE_ADDR) {
+            itc.next(); // Ignore the console
+        } else if (itc.user()) {
+            if (EXIT_PARANOIA >= 2) {
+                log_printf("[free_auto_allocs] FREEING VA 0x%x, i.e. PA 0x%x\n", itc.va(), itc.pa());
+            }
+            itc.kfree_page();
+            itc.next();
+        } else {
+            itc.next_range(); // Skip unallocated ranges to save time
+        }
+    }
+
+    // Now that all allocated mempages are freed, free the pagetable.
+    for (ptiter it(p); it.low(); it.next()) {
+        if (EXIT_PARANOIA >= 2) {
+            log_printf("[free_auto_allocs] FREEING VA 0x%x, i.e. PA 0x%x\n", it.va(), it.pa());
+        }
+        it.kfree_ptp();
+    }
+    this->unlock_pagetable_read(irqs);
+}
+
+
+void proc::free_auto_allocs(x86_64_pagetable* pt) {
+    // Free all allocated pages.
+    auto irqs = this->lock_pagetable_read();
+    for (vmiter itc(pt); itc.va() < MEMSIZE_VIRTUAL; ) {
+        if (itc.va() == CONSOLE_ADDR) {
+            itc.next(); // Ignore the console
+        } else if (itc.user()) {
+            if (EXIT_PARANOIA >= 2) {
+                log_printf("[free_auto_allocs] FREEING VA 0x%x, i.e. PA 0x%x\n", itc.va(), itc.pa());
+            }
+            itc.kfree_page();
+            itc.next();
+        } else {
+            itc.next_range(); // Skip unallocated ranges to save time
+        }
+    }
+
+    // Now that all allocated mempages are freed, free the pagetable.
+    for (ptiter it(pt); it.low(); it.next()) {
+        if (EXIT_PARANOIA >= 2) {
+            log_printf("[free_auto_allocs] FREEING VA 0x%x, i.e. PA 0x%x\n", it.va(), it.pa());
+        }
+        it.kfree_ptp();
+    }
+    this->unlock_pagetable_read(irqs);
+}
+
 // proc::syscall_exit(regs)
 //    Exits a process without data races
 void proc::syscall_exit(regstate* regs) {
@@ -902,7 +964,6 @@ void proc::syscall_exit(regstate* regs) {
     if (EXIT_PARANOIA >= 1 || WAITQ_PARANOIA >= 1 || WAITPID_PARANOIA >= 1) {
         log_printf("[exit] Freeing process at VA 0x%x with pid %lu\n", p, pid);
     }
-    auto irqs = this->lock_pagetable_read();
 
     // Close all open file descriptors.
     if (EXIT_PARANOIA >= 2 || VFS_PARANOIA >= 2) {
@@ -920,29 +981,8 @@ void proc::syscall_exit(regstate* regs) {
         }
     }
 
-    // Free all allocated pages.
-    for (vmiter itc(p); itc.va() < MEMSIZE_VIRTUAL; ) {
-        if (itc.va() == CONSOLE_ADDR) {
-            itc.next(); // Ignore the console
-        } else if (itc.user()) {
-            if (EXIT_PARANOIA >= 2) {
-                log_printf("[SYSCALL_EXIT] FREEING VA 0x%x, i.e. PA 0x%x\n", itc.va(), itc.pa());
-            }
-            itc.kfree_page();
-            itc.next();
-        } else {
-            itc.next_range(); // Skip unallocated ranges to save time
-        }
-    }
-
-    // Now that all allocated mempages are freed, free the pagetable.
-    for (ptiter it(p); it.low(); it.next()) {
-        if (EXIT_PARANOIA >= 2) {
-            log_printf("[exit] FREEING VA 0x%x, i.e. PA 0x%x\n", it.va(), it.pa());
-        }
-        it.kfree_ptp();
-    }
-    this->unlock_pagetable_read(irqs);
+    // Free all allocations except L4 pt and struct proc.
+    free_auto_allocs(this);
 
     // Set the pagetable of the current process to the OG pagetable
     // before freeing the L4 pagetable of the process.
@@ -1101,6 +1141,7 @@ static void release_child(proc* p, pid_t cpid) {
         log_printf("]; num (alive) children = %d\n", p->nchildren_);
     }
 }
+
 
 // proc::syscall_waitpid(regs)
 //    Waits for either a specific child PID or the first to exit and cleans up.
@@ -1338,6 +1379,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
     }
 }
 
+
 // proc::find_open_fd()
 //    Returns first available open file descriptor, i.e. null entry.
 //    Can exclude one fd if necessary (e.g. if it were temporarily taken but not yet assigned).
@@ -1353,6 +1395,7 @@ int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
     return E_MFILE;
 }
 
+
 // proc::show_fdtable_()
 //   Prints state of the fdtable
 void proc::show_fdtable_() {
@@ -1363,6 +1406,7 @@ void proc::show_fdtable_() {
     }
     log_printf("%d:%s] <-- TAIL\n", MAX_FD-1, fdtable[MAX_FD-1] ? "T" : "F");
 }
+
 
 // IO_invalid(p, start, end, check_writable)
 //    Helper function that ensures read/write is valid. end is noninclusive.
@@ -1396,6 +1440,7 @@ static int IO_invalid(proc* p, uintptr_t start, uintptr_t end, bool check_writab
     }
     return 0;
 }
+
 
 // filename_invalid(pathname)
 //    Returns 0 if a path name of valid length and in accessible memory. Fails otherwise.
@@ -1436,9 +1481,14 @@ static int pathname_invalid(proc* p, const char* pathname) {
             log_printf("[pathname_invalid] Invalid file name: too long. Ensure buf ptr is correct\n");
         }
         return E_FAULT;
-    } 
+    }
+
+    if (VFS_MF_PARANOIA >= 2) {
+        log_printf("[pathname_invalid] Filename '%s' validated\n", pathname);
+    }
     return 0;
 }
+
 
 // proc::syscall_open(regs)
 //    Opens a file and returns the file descriptor, or an error.
@@ -1500,6 +1550,7 @@ int proc::syscall_open(regstate* regs) {
     return fd;
 }
 
+
 // proc::syscall_dup2(regs)
 //    Copies vnodes from a file descriptor to another. Returns new fd if successful.
 int proc::syscall_dup2(regstate* regs) {
@@ -1531,6 +1582,7 @@ int proc::syscall_dup2(regstate* regs) {
     }
     return 0;
 }
+
 
 // proc::syscall_pipe(regs)
 //    Creates a read and write pipe and writes fd's into a single long as rfd | (wfd << 32).
@@ -1649,6 +1701,7 @@ uintptr_t proc::syscall_read(regstate* regs) {
     return fdtable[fd]->read(addr, sz);
 }
 
+
 uintptr_t proc::syscall_write(regstate* regs) {
     // This is a slow system call, so allow interrupts by default
     sti();
@@ -1706,6 +1759,118 @@ int proc::syscall_close(regstate* regs) {
         show_fdtable_();
     }
     return 0;
+}
+
+// proc::syscall_execv(regs)
+//    Replaces current process image with a fresh binary given in args.
+int proc::syscall_execv(regstate* regs) {
+    if (VFS_PARANOIA >= 2 || VFS_MF_PARANOIA >= 2) {
+        log_printf("[syscall_execv] Execv called by process PID=%d\n", id_);
+    }
+    const char* prgm_name = reinterpret_cast<const char*>(regs->reg_rdi);
+    const char* argv = reinterpret_cast<const char*>(regs->reg_rsi);
+    size_t argc = regs->reg_rdx;
+    
+    // Validate pathname.
+    if (pathname_invalid(this, prgm_name)) { // Check filename
+        if (VFS_PARANOIA >= 1) {
+            log_printf("[syscall_execv] Invalid program name\n");
+        }
+        return E_FAULT;
+    }
+
+    // Look up the process name in memfiles.
+    int initfs_index = memfile::initfs_lookup(prgm_name);
+    if (initfs_index < 0) { // Error code was returned
+        // NOTE: Kernel logs done in the lookup function.
+        return initfs_index;
+    }
+    assert(initfs_index < (int) memfile::namesize);
+
+    // Allocate a new pagetable and stack page.
+    x86_64_pagetable* pt = kalloc_pagetable();
+    if (!pt) {
+        if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+            log_printf("[syscall_execv] Failed to allocate a new pagetable\n");
+        }
+        return E_NOMEM;
+    } else if (VFS_PARANOIA >= 2 || VFS_MF_PARANOIA >= 2) {
+        log_printf("[syscall_execv] New pt alloc at KVA=%p, PA=0x%x\n",
+            pt, kptr2pa(pt));
+    }
+    void* stkpg = kalloc(PAGESIZE);
+    if (!stkpg) {
+        if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+            log_printf("[syscall_execv] Failed to allocate a new stack page\n");
+        }
+        kfree(pt);
+        return E_NOMEM;
+    } else if (VFS_PARANOIA >= 2 || VFS_MF_PARANOIA >= 2) {
+        log_printf("[syscall_execv] New stack page alloc at KVA=%p, PA=0x%x\n",
+            stkpg, kptr2pa(stkpg));
+    }
+
+    // Load the process.
+    memfile_loader mld(initfs_index, pt);
+    int load_error = load(mld);
+    if (load_error) { // Restore and return error upon load failure
+        if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+            log_printf("[syscall_execv] Failed to load new process\n");
+        }
+        kfree(pt);
+        kfree(stkpg);
+        free_auto_allocs(pt); // Free any allocations made by loader
+        return load_error;
+    } else if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
+        log_printf("[syscall_execv] Process successfully loaded\n",
+            pt, kptr2pa(pt));
+    }
+
+    // Map stack page and the console to pt. 
+    // (See boot_process_start for a more detailed explanation.)
+    int stk_map_error = vmiter(pt, MEMSIZE_VIRTUAL-PAGESIZE).try_map(stkpg, PTE_PWU);
+    int cons_map_error = vmiter(pt, CONSOLE_ADDR).try_map(CONSOLE_ADDR, PTE_PWU);
+    if (stk_map_error || cons_map_error) {
+        if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
+            log_printf("[syscall_execv] Failed to map stack and/or console to new pt\n");
+        }
+        free_auto_allocs(pt); // Free any allocations made by loader
+        kfree(pt);
+        if (stk_map_error) {
+            kfree(stkpg); // If map didn't work then free_auto_allocs() won't free stack pg.
+        }
+        return E_NOMEM;
+    } else if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
+        log_printf("[syscall_execv] Stack / Console successfully mapped to UVA=0x%x / 0x%x\n",
+            MEMSIZE_VIRTUAL-PAGESIZE, CONSOLE_ADDR);
+    }
+
+    // At this point, the system call will succeeed. The next line stomps on regstate.
+    // Initialize a new set of registers for the process.
+    init_user(id_, pt); // Install pt, reset regs_
+    if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
+        log_printf("[syscall_execv] Process regs_ reset to initialized values\n");
+    }
+
+    // Set instruction and stack ptr regs.
+    regs_->reg_rip = mld.entry_rip_;
+    regs_->reg_rsp = MEMSIZE_VIRTUAL;
+    if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
+        log_printf("[syscall_execv] \%rsp set to 0x%x, rip set to 0x%x\n",
+            MEMSIZE_VIRTUAL, mld.entry_rip_);
+    }
+
+    // Set the pagetable and free the old one.
+    set_pagetable(pt);
+    free_auto_allocs(pagetable_);
+    kfree(pagetable_);
+    if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
+        log_printf("[syscall_execv] New pagetable set, old pagetable and mem freed\n");
+    }
+
+    // yield_noreturn() so the scheduler treats resume() like a regstate
+    // and uses regs_ as the resumption state regs.
+    yield_noreturn();
 }
 
 // proc::syscall_readdiskfile(regs)

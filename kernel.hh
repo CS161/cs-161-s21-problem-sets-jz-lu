@@ -73,7 +73,7 @@ struct __attribute__((aligned(4096))) proc {
     int nchildren_ = 0;                        // Number of children
     int e_intr = 0;                            // Interrupt code
     pid_t childpids_[NPROC] = {0};             // PID Array of children
-    vnode* fdtable[MAX_FD] = {0};               // Per-process (threads share) file descriptor table
+    vnode* fdtable[MAX_FD] = {0};              // Per-process (threads share) file descriptor table
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
     uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
@@ -127,7 +127,8 @@ struct __attribute__((aligned(4096))) proc {
     uintptr_t syscall_read(regstate* reg);
     uintptr_t syscall_write(regstate* reg);
     int syscall_close(regstate* regs);
-    uintptr_t syscall_readdiskfile(regstate* reg);
+    int syscall_execv(regstate* regs);
+    uintptr_t syscall_readdiskfile(regstate* regs);
 
     inline irqstate lock_pagetable_read();
     inline void unlock_pagetable_read(irqstate& irqs);
@@ -136,9 +137,11 @@ struct __attribute__((aligned(4096))) proc {
     static int load_segment(const elf_program& ph, proc_loader& ld);
 
     // Copies all of the user memory from parent to child.
-    int find_open_fd(bool exclude_one, int taken); // TODO [MULTITH] lock this function
+    int find_open_fd(bool exclude_one, int taken);
     int copy_memory_(proc* child);
     void show_fdtable_();
+    void free_auto_allocs(proc* p);
+    void free_auto_allocs(x86_64_pagetable* pt);
     uint64_t canary = CANARY_EV;
 };
 
