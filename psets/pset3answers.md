@@ -4,7 +4,7 @@ Leave your name out of this file. Put collaboration notes and credit in
 `pset3collab.md`.
 
 ## Questions
-
+1. Issue with `echo Hello > hi.txt; cat hi.txt` in the shell. The shell does a `dup2` of a read-only memfile into `stdout` and fails to write on it---is this a logical error in my code?
 
 Answers to written questions
 ----------------------------

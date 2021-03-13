@@ -130,7 +130,8 @@ uintptr_t kb_c_vnode::read(uintptr_t addr, size_t sz) {
 // syscall_open() uses this feature to prevent memory leaks.
 memfile_vnode::memfile_vnode(int mode, memfile* mf) : vnode(mode) {
     if (VFS_MF_PARANOIA >= 1) {
-        log_printf("[memfile-vnode-constructor] memfile vnode constructor called\n");
+        log_printf("[memfile-vnode-constructor] memfile vnode constructor called with mode %d\n",
+            mode);
     }
     mf_ = mf;
     assert(offset_ == 0);

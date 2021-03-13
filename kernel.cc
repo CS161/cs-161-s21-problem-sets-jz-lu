@@ -1512,6 +1512,11 @@ int proc::syscall_open(regstate* regs) {
     bool mode = flags & (OF_RDWR);
     if (!mode) { // Check for null read/write mode flag
         return E_INVAL;
+    } else if (VFS_PARANOIA >= 2) {
+        log_printf("[syscall_open] Read? %s; Write? %s, Create? %s\n", 
+            (mode & OF_READ) ? "Yes" : "No", 
+            (mode & OF_WRITE) ? "Yes" : "No", 
+            create? "Yes" : "No");
     }
 
     // Attempt to open the file.
@@ -1548,6 +1553,11 @@ int proc::syscall_open(regstate* regs) {
         assert(retstat == 0);
     }
 
+    if (VFS_MF_PARANOIA >= 2) {
+        log_printf("[syscall_open] Open successful\n");
+        show_fdtable_();
+    }
+
     return fd;
 }
 
@@ -1558,6 +1568,10 @@ int proc::syscall_dup2(regstate* regs) {
     // TODO [MULTITH] lock fdtable accesses
     int oldfd = regs->reg_rdi;
     int newfd = regs->reg_rsi;
+    if (VFS_PARANOIA >= 2) {
+        log_printf("[syscall_dup2] Dup2 called by process PID=%d. old=%d, new=%d\n",
+            id_, oldfd, newfd);
+    }
     if (oldfd < 0 || oldfd >= MAX_FD || newfd < 0 || newfd >= MAX_FD) { // Invalid fd
         return E_BADF;
     } else if (!fdtable[oldfd]) { // Non-open old fd
