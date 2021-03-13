@@ -69,9 +69,9 @@ struct pipe_vnode:public vnode {
 // Simplified Unix domain socket. A single client and a single server process
 // can send a file descriptor over. Not a part of the vnode family.
 struct uds {
-    char* key_ = nullptr;                   // Index of descriptor
+    char key_[MAX_FILENAME_LEN] = "\0"; // Index of descriptor
     int fd_ = -1;
-    bool listening = false, accepting = false;
+    bool listening_ = false, accepting_ = false, received_ = false;
     proc *server_ = nullptr, *client_ = nullptr;
     spinlock client_server_lock_;       // Any information relevant to client AND server locks
     wait_queue servq_, clq_;            // Server and client blocking queues

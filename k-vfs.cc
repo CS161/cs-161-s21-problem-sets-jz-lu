@@ -418,15 +418,31 @@ uintptr_t pipe_vnode::read(uintptr_t addr, size_t sz) {
 
 // ===== Unix Domain Sockets ===== //
 
+// Assumes key is validated.
 uds::uds(const char* key) {
-    key_ = (char*) key;
+    strcpy(key_, key);
+    if (UDS_PARANOIA >= 2) {
+        log_printf("[uds-constructor] Init key=%s, key_=%s\n", key, key_);
+    }
 }
 
 uds::~uds() {
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[uds-destructor] Destructor called\n");
+    }
 }
 
 int uds::bind(proc* server) {
+    if (!server) {
+        if (UDS_PARANOIA >= 1) {
+            log_printf("[uds] Error: attempted server bind to null proc*\n");
+        }
+        return E_FAULT;
+    }
     spinlock_guard guard(client_server_lock_);
+    if (UDS_PARANOIA >= 2) {
+        log_printf("[uds] Bindding socket to process PID=%d\n", server->id_);
+    }
     if (server_) {
         return E_MFILE; // A server is already using this socket
     } else {
@@ -436,27 +452,37 @@ int uds::bind(proc* server) {
 }
 
 int uds::listen() {
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[uds] UDS bound to server PI D=%d now listening\n", server_->id_);
+    }
     spinlock_guard guard(client_server_lock_);
     if (!server_) {
+        if (UDS_PARANOIA >= 1) {
+            log_printf("[uds] Error: attempted listen on unbound UDS\n");
+        }
         return E_BADCONN;
     }
-    listening = true;
+    listening_ = true;
+    return 0;
 }
 
 int uds::accept() {
     spinlock_guard guard(client_server_lock_);
-    if (!listening) {
+    if (!listening_) {
         return E_BADCONN;
     }
-    accepting = true;
+    accepting_ = true;
     clq_.wake_all(); // Wake up client sleeping on a connect()
     long start_time = ticks;
-    long end_time;
+    long end_time = start_time;
     if (!connected()) {
         waiter().block_until(servq_, [&] () {
             end_time = ticks;
             return (connected() || end_time >= start_time + UDS_TIMEOUT);
         }, guard);
+    }
+    if (!connected()) { // UDS got closed
+        return E_BADCONN;
     }
     if (end_time >= start_time + UDS_TIMEOUT) {
         return E_SOCKTIMEOUT;
@@ -466,36 +492,108 @@ int uds::accept() {
 }
 
 int uds::connect(proc* client) {
+    if (!client) {
+        if (UDS_PARANOIA >= 1) {
+            log_printf("[uds] Error: attempted connection to null client proc*\n");
+        }
+        return E_FAULT;
+    }
     spinlock_guard guard(client_server_lock_);
-    if (!listening) { // Can't connect till server is listening.
+    if (!listening_) { // Can't connect till server is listening.
         return E_BADCONN;
     }
     client_ = client;
     assert(connected());
     servq_.wake_all(); // Wake up server sleeping on an accept()
     long start_time = ticks;
-    long end_time;
-    if (!accepting) {
+    long end_time = start_time;
+    if (!accepting_) {
         waiter().block_until(clq_, [&] () {
             end_time = ticks;
-            return (accepting || end_time >= start_time + UDS_TIMEOUT);
+            return (accepting_ || end_time >= start_time + UDS_TIMEOUT);
         }, guard);
     }
-    if (end_time >= start_time + UDS_TIMEOUT) {
+    if (!accepting_) { // UDS got closed
+        return E_BADCONN;
+    } else if (end_time >= start_time + UDS_TIMEOUT) {
         return E_SOCKTIMEOUT;
+    } else {
+        return 0;
     }
 }
 // TODO implement timeout feature in proc::exception()
 
 int uds::close() {
-    // Reset everything under lock
+    // Reset everything under lock.
     spinlock_guard guard(client_server_lock_);
-    key_ = nullptr;
+    strcpy(key_, "\0");
     fd_ = -1;
     client_ = server_ = nullptr;
+    accepting_ = listening_ = received_ = false;
+    clq_.wake_all();
+    servq_.wake_all();
     return 0;
 }
 
 int uds::write(int fd) {
-    spinlock_guard guard()
+    spinlock_guard guard(client_server_lock_);
+    long start_time = ticks;
+    long end_time = start_time;
+    if (!received_) {
+        waiter().block_until(clq_, [&] () {
+            end_time = ticks;
+            return (!received_) || (end_time >= start_time + UDS_TIMEOUT);
+        }, guard);
+    } 
+    if (!connected()) { // UDS closed
+        return E_BADCONN;
+    } else if (end_time >= start_time + UDS_TIMEOUT) {
+        // Missed it, oh well.
+        received_ = true;
+        return E_SOCKTIMEOUT;
+    } else {
+        fd_ = fd;
+        received_ = false;
+        return 0;
+    }
+}
+
+// * Note: do not call this function holding a fdtable lock.
+// * This will induce a deadlock.
+int uds::read(int fd) {
+    spinlock_guard guard(client_server_lock_);
+    long start_time = ticks;
+    long end_time = start_time;
+    if (received_) {
+        waiter().block_until(servq_, [&] () {
+            end_time = ticks;
+            return (!received_) || (end_time >= start_time + UDS_TIMEOUT);
+        }, guard);
+    }
+    if (!accepting_) { // UDS closed
+        return E_BADCONN;
+    } else if (end_time >= start_time + UDS_TIMEOUT) {
+        // Missed it, oh well.
+        received_ = true;
+        return E_SOCKTIMEOUT;
+    } else if (!received_) {
+        // Add the file descriptor to the fdtable, if possible.
+        // TODO lock access to fdtable
+        vnode* vn = client_->fdtable[fd_];
+        int newfd;
+        if (!server_->fdtable[fd_]) {
+            newfd = fd_;
+        } else {
+            newfd = server_->find_open_fd(false, 0);
+            if (newfd == E_MFILE) {
+                received_ = true;
+                return E_MFILE;
+            }
+        }
+        server_->fdtable[newfd] = vn;
+        spinlock_guard refguard(vn->open_close_lock_);
+        ++server_->fdtable[newfd]->refcount_;
+        received_ = true;
+    }
+    return fd_;
 }

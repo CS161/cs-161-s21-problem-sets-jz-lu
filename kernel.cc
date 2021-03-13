@@ -100,6 +100,7 @@ void kernel_start(const char* command) {
             log_printf("[kernel_start] Initializing init_task\n");
         } 
     }
+    log_printf("UDS size: 0x%x bytes\n", sizeof(uds));
     cpus[0].enqueue(init_task);
 
 
@@ -625,6 +626,7 @@ int proc::syscall_fork(regstate* regs) {
     memcpy((void*) &(child->fdtable), (void*) &fdtable, MAX_FD*sizeof(vnode*));
     for (int fd = 0; fd < MAX_FD; ++fd) {
         if (fdtable[fd]) {
+            spinlock_guard refguard(fdtable[fd]->open_close_lock_);
             ++fdtable[fd]->refcount_;
         }
     }
@@ -1385,6 +1387,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
 //    Returns first available open file descriptor, i.e. null entry.
 //    Can exclude one fd if necessary (e.g. if it were temporarily taken but not yet assigned).
 //    If exclude_one is turned on then taken_fd must be passed in.
+//    Returns E_MFILE if none available.
 int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
     // TODO [MULTITH] DO NOT LOCK THIS! Lock places that call this, as lock usually
     // TODO needed until after mem alloc successful.
@@ -1452,6 +1455,11 @@ static int pathname_invalid(proc* p, const char* pathname) {
     if (!pathname) { // nullptr check
         if (VFS_MF_PARANOIA >= 1) {
             log_printf("[pathname_invalid] Error: nullptr passed in as path name\n");
+        }
+        return E_FAULT;
+    } else if (!pathname[0]) { // empty string check
+        if (VFS_MF_PARANOIA >= 1) {
+            log_printf("[pathname_invalid] Error: empty string passed in as path name\n");
         }
         return E_FAULT;
     }

@@ -131,6 +131,7 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_msleep(regstate *regs);
     uint64_t syscall_waitpid(regstate *regs);
     
+    int find_open_fd(bool exclude_one, int taken);
     int syscall_open(regstate* regs);
     uintptr_t syscall_pipe(regstate* regs);
     int syscall_dup2(regstate* regs);
@@ -147,7 +148,6 @@ struct __attribute__((aligned(4096))) proc {
     static int load_segment(const elf_program& ph, proc_loader& ld);
 
     // Copies all of the user memory from parent to child.
-    int find_open_fd(bool exclude_one, int taken);
     int argv_invalid(int argc, const char** argv);
     void show_argv(int argc, const char** argv);
     uintptr_t copy_argv(x86_64_pagetable* pt, void* stkpg_kptr, 
@@ -246,8 +246,9 @@ const uint64_t WAITH_PARANOIA = 0;          // Wait heap
 const uint64_t VFS_KBC_PARANOIA = 1;        // Console and Keyboard VFS
 const uint64_t VFS_MF_PARANOIA = 2;         // Memfile VFS
 const uint64_t PROC_PARANOIA = 2;           // Struct proc constructor/destructor
-const uintptr_t PIPE_PARANOIA = 1;
+const uint64_t PIPE_PARANOIA = 1;
 const uint64_t VFS_PARANOIA = 3;            // General VFS, set to max of others usually
+const uint64_t UDS_PARANOIA = 3;            // Unix Domain Sockets
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_
