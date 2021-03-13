@@ -24,9 +24,10 @@ struct elf_program;
 #endif 
 
 // VFS constants
-#define MAX_FD              8
-#define MAX_FILENAME_LEN    64
+#define MAX_FD              8                   // Number of fd's in list.
+#define MAX_FILENAME_LEN    64                  // Max filename length
 #define MAX_ARGV_LEN        (PAGESIZE >> 2)-8   // -8 since argv[argc] must be set to nullptr
+#define MAX_UDS_KEYLEN      32                  // Max length of UDS key (name string)
 
 // kernel.hh
 //

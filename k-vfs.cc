@@ -416,4 +416,86 @@ uintptr_t pipe_vnode::read(uintptr_t addr, size_t sz) {
     return bbuf_->read(addr, sz);
 }
 
+// ===== Unix Domain Sockets ===== //
 
+uds::uds(const char* key) {
+    key_ = (char*) key;
+}
+
+uds::~uds() {
+}
+
+int uds::bind(proc* server) {
+    spinlock_guard guard(client_server_lock_);
+    if (server_) {
+        return E_MFILE; // A server is already using this socket
+    } else {
+        server_ = server;
+        return 0;
+    }
+}
+
+int uds::listen() {
+    spinlock_guard guard(client_server_lock_);
+    if (!server_) {
+        return E_BADCONN;
+    }
+    listening = true;
+}
+
+int uds::accept() {
+    spinlock_guard guard(client_server_lock_);
+    if (!listening) {
+        return E_BADCONN;
+    }
+    accepting = true;
+    clq_.wake_all(); // Wake up client sleeping on a connect()
+    long start_time = ticks;
+    long end_time;
+    if (!connected()) {
+        waiter().block_until(servq_, [&] () {
+            end_time = ticks;
+            return (connected() || end_time >= start_time + UDS_TIMEOUT);
+        }, guard);
+    }
+    if (end_time >= start_time + UDS_TIMEOUT) {
+        return E_SOCKTIMEOUT;
+    } else {
+        return 0;
+    }
+}
+
+int uds::connect(proc* client) {
+    spinlock_guard guard(client_server_lock_);
+    if (!listening) { // Can't connect till server is listening.
+        return E_BADCONN;
+    }
+    client_ = client;
+    assert(connected());
+    servq_.wake_all(); // Wake up server sleeping on an accept()
+    long start_time = ticks;
+    long end_time;
+    if (!accepting) {
+        waiter().block_until(clq_, [&] () {
+            end_time = ticks;
+            return (accepting || end_time >= start_time + UDS_TIMEOUT);
+        }, guard);
+    }
+    if (end_time >= start_time + UDS_TIMEOUT) {
+        return E_SOCKTIMEOUT;
+    }
+}
+// TODO implement timeout feature in proc::exception()
+
+int uds::close() {
+    // Reset everything under lock
+    spinlock_guard guard(client_server_lock_);
+    key_ = nullptr;
+    fd_ = -1;
+    client_ = server_ = nullptr;
+    return 0;
+}
+
+int uds::write(int fd) {
+    spinlock_guard guard()
+}

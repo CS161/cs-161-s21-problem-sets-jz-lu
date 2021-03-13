@@ -1481,7 +1481,7 @@ static int pathname_invalid(proc* p, const char* pathname) {
         if (VFS_MF_PARANOIA >= 1) {
             log_printf("[pathname_invalid] Invalid file name: too long. Ensure buf ptr is correct\n");
         }
-        return E_FAULT;
+        return E_NAMETOOLONG;
     }
 
     if (VFS_MF_PARANOIA >= 2) {
@@ -1829,7 +1829,7 @@ int proc::argv_invalid(int argc, const char** argv) {
             log_printf("[argv_invalid] Too many args and/or arg too long. Total length must be below %d\n",
                 MAX_ARGV_LEN);
         }
-        return E_FAULT;
+        return E_2BIG;
     }
     if (nstrs != argc) {
         if (VFS_PARANOIA >= 1) {

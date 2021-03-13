@@ -308,6 +308,8 @@ struct bitset_view {
 #define E_SRCH          -3         // No such process
 #define E_TXTBSY        -26        // Text file busy
 #define E_2BIG          -7         // Argument list too long
+#define E_BADCONN       -31        // Socket is not properly set up
+#define E_SOCKTIMEOUT   -33        // Socket waited too long on accept or connect
 
 #define E_MINERROR      -100
 

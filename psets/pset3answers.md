@@ -13,6 +13,8 @@ Answers to written questions
 1. We neglected to mention that `fork()` should also increment the `refcount` of each copied `vnode`.
 2. At the time of design we did not think about process VFS cleanup upon exit. `syscall_exit()` must walk through the `proc::fdtable[]` and close all open file descriptors in the same way `syscall_close()` does it.
 3. The `kb_c_vnode` does not require a pointer to the keyboard and console states as the document stated, as they are global singletons.
+4. In case it was not clear to the reader from the design document, the only functions that can possibly block are the various `read()` and `write()` functions from `vnode` derived classes. In our case, currently only pipe buffer read/writes actually block if buffer is empty/full.
+5. The computations for read and write size for `memfile` writing were incorrect; at the time we were not aware of `memfile::set_length()`. The new method is to check `memfile::len_ - vnode::offset_` and if it is smaller than `sz`, try to set the length (for writes---for reads, just read as much as possible).
 
 ### Part C
 The bounded buffer implementation follows closely the implementation from CS 61 linked on the problem set statement; as such, we refrain from restating all of the logic for the bounded buffer. We built the pipe `vnode` system in our design document early on, so any updates are below.

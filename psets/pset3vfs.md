@@ -155,7 +155,7 @@ At the moment, accesses to `proc::fdtable[]` are not locked (see Future Work). A
 5. Future work
 Add a per-`struct proc` lock to lock the `proc::fdtable[]` to support multithreaded processes sharing a `fdtable[]`. Any access to the `fdtable[]` will be under this lock. As any access to a `vnode` must occur through the `fdtable[]` of a `struct proc`, it suffices to lock only the table and not the `vnode`, as only different threads of the same process have access to the same `vnode`. Since a per-process lock will eventually be put in use, it may be of interest, time permitting, to make some other locking strategies finer-grained to the per-process structure.
 
-6. Concerns
+6. Concerns (i.e. OH Questions)
 
 Is a "read" just reading off the beginning of the data array plus the `vnode::offset_`? Or is there something else to it? Similarly, is a "write" to the end of the file, or to the beginning plus `vnode::offset_`? This does not apply for console, right, as every read/write is to the end and separated?
 
