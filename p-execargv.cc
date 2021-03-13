@@ -1,10 +1,10 @@
 #include "u-lib.hh"
 
 void process_main() {
-    sys_write(1, "About to greet you...\n", 22);
+    sys_write(1, "Testing execv argument passing...\n", 22);
 
     const char* args[] = {
-        "runargv", "a1", "a2", nullptr
+        "runargv", "a1", "a2", "a3", "a4", "a5", "a6", nullptr
     };
     int r = sys_execv("runargv", args);
     assert_eq(r, 0);

@@ -16,12 +16,11 @@ static size_t io_sz(size_t start, size_t cap, size_t sz) {
 }
 
 // Direct functions.
-vnode::vnode(int mode) {
+vnode::vnode(int mode) : mode_(mode) {
     if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
         log_printf("[vnode] Generic vnode constructor called\n");
     }
-    // assert((mode >= OF_READ) && (mode <= OF_RDWR));
-    mode_ = mode;
+    assert((mode >= OF_READ) && (mode <= (OF_RDWR)));
 }
 
 // * By C++ decree, a struct that is delete'd with the parent class pointer type
@@ -139,6 +138,7 @@ memfile_vnode::memfile_vnode(int mode, memfile* mf) : vnode(mode) {
 }
 
 memfile_vnode::~memfile_vnode() {
+    spinlock_guard guard(open_close_lock_);
     if (VFS_MF_PARANOIA >= 1) {
         log_printf("[memfile_vnode-destructor] *Closing time...one last call for alcohol*\n");
     }

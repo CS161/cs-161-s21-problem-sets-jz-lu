@@ -36,7 +36,7 @@ struct elf_program;
 // All declarations of children in k-vfs.hh. This cannot be declared in 
 // because its a 
 struct vnode {
-    int mode_ = 0; // Read, write, or both
+    const int mode_ = 0; // Read, write, or both
     off_t offset_ = 0; // Offset from file, to be incremented on read/writes
     int refcount_ = 0; // Number of processes with entry in fd table pointing here
     spinlock open_close_lock_; // To decrement refcount and offset if necessary

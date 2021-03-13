@@ -65,6 +65,9 @@ struct pipe_vnode:public vnode {
     uintptr_t read(uintptr_t addr, size_t sz);
 };
 
-
+// Unix domain socket
+struct uds_vnode:public vnode {
+    const char* name;
+};
 
 #endif

@@ -1509,7 +1509,7 @@ int proc::syscall_open(regstate* regs) {
     int flags = regs->reg_rsi;
     bool create = (flags & OF_CREAT);
     bool trunc = (flags & OF_TRUNC);
-    bool mode = flags & (OF_RDWR);
+    int mode = flags & (OF_RDWR);
     if (!mode) { // Check for null read/write mode flag
         return E_INVAL;
     } else if (VFS_PARANOIA >= 2) {
