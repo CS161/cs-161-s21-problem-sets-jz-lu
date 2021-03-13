@@ -1855,7 +1855,7 @@ uintptr_t proc::copy_argv(x86_64_pagetable* pt, void* stkpg_uptr, int argc,
 
     // One by one, copy in the strings (which have been assumed to be validated)
     // and increment cpy_kva. At the same time, build the pointers into an array.
-    uintptr_t argv_arr_kva = cpy_kva - sizeof(char*)*argc;
+    uintptr_t argv_arr_kva = cpy_kva - sizeof(char*)*(argc+1); // +1 for last element nullptr
     uintptr_t argv_arr_uva = stkpg_uva + PAGESIZE - (stkpg_top_kva - argv_arr_kva);
     uintptr_t next_arg_kva = argv_arr_kva;
     for (int i = 0; i < argc; ++i) {
@@ -1872,6 +1872,8 @@ uintptr_t proc::copy_argv(x86_64_pagetable* pt, void* stkpg_uptr, int argc,
         assert(cpy_kva <= stkpg_top_kva);
         assert(cpy_uva <= stkpg_uva + PAGESIZE);
     }
+    memset(reinterpret_cast<void*>(next_arg_kva), 0, sizeof(char*));
+    next_arg_kva += sizeof(char*);
 
     // Run some tests.
     if (VFS_PARANOIA >= 3) {

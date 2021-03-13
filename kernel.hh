@@ -15,7 +15,7 @@ struct proc_loader;
 struct elf_program;
 #define PROC_RUNNABLE 1
 #define NPROC 16
-#define CANARY_EV 894753471348 // Expected canary value
+#define CANARY_EV 894753471348                  // Expected canary value
 
 #ifdef log_2f 
 #define log_2f log_printf 
@@ -26,7 +26,7 @@ struct elf_program;
 // VFS constants
 #define MAX_FD              8
 #define MAX_FILENAME_LEN    64
-#define MAX_ARGV_LEN        PAGESIZE >> 2
+#define MAX_ARGV_LEN        (PAGESIZE >> 2)-8   // -8 since argv[argc] must be set to nullptr
 
 // kernel.hh
 //

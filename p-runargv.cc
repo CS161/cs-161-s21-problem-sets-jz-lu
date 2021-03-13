@@ -14,4 +14,5 @@ void process_main(int argc, char** argv) {
                argv[i]);
     }
     console_printf("If the above printed a1 and a2 as args, test succeeded\n");
+    sys_exit(0);
 }

@@ -8,6 +8,5 @@ void process_main() {
     };
     int r = sys_execv("echo", args);
     assert_eq(r, 0);
-
     sys_exit(0);
 }
