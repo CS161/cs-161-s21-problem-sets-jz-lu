@@ -26,7 +26,7 @@ struct elf_program;
 // VFS constants
 #define MAX_FD              8
 #define MAX_FILENAME_LEN    64
-#define MAX_ARGV_LEN        PAGESIZE >> 1
+#define MAX_ARGV_LEN        PAGESIZE >> 2
 
 // kernel.hh
 //
@@ -149,7 +149,8 @@ struct __attribute__((aligned(4096))) proc {
     int find_open_fd(bool exclude_one, int taken);
     int argv_invalid(int argc, const char** argv);
     void show_argv(int argc, const char** argv);
-    void copy_argv(void* stkpg_kptr, int argc, const char** argv, int total_length);
+    uintptr_t copy_argv(x86_64_pagetable* pt, void* stkpg_kptr, 
+        int argc, const char** argv, int total_length);
     int copy_memory_(proc* child);
     void show_fdtable_();
     void free_auto_allocs(proc* p);

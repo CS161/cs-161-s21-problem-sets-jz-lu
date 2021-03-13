@@ -1831,35 +1831,75 @@ int proc::argv_invalid(int argc, const char** argv) {
 
 
 // proc::copy_argv(stkpg_kptr, argc, argv)
-//    Copies the arguments into a stack page passed in as a kptr.
-//    NOTE: Assumes argv has been validated and the stkpg is non-null.
-void proc::copy_argv(void* stkpg_kptr, int argc, const char** argv, int total_length) {
+//    Copies the arguments into a stack page passed in as a kptr. Returns UVA of new argv.
+//    NOTE: Assumes argv has been validated and the stkpg has been mapped in to user proc.
+uintptr_t proc::copy_argv(x86_64_pagetable* pt, void* stkpg_uptr, int argc, 
+    const char** argv, int total_length) {
+    vmiter it(pt, reinterpret_cast<uintptr_t>(stkpg_uptr));
+    uintptr_t stkpg_pa = it.pa(); // Physical addr
+    uintptr_t stkpg_uva = it.va(); // User virtual addr
+    void* stkpg_kptr = pa2kptr<void*>(stkpg_pa);
     if (VFS_PARANOIA >= 2) {
-        log_printf("[copy_argv] Copying argv below to stack page KVA=%p, PA=0x%x. Total length: %d\n",
-            stkpg_kptr, kptr2pa(stkpg_kptr), total_length);
+        log_printf("[copy_argv] Copying argv below to stack page KVA=%p, UVA=%p, PA=0x%x. Total length: %d\n",
+            stkpg_kptr, stkpg_uptr, stkpg_pa, total_length);
         show_argv(argc, argv);
     }
-    assert(stkpg_kptr);
+    assert(stkpg_uptr == reinterpret_cast<void*>(stkpg_uva));
 
     // Start the copy off from the top of the stack minus the total length 
     // of all the arguments in the array when concatenated.
-    uintptr_t stkpg_top_addr = reinterpret_cast<uintptr_t>(stkpg_kptr) + PAGESIZE;
-    uintptr_t cur_addr = stkpg_top_addr - total_length;
-    assert(stkpg_top_addr - cur_addr < MAX_ARGV_LEN);
+    uintptr_t stkpg_top_kva = reinterpret_cast<uintptr_t>(stkpg_kptr) + PAGESIZE;
+    uintptr_t cpy_kva = stkpg_top_kva - total_length;
+    uintptr_t cpy_uva = stkpg_uva + PAGESIZE - total_length; // Addresses in the new argv must be user-level
+    assert(stkpg_top_kva - cpy_kva < MAX_ARGV_LEN);
 
     // One by one, copy in the strings (which have been assumed to be validated)
-    // and increment cur_addr.
+    // and increment cpy_kva. At the same time, build the pointers into an array.
+    uintptr_t argv_arr_kva = cpy_kva - sizeof(char*)*argc;
+    uintptr_t argv_arr_uva = stkpg_uva + PAGESIZE - (stkpg_top_kva - argv_arr_kva);
+    uintptr_t next_arg_kva = argv_arr_kva;
     for (int i = 0; i < argc; ++i) {
         char* arg = (char*) argv[i];
         int arglen = strlen(arg) + 1; // Must include null terminator
-        memcpy(reinterpret_cast<void*>(cur_addr), reinterpret_cast<void*>(arg), arglen);
-        cur_addr += arglen;
-        assert(cur_addr <= stkpg_top_addr);
+
+        // Copy in the string, and copy in the corresponding user-virtual address to an array.
+        memcpy(reinterpret_cast<void*>(cpy_kva), reinterpret_cast<void*>(arg), arglen);
+        memcpy(reinterpret_cast<void*>(next_arg_kva), &cpy_uva, sizeof(char*));
+
+        next_arg_kva += sizeof(char*);
+        cpy_kva += arglen;
+        cpy_uva += arglen;
+        assert(cpy_kva <= stkpg_top_kva);
+        assert(cpy_uva <= stkpg_uva + PAGESIZE);
     }
-    assert(cur_addr == stkpg_top_addr);
+
+    // Run some tests.
+    if (VFS_PARANOIA >= 3) {
+        assert(cpy_kva == stkpg_top_kva);
+        assert(cpy_uva == stkpg_uva + PAGESIZE);
+        assert(next_arg_kva == stkpg_top_kva - total_length);
+        next_arg_kva = argv_arr_kva;
+        log_printf("[TEST] [copy_argv] NEW char** argv=0x%x is an array of UVA ptrs --> [", 
+            argv_arr_kva);
+        for (int i = 0; i < argc-1; ++i) {
+            log_printf("0x%x, ", next_arg_kva);
+            next_arg_kva += sizeof(char*);
+        }
+        log_printf("0x%x]\n", next_arg_kva);
+        log_printf("[TEST] [copy_argv] Corresponding strings pointed to by argv: {");
+        char** str_arr = reinterpret_cast<char**>(argv_arr_kva);
+        for (int i = 0; i < argc-1; ++i) {
+            log_printf("%s, ", pa2kptr<char*>(vmiter(pt, (uintptr_t) str_arr[i]).pa()));
+        }
+        log_printf("%s}\n", pa2kptr<char*>(vmiter(pt, (uintptr_t) str_arr[argc-1]).pa()));
+        log_printf("[TEST] [copy_argv] new argv arr KVA=%p, UVA=%p, PA=%p\n",
+            (void*) argv_arr_kva, (void*) argv_arr_uva, ka2pa(argv_arr_kva));
+    }
+
     if (VFS_PARANOIA >= 2) {
         log_printf("[copy_argv] argv copy successful\n");
     }
+    return argv_arr_uva;
 }
 
 
@@ -1958,7 +1998,8 @@ int proc::syscall_execv(regstate* regs) {
     }
 
     // Copy in the argv and argc.
-    copy_argv(stkpg, argc, argv, total_length);
+    uintptr_t new_argv_uva = copy_argv(pt, (void*) (MEMSIZE_VIRTUAL-PAGESIZE), argc, argv, total_length);
+    assert(new_argv_uva);
 
     // At this point, the system call will succeeed. The next line stomps on regstate.
     // Initialize a new set of registers for the process.
@@ -1973,15 +2014,23 @@ int proc::syscall_execv(regstate* regs) {
 
     // Set instruction and stack ptr regs.
     regs_->reg_rip = mld.entry_rip_;
-    regs_->reg_rsp = MEMSIZE_VIRTUAL-total_length; // Start at where the arguments are
+    // %rsp starts at the argv array in user-level memory.
+    regs_->reg_rsp = new_argv_uva;
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] \%rsp set to 0x%x, \%rip set to 0x%x\n", 
-            MEMSIZE_VIRTUAL, mld.entry_rip_);
+            regs_->reg_rsp, mld.entry_rip_);
+        char** start = pa2kptr<char**>(vmiter(pt, regs_->reg_rsp).pa());
+        log_printf("[syscall_execv] \%rsi=%p points to array with first string='%s'\n",
+            start, pa2kptr<char**>(vmiter(pt, (uintptr_t) start[0]).pa()));
     }
 
-    // Set functional argument regs to argc and argv.
+    // Set functional argument regs to argc and the NEW argv pointer in the stack page.
     regs_->reg_rdi = argc;
-    regs_->reg_rsi = reinterpret_cast<uintptr_t>(argv);
+    regs_->reg_rsi = regs_->reg_rsp;
+    if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
+        log_printf("[syscall_execv] set \%rdi=%lu and \%rsi=0x%x\n", 
+            regs_->reg_rdi, regs_->reg_rsi);
+    } 
 
     // Set the pagetable and free the old one.
     set_pagetable(pt);
@@ -1990,10 +2039,11 @@ int proc::syscall_execv(regstate* regs) {
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] New pagetable %p set, old pagetable %p and mem freed\n",
             pagetable_, old_pt);
+        log_printf("[syscall_execv] Execv setup complete, yielding\n");
     }
     
     // yield_noreturn() so the scheduler treats resume() like a regstate
-    // and uses regs_ as the resumption state regs.
+    // and uses regs_ in the resumption state register set inseead of a yieldstate.
     yield_noreturn();
 }
 
