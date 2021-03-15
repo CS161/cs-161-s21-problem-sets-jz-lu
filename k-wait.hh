@@ -80,6 +80,7 @@ inline void waiter::clear() {
     wake();
 
     // Dequeue the waiter off the the wait queue, if it is enqueued.
+    // TODO [Eric]
     for (waiter *it = wq_->q_.front(); it; it = wq_->q_.next(it)) {
         if (it == this) {
             wq_->q_.erase(it);
@@ -343,8 +344,8 @@ inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicat
             break;
         }
         if (WAITH_PARANOIA >= 3) {
-            log_printf("[HEAP-waiter] Predcheck failed: e_intr = %d. About to block PID=%d\n", 
-                p_->e_intr, p_->id_);
+            log_printf("[HEAP-waiter] Predcheck failed: About to block PID=%d\n", 
+                p_->id_);
         }
         block();
         if (WAITH_PARANOIA >= 3) {
