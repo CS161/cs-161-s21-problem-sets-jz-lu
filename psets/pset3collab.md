@@ -3,7 +3,7 @@ CS 161 Problem Set 3 Collaboration
 
 Collaborators
 -------------
-Aakash Mishra (partner)
+Aakash Mishra (partner and space cowboy)
 
 Citations
 ---------

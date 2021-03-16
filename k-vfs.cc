@@ -147,6 +147,8 @@ memfile_vnode::~memfile_vnode() {
 }
 
 void memfile_vnode::set_mf(memfile* mf) {
+    // No races here: no two threads can initialize the same node at the
+    // same time.
     assert(mf);
     assert(!mf_); // Can only set this once
     mf_ = mf;
