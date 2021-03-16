@@ -1,0 +1,1778 @@
+boot.cc:#include "x86-64.h"
+boot.cc://   of instructions: it is stored in the disk's first 512-byte sector.
+boot.cc://   BIOS intializes devices and CPU state, reads the first 512-byte sector of
+boot.cc:    while (ELFHDR->e_magic != ELF_MAGIC) {
+boot.cc:    elf_program* ph = (elf_program*) ((uint8_t*) ELFHDR + ELFHDR->e_phoff);
+boot.cc:    elf_program* eph = ph + ELFHDR->e_phnum;
+boot.cc:        boot_readseg(ph->p_va,
+boot.cc:                     KERNEL_START_SECTOR + ph->p_offset / SECTORSIZE,
+boot.cc:                     ph->p_filesz, ph->p_memsz);
+boot.cc:    [[noreturn]] kernel_entry_t kernel_entry = (kernel_entry_t) ELFHDR->e_entry;
+boot.cc:    ptr &= ~(SECTORSIZE - 1);
+bootentry.S:#   it loads the first 512-byte sector of the hard disk
+bootentry.S:#   into physical addresses 0x7C00-0x7DFF.
+bootentry.S:#   the 8086, which supported only 16-bit addresses.  When the BIOS calls
+bootentry.S:#   into the OS, it is running in the "most compatible" mode, 16-bit real
+bootentry.S:#   user-mode applications. The following weird magic transitions the
+bootentry.S:#   processor to 64-bit mode and sets up a page table suitable for initial
+bootentry.S:/* import constants from kernel.hh and x86-64.h */
+bootentry.S:#include "obj/k-asm.h"
+bootentry.S:        # for x86-64 code. https://wiki.osdev.org/X86-64
+bootentry.S:        # low-canonical, high-canonical, and kernel-text addresses to
+bootentry.S:        movl    $(PTE_P + PTE_W + PTE_PS), -3(%ecx)
+bootentry.S:        movl    $MSR_IA32_EFER, %ecx    # turn on 64-bit mode
+bootentry.S:        .word 0x0f                           # sizeof(gdt) - 1
+boot.ld:OUTPUT_FORMAT(elf64-x86-64)
+boot.ld:OUTPUT_ARCH(i386:x86-64)
+boot.ld:    /DISCARD/ : { *(.eh_frame .note.GNU-stack) }
+cbyteswap.hh:// Chickadee requires x86-64, which is little-endian.
+Binary file chickadeeboot.img matches
+chickadeefs.hh:    blocknum_t data_bn;           // first data-area block
+chickadeefs.hh:    // return the buffer cache entry containing this buffer-cached inode
+chickadeefs.hh:    // drop reference to this buffer-cached inode
+chickadeefs.hh:    return tiddiff_t(x - y) < 0;
+chickadeefs.hh:    return tiddiff_t(x - y) <= 0;
+chickadeefs.hh:    return tiddiff_t(x - y) >= 0;
+chickadeefs.hh:    return tiddiff_t(x - y) > 0;
+chickadeefs.hh:static constexpr size_t ref_size = (blocksize / 4 - 7) / 3;
+Binary file chickadeefs.img matches
+crc32c.cc: * crc32c.c - compute CRC32 using the Castagnoli polymonial
+crc32c.cc: * Based on code found in cyrus-imapd, modified for Chickadee.
+crc32c.cc: * Copyright (c) 2011-2015 Stephan Brumme. All rights reserved.
+crc32c.cc: * This software is provided 'as-is', without any express or implied warranty.
+crc32c.cc:/* Tables for slice-by-4 implementation */
+crc32c.cc:    for (; len != 0 && reinterpret_cast<uintptr_t>(cbuf) % 4; ++cbuf, --len) {
+crc32c.cc:    // four-byte slices
+crc32c.cc:    for (; len >= 4; cbuf += 4, len -= 4) {
+crc32c.cc:    for (; len != 0; ++cbuf, --len) {
+elf.h:// in-memory reference to debug symbol table + string table
+GNUmakefile:-include $(CONFIG)
+GNUmakefile:QEMUOPT = -net none -parallel $(LOG) -smp $(NCPU)
+GNUmakefile:QEMUOPT += -d int,cpu_reset,guest_errors -no-reboot
+GNUmakefile:QEMUGDB ?= -gdb tcp::12949
+GNUmakefile:KERNEL_OBJS = $(OBJDIR)/k-exception.ko \
+GNUmakefile:	$(OBJDIR)/kernel.ko $(OBJDIR)/k-cpu.ko $(OBJDIR)/k-proc.ko \
+GNUmakefile:	$(OBJDIR)/k-alloc.ko $(OBJDIR)/k-vmiter.ko $(OBJDIR)/k-devices.ko \
+GNUmakefile:	$(OBJDIR)/k-init.ko $(OBJDIR)/k-hardware.ko $(OBJDIR)/k-mpspec.ko \
+GNUmakefile:	$(OBJDIR)/k-ahci.ko $(OBJDIR)/k-chkfs.ko $(OBJDIR)/k-chkfsiter.ko \
+GNUmakefile:	$(OBJDIR)/k-memviewer.ko $(OBJDIR)/lib.ko $(OBJDIR)/k-initfs.ko \
+GNUmakefile:	$(OBJDIR)/k-vfs.ko
+GNUmakefile:PROCESSES ?= $(patsubst %.cc,%,$(wildcard p-*.cc))
+GNUmakefile:PROCESS_LIB_OBJS = $(OBJDIR)/lib.uo $(OBJDIR)/u-lib.uo $(OBJDIR)/crc32c.uo
+GNUmakefile:	$(shell find initfs -type f -not -name '\#*\#' -not -name '*~' 2>/dev/null) \
+GNUmakefile:	$(shell find initfs -type f -not -name '\#*\#' -not -name '*~' 2>/dev/null) \
+GNUmakefile:	$(shell find diskfs -type f -not -name '\#*\#' -not -name '*~' 2>/dev/null) \
+GNUmakefile:-include build/rules.mk
+GNUmakefile:RUNCMD_LASTWORD := $(filter run-%,$(MAKECMDGOALS))
+GNUmakefile:RUNCMD_LASTWORD := $(lastword $(subst -, ,$(RUNCMD_LASTWORD)))
+GNUmakefile:ifneq ($(filter p-$(RUNCMD_LASTWORD),$(PROCESSES)),)
+GNUmakefile:$(OBJDIR)/k-firstprocess.h: always
+GNUmakefile:ifeq ($(wildcard $(OBJDIR)/k-firstprocess.h),)
+GNUmakefile:KERNELBUILDSTAMPS += $(OBJDIR)/k-firstprocess.h
+GNUmakefile:	$(call cxxcompile,$(KERNELCXXFLAGS) -O2 -DCHICKADEE_KERNEL -mcmodel=kernel -c $< -o $@,COMPILE $<)
+GNUmakefile:$(OBJDIR)/%.ko: %.S $(OBJDIR)/k-asm.h $(KERNELBUILDSTAMPS)
+GNUmakefile:	$(call assemble,-O2 -mcmodel=kernel -c $< -o $@,ASSEMBLE $<)
+GNUmakefile:	$(call cxxcompile,$(CXXFLAGS) -Os -fomit-frame-pointer -c $< -o $@,COMPILE $<)
+GNUmakefile:	bootentry.S $(OBJDIR)/k-asm.h $(KERNELBUILDSTAMPS)
+GNUmakefile:	$(call assemble,-Os -fomit-frame-pointer -c $< -o $@,ASSEMBLE $<)
+GNUmakefile:	$(call cxxcompile,$(CXXFLAGS) -O1 -DCHICKADEE_PROCESS -c $< -o $@,COMPILE $<)
+GNUmakefile:$(OBJDIR)/%.uo: %.S $(OBJDIR)/u-asm.h $(BUILDSTAMPS)
+GNUmakefile:	$(call assemble,-O2 -c $< -o $@,ASSEMBLE $<)
+GNUmakefile:$(OBJDIR)/k-asm.h: kernel.hh lib.hh types.h x86-64.h build/mkkernelasm.awk $(KERNELBUILDSTAMPS)
+GNUmakefile:	$(call cxxcompile,-dM -E kernel.hh | awk -f build/mkkernelasm.awk | sort > $@,CREATE $@)
+GNUmakefile:	@if test ! -s $@; then echo '* Error creating $@!' 1>&2; exit 1; fi
+GNUmakefile:$(OBJDIR)/u-asm.h: u-lib.hh lib.hh types.h x86-64.h build/mkkernelasm.awk $(BUILDSTAMPS)
+GNUmakefile:	$(call cxxcompile,-dM -E u-lib.hh | awk -f build/mkkernelasm.awk | sort > $@,CREATE $@)
+GNUmakefile:	@if test ! -s $@; then echo '* Error creating $@!' 1>&2; exit 1; fi
+GNUmakefile:$(OBJDIR)/k-firstprocess.h:
+GNUmakefile:$(OBJDIR)/k-initfs.cc: build/mkinitfs.awk \
+GNUmakefile:	$(call run,echo $(INITFS_CONTENTS) $(INITFS_PARAMS) | awk -f build/mkinitfs.awk >,CREATE,$@)
+GNUmakefile:$(OBJDIR)/k-initfs.ko: $(OBJDIR)/k-initfs.cc
+GNUmakefile:	$(call cxxcompile,$(KERNELCXXFLAGS) -O2 -DCHICKADEE_KERNEL -mcmodel=kernel -c $< -o $@,COMPILE $<)
+GNUmakefile:	$(call link,-T kernel.ld -o $@ $(KERNEL_OBJS) -b binary $(INITFS_CONTENTS),LINK)
+GNUmakefile:$(OBJDIR)/p-%.full: $(OBJDIR)/p-%.uo $(PROCESS_LIB_OBJS) process.ld
+GNUmakefile:	$(call link,-T process.ld -o $@ $< $(PROCESS_LIB_OBJS),LINK)
+GNUmakefile:	$(call run,$(OBJDUMP) -C -S -j .lowtext -j .text -j .ctors $< >$@.asm)
+GNUmakefile:	$(call run,$(NM) -n $< >$@.sym)
+GNUmakefile:	$(call run,$(OBJCOPY) -j .lowtext -j .lowdata -j .text -j .rodata -j .data -j .bss -j .ctors -j .init_array $<,STRIP,$@)
+GNUmakefile:	@if $(OBJDUMP) -p $@ | grep off | grep -iv 'off[ 0-9a-fx]*000 ' >/dev/null 2>&1; then echo "* Warning: Some sections of kernel object file are not page-aligned." 1>&2; fi
+GNUmakefile:	$(call run,$(OBJDUMP) -C -S -j .text -j .ctors $< >$@.asm)
+GNUmakefile:	$(call run,$(NM) -n $< >$@.sym)
+GNUmakefile:	$(call run,$(QUIETOBJCOPY) -j .text -j .rodata -j .data -j .bss -j .ctors -j .init_array $<,STRIP,$@)
+GNUmakefile:	$(call link,-T boot.ld -o $@.full $(BOOT_OBJS),LINK)
+GNUmakefile:	$(call run,$(OBJDUMP) -C -S $@.full >$@.asm)
+GNUmakefile:	$(call run,$(NM) -n $@.full >$@.sym)
+GNUmakefile:	$(call run,$(OBJCOPY) -S -O binary -j .text $@.full $@)
+GNUmakefile:	$(call run,$(HOSTCXX) $(CPPFLAGS) $(HOSTCXXFLAGS) $(DEPCFLAGS) -g -o $@,HOSTCOMPILE,$<)
+GNUmakefile:	$(call run,$(HOSTCXX) $(CPPFLAGS) $(HOSTCXXFLAGS) $(DEPCFLAGS) -c -o $@,HOSTCOMPILE,$<)
+GNUmakefile:	$(call run,$(HOSTCXX) $(CPPFLAGS) $(HOSTCXXFLAGS) $(DEPCFLAGS) -c -o $@,HOSTCOMPILE,$<)
+GNUmakefile:	$(call run,$(HOSTCXX) $(CPPFLAGS) $(HOSTCXXFLAGS) $(DEPCFLAGS) -g -o $@,HOSTCOMPILE,$<)
+GNUmakefile:	$(call run,$(HOSTCXX) $(CPPFLAGS) $(HOSTCXXFLAGS) $(DEPCFLAGS) $(CHICKADEEFSCK_OBJS) -o,HOSTLINK,$@)
+GNUmakefile:# If you change the `-f` argument, also change `boot.cc:KERNEL_START_SECTOR`
+GNUmakefile:	$(call run,$(OBJDIR)/mkchickadeefs -b 4096 -f 16 -s $(OBJDIR)/bootsector $(OBJDIR)/kernel > $@,CREATE $@)
+GNUmakefile:	$(call run,$(OBJDIR)/mkchickadeefs -b 32768 -f 16 -j 64 -s $(OBJDIR)/bootsector $(OBJDIR)/kernel $(DISKFS_CONTENTS) > $@,CREATE $@)
+GNUmakefile:	$(call run,rm -f chickadeefs.img,RM chickadeefs.img)
+GNUmakefile:QEMUIMG = -M q35 \
+GNUmakefile:	-device piix4-ide,bus=pcie.0,id=piix4-ide \
+GNUmakefile:	-drive file=chickadeeboot.img,if=none,format=raw,id=bootdisk \
+GNUmakefile:	-device ide-hd,drive=bootdisk,bus=piix4-ide.0 \
+GNUmakefile:	-drive file=chickadeefs.img,if=none,format=raw,id=maindisk \
+GNUmakefile:	-device ide-hd,drive=maindisk,bus=ide.0
+GNUmakefile:run: run-$(QEMUDISPLAY)
+GNUmakefile:run-gdb-report:
+GNUmakefile:	@if test "$(QEMUGDB)" = "-gdb tcp::12949"; then echo '* Run `gdb -x build/weensyos.gdb` to connect gdb to qemu.' 1>&2; fi
+GNUmakefile:run-graphic: $(QEMUIMAGEFILES) check-qemu run-gdb-report
+GNUmakefile:run-console: $(QEMUIMAGEFILES) check-qemu-console run-gdb-report
+GNUmakefile:	$(call run,$(QEMU) $(QEMUOPT) -curses $(QEMUGDB) $(QEMUIMG),QEMU $<)
+GNUmakefile:run-monitor: $(QEMUIMAGEFILES) check-qemu
+GNUmakefile:	$(call run,$(QEMU_PRELOAD) $(QEMU) $(QEMUOPT) -monitor stdio $(QEMUIMG),QEMU $<)
+GNUmakefile:run-gdb: run-gdb-$(QEMUDISPLAY)
+GNUmakefile:run-gdb-graphic: $(QEMUIMAGEFILES) check-qemu
+GNUmakefile:	$(call run,$(QEMU_PRELOAD) $(QEMU) $(QEMUOPT) -gdb tcp::12949 $(QEMUIMG) &,QEMU $<)
+GNUmakefile:	$(call run,sleep 0.5; gdb -x build/chickadee.gdb,GDB)
+GNUmakefile:run-gdb-console: $(QEMUIMAGEFILES) check-qemu-console
+GNUmakefile:	$(call run,$(QEMU) $(QEMUOPT) -curses -gdb tcp::12949 $(QEMUIMG),QEMU $<)
+GNUmakefile:run-$(RUNSUFFIX): run
+GNUmakefile:run-graphic-$(RUNSUFFIX): run-graphic
+GNUmakefile:run-console-$(RUNSUFFIX): run-console
+GNUmakefile:run-monitor-$(RUNSUFFIX): run-monitor
+GNUmakefile:run-gdb-$(RUNSUFFIX): run-gdb
+GNUmakefile:run-gdb-graphic-$(RUNSUFFIX): run-gdb-graphic
+GNUmakefile:run-gdb-console-$(RUNSUFFIX): run-gdb-console
+GNUmakefile:	-killall -u $$(whoami) $(QEMU)
+GNUmakefile:	@sleep 0.2; if ps -U $$(whoami) | grep $(QEMU) >/dev/null; then killall -9 -u $$(whoami) $(QEMU); fi
+journalreplayer.cc:        message(-1U, "no metablocks found");
+journalreplayer.cc:            auto last = mr_[mi - 1].b;
+journalreplayer.cc:            if (cur->seq == last->seq) {
+journalreplayer.cc:            if (tid_lt(cur->commit_boundary, last->commit_boundary)) {
+journalreplayer.cc:            if (tid_lt(cur->complete_boundary, last->complete_boundary)) {
+journalreplayer.cc:        if (tid_gt(cur->complete_boundary, cur->commit_boundary)) {
+journalreplayer.cc:        if (cur->nref
+journalreplayer.cc:            && tid_lt(cur->tid, mr_[mi - 1].b->commit_boundary)) {
+journalreplayer.cc:        if (cur->nref
+journalreplayer.cc:            && tid_lt(cur->tid, mr_[mi].b->complete_boundary)) {
+journalreplayer.cc:        if ((cur->flags & jf_complete)
+journalreplayer.cc:            && tid_ge(cur->tid, cur->complete_boundary)) {
+journalreplayer.cc:        if ((cur->flags & jf_commit)
+journalreplayer.cc:            && tid_ge(cur->tid, cur->commit_boundary)) {
+journalreplayer.cc:    tid_t complete_boundary = mr_[nmr_ - 1].b->complete_boundary;
+journalreplayer.cc:    tid_t commit_boundary = mr_[nmr_ - 1].b->commit_boundary;
+journalreplayer.cc:    message(-1U, "committable region is [%u,%u)", complete_boundary,
+journalreplayer.cc:    for (unsigned mx = nmr_; mx != 0; --mx) {
+journalreplayer.cc:        auto jmb = mr_[mx - 1].b;
+journalreplayer.cc:        if (tid_ge(jmb->tid, complete_boundary)
+journalreplayer.cc:            && tid_lt(jmb->tid, commit_boundary)) {
+journalreplayer.cc:    if (from_le(jmb->magic) != journalmagic) {
+journalreplayer.cc:    auto checksum = from_le(jmb->checksum);
+journalreplayer.cc:        || checksum == crc32c(jd + 16, blocksize - 16);
+journalreplayer.cc:        jmb->seq = from_le(jmb->seq);
+journalreplayer.cc:        jmb->tid = from_le(jmb->tid);
+journalreplayer.cc:        jmb->commit_boundary = from_le(jmb->commit_boundary);
+journalreplayer.cc:        jmb->complete_boundary = from_le(jmb->complete_boundary);
+journalreplayer.cc:        jmb->flags = from_le(jmb->flags);
+journalreplayer.cc:        jmb->nref = from_le(jmb->nref);
+journalreplayer.cc:        if (jmb->flags & (jf_error | jf_corrupt)) {
+journalreplayer.cc:            jmb->flags |= jf_error;
+journalreplayer.cc:        if (!(jmb->flags & jf_meta)) {
+journalreplayer.cc:            jmb->flags |= jf_error;
+journalreplayer.cc:        if (jmb->nref > ref_size) {
+journalreplayer.cc:            jmb->flags |= jf_error;
+journalreplayer.cc:        for (unsigned refi = 0; refi != jmb->nref; ++refi) {
+journalreplayer.cc:            delta = analyze_block_reference(jmb, jmb->ref[refi], bi, delta);
+journalreplayer.cc:        // add non-erroneous metablocks to list in sequence number order
+journalreplayer.cc:        if (!(jmb->flags & jf_error)) {
+journalreplayer.cc:            while (x != nmr_ && int32_t(jmb->seq - mr_[x].b->seq) >= 0) {
+journalreplayer.cc:                memmove(&mr_[x + 1], &mr_[x], (nmr_ - x) * sizeof(metaref));
+journalreplayer.cc:    } else if (from_le(jmb->magic) != 0) {
+journalreplayer.cc:        if (from_le(jmb->magic) != journalmagic) {
+journalreplayer.cc:                    from_le(jmb->magic));
+journalreplayer.cc:                    from_le(jmb->checksum));
+journalreplayer.cc:            jmb->flags |= jf_error;
+journalreplayer.cc:            jmb->flags |= jf_error;
+journalreplayer.cc:            auto want_seq = tid_t(mr_[mi - 1].b->seq + 1);
+journalreplayer.cc:            if (jmb->seq == want_seq) { // no seq numbers missing
+journalreplayer.cc:                if (tid_gt(jmb->commit_boundary, tid)) {
+journalreplayer.cc:                if (tid_gt(jmb->complete_boundary, tid)) {
+journalreplayer.cc:        if (jmb->tid == tid) {
+journalreplayer.cc:            tid_flags = jmb->flags;
+journalreplayer.cc:            if (tid_gt(jmb->commit_boundary, tid)) {
+journalreplayer.cc:            if (tid_gt(jmb->complete_boundary, tid)) {
+journalreplayer.cc:                && jmb->nref != 0) {
+journalreplayer.cc:        error(-1U, "tid %u in committable region is not committed", tid);
+journalreplayer.cc:    auto jmb = mr_[mx - 1].b;
+journalreplayer.cc:    for (unsigned refx = jmb->nref; refx != 0; --refx) {
+journalreplayer.cc:        auto& ref = jmb->ref[refx - 1];
+journalreplayer.cc:            mark_overwritten_block(from_le(ref.bn), mx, refx - 1);
+journalreplayer.cc:    for (; mx != 0; --mx, refx = unsigned(-1)) {
+journalreplayer.cc:        auto jmb = mr_[mx - 1].b;
+journalreplayer.cc:        if (refx > jmb->nref) {
+journalreplayer.cc:            refx = jmb->nref;
+journalreplayer.cc:        for (; refx != 0; --refx) {
+journalreplayer.cc:            if (from_le(jmb->ref[refx - 1].bn) == bn) {
+journalreplayer.cc:                auto bflags = from_le(jmb->ref[refx - 1].bflags);
+journalreplayer.cc:                jmb->ref[refx - 1].bflags = to_le(bflags);
+journalreplayer.cc:    tid_t complete_boundary = mr_[nmr_ - 1].b->complete_boundary;
+journalreplayer.cc:    tid_t commit_boundary = mr_[nmr_ - 1].b->commit_boundary;
+journalreplayer.cc:        if (tid_ge(jmb->tid, complete_boundary)
+journalreplayer.cc:            && tid_lt(jmb->tid, commit_boundary)) {
+journalreplayer.cc:            for (unsigned refi = 0; refi != jmb->nref; ++refi) {
+journalreplayer.cc:                auto& ref = jmb->ref[refi];
+journalreplayer.cc:                    write_block(jmb->tid, from_le(ref.bn), djd);
+k-ahci.cc:#include "k-ahci.hh"
+k-ahci.cc:#include "k-apic.hh"
+k-ahci.cc:#include "k-pci.hh"
+k-ahci.cc:// k-ahci.cc
+k-ahci.cc:    assert((pa & 1) == 0 && (sz & 1) == 0);       // word-aligned
+k-ahci.cc:    assert((pa ^ (pa + sz - 1)) < (64U << 10));   // within aligned 64KiB
+k-ahci.cc:    dma_.ct[slot].buf[nbuf].maxbyte = sz - 1;
+k-ahci.cc:    pr_->ncq_active_mask = 1U << slot;  // tell interface NCQ slot used
+k-ahci.cc:    pr_->command_mask = 1U << slot;     // tell interface command available
+k-ahci.cc:    --nslots_available_;
+k-ahci.cc://    sector-aligned (i.e., multiples of `ahcistate::sectorsize`).
+k-ahci.cc:    // `sz` and `off` must be sector-aligned
+k-ahci.cc:    bool is_error = (pr_->interrupt_status & interrupt_fatal_error_mask)
+k-ahci.cc:        || (pr_->rstatus & rstatus_error);
+k-ahci.cc:    pr_->interrupt_status = ~0U;
+k-ahci.cc:    dr_->interrupt_status = ~0U;
+k-ahci.cc:    uint32_t acks = slots_outstanding_mask_ & ~pr_->ncq_active_mask;
+k-ahci.cc:    pr_->command &= ~pcmd_start;
+k-ahci.cc:    while (pr_->command & pcmd_command_running) {
+k-ahci.cc:    pr_->serror = ~0U;
+k-ahci.cc:    pr_->command |= pcmd_start;
+k-ahci.cc:    if (cmd == cmd_set_features && count != -1) {
+k-ahci.cc:    pr_->command_mask = 1U << slot;    // tell interface command is available
+k-ahci.cc:    --nslots_available_;
+k-ahci.cc:    while (pr_->command_mask & (1U << slot)) {
+k-ahci.cc:      dr_(dr), pr_(&dr->p[sata_port]), nslots_(1),
+k-ahci.cc:    pr_->command &= ~uint32_t(pcmd_rfis_enable | pcmd_start);
+k-ahci.cc:    while (pr_->command & (pcmd_command_running | pcmd_rfis_running)) {
+k-ahci.cc:    pr_->cmdlist_pa = ka2pa(&dma_.ch[0]);
+k-ahci.cc:    pr_->rfis_pa = ka2pa(&dma_.rfis);
+k-ahci.cc:    pr_->serror = ~0U;
+k-ahci.cc:    pr_->command |= pcmd_power_up;
+k-ahci.cc:    pr_->interrupt_status = ~0U; // clear pending interrupts
+k-ahci.cc:    dr_->interrupt_status = ~0U;
+k-ahci.cc:    pr_->interrupt_enable = interrupt_device_to_host
+k-ahci.cc:    dr_->ghc |= ghc_interrupt_enable;
+k-ahci.cc:    pr_->command |= pcmd_rfis_enable;
+k-ahci.cc:    while ((pr_->rstatus & (rstatus_busy | rstatus_datareq)) != 0
+k-ahci.cc:           || !sstatus_active(pr_->sstatus)) {
+k-ahci.cc:    pr_->command = (pr_->command & ~pcmd_interface_mask)
+k-ahci.cc:    while ((pr_->command & pcmd_interface_mask) != pcmd_interface_idle) {
+k-ahci.cc:    pr_->command |= pcmd_start;
+k-ahci.cc:    assert(devid[83] & 0x0400);                    // 48-bit addresses
+k-ahci.cc:    assert(!(devid[106] & 0x1000));                // 512-byte logical sectors
+k-ahci.cc:    assert(dr_->capabilities & 0x40000000U);         // NCQ supported
+k-ahci.cc:    nslots_ = ((dr_->capabilities >> 8) & 0x1F) + 1; // slots per controller
+k-ahci.cc:    slots_full_mask_ = (nslots_ == 32 ? 0xFFFFFFFFU : (1U << nslots_) - 1);
+k-ahci.cc:    int intr_pin = ((pci.readl(pci_addr + 0x3C) >> 8) & 0xFF) - 1;
+k-ahci.cc:    pr_->interrupt_status = ~0U;
+k-ahci.cc:    dr_->interrupt_status = ~0U;
+k-ahci.cc:        if (!(dr->ghc & ghc_ahci_enable)) {
+k-ahci.cc:            dr->ghc = ghc_ahci_enable;
+k-ahci.cc:            if ((dr->port_mask & (1U << port))
+k-ahci.cc:                && dr->p[port].sstatus) {
+k-ahci.hh:#include "k-wait.hh"
+k-ahci.hh:    // Specification: "ATA/ATAPI Command Set" for ATA-8
+k-ahci.hh:    // memory-mapped I/O structures for device communication
+k-ahci.hh:    //    physical-memory pointers in `portregs`.
+k-ahci.hh:    // DMA and memory-mapped I/O state
+k-ahci.hh:    // high-level functions (they block)
+k-ahci.hh:    void issue_meta(int slot, idecommand cmd, int features, int count = -1);
+k-alloc.cc:#include "k-lock.hh"
+k-alloc.cc:list<bapg, &bapg::pglink> free_blocks[MAX_ORDER - MIN_ORDER + 1];
+k-alloc.cc:    assert((pa & (PAGESIZE - 1)) == 0); // Must be page-aligned
+k-alloc.cc:        return sz - 1;
+k-alloc.cc:    uint64_t y = sz - 1;
+k-alloc.cc:    assert((pa & (PAGESIZE-1)) == 0, "[blk_order] Error: pa not page-aligned.\n");
+k-alloc.cc:        if (range->type() == mem_available) {
+k-alloc.cc:            uintptr_t curr_addr = range->first();
+k-alloc.cc:            uint64_t remaining_size = range->last() - curr_addr;
+k-alloc.cc:                free_blocks[ord - MIN_ORDER].push_back(&pgmap[curr_addr/PAGESIZE]);
+k-alloc.cc:                    assert(!free_blocks[ord - MIN_ORDER].empty());  
+k-alloc.cc:                remaining_size -= current_size;
+k-alloc.cc:    assert(start->returned); // The block corresponding to the ptr was marked as returned to user
+k-alloc.cc:        assert(it->ord == ord);
+k-alloc.cc:        assert(!it->free);
+k-alloc.cc:            assert(!it->returned); 
+k-alloc.cc:    for (bapg* it = free_blocks[ord - MIN_ORDER].front(); 
+k-alloc.cc:        it = free_blocks[ord - MIN_ORDER].next(it)) {
+k-alloc.cc:    //     log_printf("[check_kfree] Computed (checking) order %d, actual block order: %d; addr 0x%x\n", ord, start->ord,  ptr);
+k-alloc.cc:    //         start->free, start->ord, start->r_ord, start->r_addr, (start-pgmap)*PAGESIZE);
+k-alloc.cc:        assert(it->free == 1);
+k-alloc.cc:        assert(it->returned == 0);
+k-alloc.cc:    short *csz_ptr = reinterpret_cast<short*>(reinterpret_cast<uint64_t>(ptr) - 8);
+k-alloc.cc:        small_chunk *s = reinterpret_cast<small_chunk*>(reinterpret_cast<uint64_t>(ptr) - 8);
+k-alloc.cc:        assert(s->canary == SLAB_CANARY);
+k-alloc.cc:        assert(s->sz == *csz_ptr);
+k-alloc.cc:        assert(s->ind < STATIC_SMALL_SLABS);
+k-alloc.cc:            if (smallslabs[i].ind == s->ind) {
+k-alloc.cc:                assert(smallslabs[i].free_chunks[s - smallslabs[i].chunks] == 0); // Chunk should be marked as not free
+k-alloc.cc:        big_chunk *s = reinterpret_cast<big_chunk*>(reinterpret_cast<uint64_t>(ptr) - 8);
+k-alloc.cc:        assert(s->canary == SLAB_CANARY);
+k-alloc.cc:        assert(s->sz == *csz_ptr);
+k-alloc.cc:        assert(s->ind < STATIC_BIG_SLABS);
+k-alloc.cc:            if (bigslabs[i].ind == s->ind) {
+k-alloc.cc:                assert(bigslabs[i].free_chunks[s - bigslabs[i].chunks] == 0); // Chunk should be marked as not free
+k-alloc.cc:    short *csz_ptr = reinterpret_cast<short*>(reinterpret_cast<uint64_t>(ptr) - 8);
+k-alloc.cc:        small_chunk *s = reinterpret_cast<small_chunk*>(reinterpret_cast<uint64_t>(ptr) - 8);
+k-alloc.cc:        assert(s->canary == SLAB_CANARY);
+k-alloc.cc:        assert(s->sz == *csz_ptr);
+k-alloc.cc:        assert(s->ind <= STATIC_SMALL_SLABS);
+k-alloc.cc:            if (smallslabs[i].ind == s->ind) {
+k-alloc.cc:                assert(smallslabs[i].free_chunks[s - smallslabs[i].chunks] == 1); // Chunk should be marked as not free
+k-alloc.cc:        big_chunk *b = reinterpret_cast<big_chunk*>(reinterpret_cast<uint64_t>(ptr) - 8);
+k-alloc.cc:        assert(b->canary == SLAB_CANARY);
+k-alloc.cc:        assert(b->sz == *csz_ptr);
+k-alloc.cc:        assert(b->ind <= STATIC_BIG_SLABS);
+k-alloc.cc:            if (bigslabs[i].ind == b->ind) {
+k-alloc.cc:                assert(bigslabs[i].free_chunks[b - bigslabs[i].chunks] == 1); // Chunk should be marked as not free
+k-alloc.cc://    to be page-aligned.
+k-alloc.cc:        log_printf("[kalloc] KALLOC called by process %d\n", current()->id_);
+k-alloc.cc:        log_printf("[kalloc/slab_kalloc] LOCK grabbed by process %d\n", current()->id_);
+k-alloc.cc:                        log_printf("[kalloc/slab_kalloc] UNLOCK grabbed by process %d\n", current()->id_);
+k-alloc.cc:                    log_printf("[kalloc/slab_kalloc] UNLOCK grabbed by process %d\n", current()->id_);
+k-alloc.cc:    if (!free_blocks[ord - MIN_ORDER].front()) { 
+k-alloc.cc:            if (free_blocks[++nb_ord - MIN_ORDER].front()) {
+k-alloc.cc:                bapg* new_blk = free_blocks[nb_ord - MIN_ORDER].pop_front();
+k-alloc.cc:                        nb_ord, 1 << nb_ord, (new_blk-pgmap)*PAGESIZE);
+k-alloc.cc:                    bapg* split_page = new_blk + (1 << (nb_ord - MIN_ORDER - 1));
+k-alloc.cc:                            (split_page-pgmap)*PAGESIZE, (split_page-pgmap));
+k-alloc.cc:                        it - split_page < (1 << (nb_ord - MIN_ORDER - 1)); 
+k-alloc.cc:                        it->ord = nb_ord - 1;
+k-alloc.cc:                    free_blocks[nb_ord - MIN_ORDER - 1].push_back(split_page);
+k-alloc.cc:                        assert(!free_blocks[nb_ord - MIN_ORDER - 1].empty());
+k-alloc.cc:                    --nb_ord;
+k-alloc.cc:                        nb_ord, (new_blk-pgmap)*PAGESIZE);
+k-alloc.cc:                    it - blk < (1 << (ord - MIN_ORDER)); 
+k-alloc.cc:                    it->ord = ord;
+k-alloc.cc:                            ord, (blk - pgmap)*PAGESIZE);
+k-alloc.cc:        blk = free_blocks[ord - MIN_ORDER].pop_front();
+k-alloc.cc:        log_printf("[kalloc] UNLOCK grabbed by process %d\n", current()->id_);
+k-alloc.cc:        uint64_t addr = (blk - pgmap)*PAGESIZE;
+k-alloc.cc:        blk->returned = 1;
+k-alloc.cc:        for (bapg* it = blk; it - blk < (1 << (ord - MIN_ORDER)); it++) {
+k-alloc.cc:            it->free = false;
+k-alloc.cc:            it->ord = ord;
+k-alloc.cc:        log_printf("[kalloc] UNLOCK grabbed by process %d\n", current()->id_);
+k-alloc.cc:    uint64_t addr = (blk - pgmap) * PAGESIZE;
+k-alloc.cc:    // Normalize the addr so that the root block (ol' grandpa) of blk sits at tnorm-address 0.
+k-alloc.cc:    // (tnorm means translation-normalized).
+k-alloc.cc:    uint64_t tnorm_addr = addr - blk->r_addr;
+k-alloc.cc:    return tnorm_addr & (1 << blk->ord);
+k-alloc.cc:        log_printf("[kfree/slab_kfree] LOCK grabbed by process %d\n", current()->id_);
+k-alloc.cc:    int *chunk_canary = reinterpret_cast<int*>(reinterpret_cast<uint64_t>(ptr) - 4);
+k-alloc.cc:    int *chunk_ind = reinterpret_cast<int*>(reinterpret_cast<uint64_t>(ptr) - 6);
+k-alloc.cc:        short *sz_ptr = reinterpret_cast<short*>(reinterpret_cast<uint64_t>(ptr) - 8);
+k-alloc.cc:        uint64_t chunk_addr = reinterpret_cast<uint64_t>(ptr) - 8;
+k-alloc.cc:            log_printf("[kfree/sfree] UNLOCK grabbed by process %d\n", current()->id_);
+k-alloc.cc:        assert((addr & 0xfff) == 0, "Attempted free on non page-aligned address\n"); // assert page-aligned pointer
+k-alloc.cc:        uint64_t blksz = 1 << blk->ord;
+k-alloc.cc:        assert(!blk->free, 
+k-alloc.cc:        assert(blk->returned, 
+k-alloc.cc:        blk->returned = 0;
+k-alloc.cc:        for (bapg* it = blk; it < blk + (1 << blk->ord)/PAGESIZE; ++it) {
+k-alloc.cc:            it->free = 1;
+k-alloc.cc:        // Don't move this! blk->ord updates as the block is reunited with buddies.
+k-alloc.cc:        asan_mark_memory(ka2pa(ptr), 1 << blk->ord, true);
+k-alloc.cc:                log_printf("[kfree] blk ord: %lu, root ord: %lu\n", blk->ord, blk->r_ord);
+k-alloc.cc:            if (blk->ord == blk->r_ord) { // No buddies left (base case)
+k-alloc.cc:                free_blocks[blk->ord - MIN_ORDER].push_back(blk);
+k-alloc.cc:                    log_printf("[kfree] Buddy found, order of current block: %lu\n", blk->ord);
+k-alloc.cc:                    addr - (1 << blk->ord) /* left bud */ : addr + (1 << blk->ord) /* right bud */;
+k-alloc.cc:                        buddy_addr < addr ? "LEFT" : "RIGHT", buddy_blk->ord, buddy_addr, addr);
+k-alloc.cc:                if (buddy_blk->free && buddy_blk->ord == blk->ord) { // If entire block is free
+k-alloc.cc:                        assert(!buddy_blk->returned, "WTF you did something rly bad\n");
+k-alloc.cc:                        log_printf("[kfree] Order of blk: %d, order of buddy: %d\n", blk->ord, buddy_blk->ord);
+k-alloc.cc:                    for (bapg* it = free_blocks[blk->ord-MIN_ORDER].front(); 
+k-alloc.cc:                        it = free_blocks[blk->ord-MIN_ORDER].next(it)) {
+k-alloc.cc:                                it, (it-pgmap)*PAGESIZE);
+k-alloc.cc:                                (it-pgmap)*PAGESIZE, it->ord);
+k-alloc.cc:                            free_blocks[blk->ord-MIN_ORDER].erase(it);
+k-alloc.cc:                                log_printf("[kfree] POPPED (ord-%lu) buddy off its free list\n", blk->ord);
+k-alloc.cc:                    int old_ord = blk->ord;
+k-alloc.cc:                        assert(blk->ord == buddy_blk->ord, "[kalloc] Immediate order assertion failure\n");
+k-alloc.cc:                        it->ord++;
+k-alloc.cc:                        it2->ord++;
+k-alloc.cc:                            buddy_blk->ord, blk->ord);
+k-alloc.cc:                        blk->ord, PAGESIZE*(blk-pgmap));
+k-alloc.cc:                    free_blocks[blk->ord - MIN_ORDER].push_back(blk);
+k-alloc.cc:        log_printf("[kfree/sfree] UNLOCK grabbed by process %d\n", current()->id_);
+k-chkfs.cc:#include "k-chkfs.hh"
+k-chkfs.cc:#include "k-ahci.hh"
+k-chkfs.cc:#include "k-chkfsiter.hh"
+k-chkfs.cc:    size_t i, empty_slot = -1;
+k-chkfs.cc:            if (empty_slot == size_t(-1)) {
+k-chkfs.cc:        if (empty_slot == size_t(-1)) {
+k-chkfs.cc:        --e_[i].ref_;
+k-chkfs.cc:            sata_disk->read(buf_, chkfs::blocksize,
+k-chkfs.cc:    if (--ref_ == 0) {
+k-chkfs.cc:        if (v >= mlock_t(-2)) {
+k-chkfs.cc:            current()->yield();
+k-chkfs.cc:    assert(v != 0 && v != mlock_t(-1));
+k-chkfs.cc:    while (!mlock.compare_exchange_weak(v, v - 1,
+k-chkfs.cc:    while (!mlock.compare_exchange_weak(v, mlock_t(-1),
+k-chkfs.cc:        current()->yield();
+k-chkfs.cc:    return mlock.load(std::memory_order_relaxed) == mlock_t(-1);
+k-chkfs.cc:    uint32_t entry_index = entry->index();
+k-chkfs.cc:    auto is = reinterpret_cast<chkfs::inode*>(entry->buf_);
+k-chkfs.cc://    you should eventually release this reference by calling `ino->put()`.
+k-chkfs.cc:        (&superblock_entry->buf_[chkfs::superblock_offset]);
+k-chkfs.cc:    superblock_entry->put();
+k-chkfs.cc:            ino = reinterpret_cast<inode*>(inode_entry->buf_);
+k-chkfs.cc:    assert(entry->contains(this));
+k-chkfs.cc:    entry()->put();
+k-chkfs.cc://    the caller should eventually release with `ino->put()`.
+k-chkfs.cc:            size_t bsz = min(dirino->size - diroff, blocksize);
+k-chkfs.cc:            auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
+k-chkfs.cc:                if (dirent->inum && strcmp(dirent->name, filename) == 0) {
+k-chkfs.cc:                    in = dirent->inum;
+k-chkfs.cc:            e->put();
+k-chkfs.cc:        dirino->lock_read();
+k-chkfs.cc:        dirino->unlock_read();
+k-chkfs.cc:        dirino->put();
+k-chkfs.cc:auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
+k-chkfs.hh:#include "k-lock.hh"
+k-chkfs.hh:#include "k-wait.hh"
+k-chkfs.hh:    return this - bc.e_;
+k-chkfs.hh:        && reinterpret_cast<uintptr_t>(ptr) - reinterpret_cast<uintptr_t>(buf_)
+k-chkfsiter.cc:#include "k-chkfsiter.hh"
+k-chkfsiter.cc:        eptr_ = &ino_->direct[0];
+k-chkfsiter.cc:            indirect_entry_->put();
+k-chkfsiter.cc:    while (off_ >= eoff_ + eptr_->count * blocksize) {
+k-chkfsiter.cc:        if (eptr_->count == 0) {
+k-chkfsiter.cc:        eoff_ += eptr_->count * blocksize;
+k-chkfsiter.cc:        } else if ((eidx_ - chkfs::ndirect) % chkfs::extentsperblock == 0) {
+k-chkfsiter.cc:                indirect_entry_->put();
+k-chkfsiter.cc:            unsigned ibi = (eidx_ - chkfs::ndirect) / chkfs::extentsperblock;
+k-chkfsiter.cc:            if (ino_->indirect.count <= ibi) {
+k-chkfsiter.cc:            indirect_entry_ = bc.get_disk_entry(ino_->indirect.first + ibi);
+k-chkfsiter.cc:            eptr_ = reinterpret_cast<chkfs::extent*>(indirect_entry_->buf_);
+k-chkfsiter.cc:    if (eptr_ && eptr_->count != 0) {
+k-chkfsiter.cc:        } while (eptr_ && eptr_->first == 0 && eptr_->count != 0);
+k-chkfsiter.cc:    assert(ino_->has_write_lock());
+k-chkfsiter.cc:    assert(!eptr_ || !eptr_->count);
+k-chkfsiter.cc:    auto ino_entry = inode()->entry();
+k-chkfsiter.cc:        chkfs::extent* peptr = &ino_->direct[eidx_ - 1];
+k-chkfsiter.cc:        if (peptr->first + peptr->count == first) {
+k-chkfsiter.cc:            ino_entry->get_write();
+k-chkfsiter.cc:            --eidx_;
+k-chkfsiter.cc:            eoff_ -= eptr_->count * blocksize;
+k-chkfsiter.cc:            eptr_->count += count;
+k-chkfsiter.cc:            ino_entry->put_write();
+k-chkfsiter.cc:    if (eidx_ == chkfs::ndirect && !ino_->indirect.count) {
+k-chkfsiter.cc:        indirect_entry_->get_write();
+k-chkfsiter.cc:        memset(indirect_entry_->buf_, 0, blocksize);
+k-chkfsiter.cc:        indirect_entry_->put_write();
+k-chkfsiter.cc:        ino_entry->get_write();
+k-chkfsiter.cc:        ino_->indirect.first = indirect_bn;
+k-chkfsiter.cc:        ino_->indirect.count = 1;
+k-chkfsiter.cc:        ino_entry->put_write();
+k-chkfsiter.cc:        eptr_ = &ino_->direct[eidx_];
+k-chkfsiter.cc:        eptr_ = reinterpret_cast<chkfs::extent*>(indirect_entry_->buf_)
+k-chkfsiter.cc:            + (eidx_ - chkfs::ndirect) % chkfs::extentsperblock;
+k-chkfsiter.cc:    entry->get_write();
+k-chkfsiter.cc:        && (eidx_ - chkfs::ndirect) % chkfs::extentsperblock != 0
+k-chkfsiter.cc:        && eptr_[-1].first + eptr_[-1].count == first) {
+k-chkfsiter.cc:        --eptr_;
+k-chkfsiter.cc:        --eidx_;
+k-chkfsiter.cc:        eoff_ -= eptr_->count * blocksize;
+k-chkfsiter.cc:        eptr_->count += count;
+k-chkfsiter.cc:        eptr_->first = first;
+k-chkfsiter.cc:        eptr_->count = count;
+k-chkfsiter.cc:    entry->put_write();
+k-chkfsiter.hh:#include "k-chkfs.hh"
+k-chkfsiter.hh:    // Like `find(offset() - delta)`
+k-chkfsiter.hh:    inline chkfs_fileiter& operator-=(ssize_t delta);
+k-chkfsiter.hh:    // `offset()` is in the middle of the file or is not block-aligned.
+k-chkfsiter.hh:    // but it supports at most one indirect-extent block.
+k-chkfsiter.hh:    // * `bufcache::get_disk_entry`, to find indirect-extent blocks
+k-chkfsiter.hh:    //   references to inode and/or indirect-extent entries
+k-chkfsiter.hh:    : ino_(ino), eptr_(&ino->direct[0]) {
+k-chkfsiter.hh:        indirect_entry_->put();
+k-chkfsiter.hh:    return eptr_ && eptr_->count != 0;
+k-chkfsiter.hh:    return !eptr_ || eptr_->first == 0;
+k-chkfsiter.hh:inline auto chkfs_fileiter::blocknum() const -> blocknum_t {
+k-chkfsiter.hh:        return eptr_->first + (off_ - eoff_) / blocksize;
+k-chkfsiter.hh:inline chkfs_fileiter& chkfs_fileiter::operator-=(ssize_t delta) {
+k-chkfsiter.hh:    return find(off_ - delta);
+k-cpu.cc:#include "k-apic.hh"
+k-cpu.cc:#include "k-wait.hh"
+k-cpu.cc:#include "k-waitstruct.hh"
+k-cpu.cc:        // ensure layout `k-exception.S` expects
+k-cpu.cc:    cpuindex_ = this - cpus;
+k-cpu.cc:    if (current_ != p && !p->runq_links_.is_linked()) {
+k-cpu.cc:                p, p->id_, p->pstate_ == proc::ps_runnable ? "YUHH" : "Naww");
+k-cpu.cc:        assert(p->resumable() || p->pstate_ != proc::ps_runnable);
+k-cpu.cc:    // don't immediately re-run idle task
+k-cpu.cc:    if (yielding_from && !USING_PSEUDO_BLOCKING && yielding_from->pstate_ == proc::ps_transition) {
+k-cpu.cc:        yielding_from->pstate_ = proc::ps_blank;
+k-cpu.cc:        parent_child_queue.wake_one(ptable[yielding_from->ppid_]);
+k-cpu.cc:           || current_->pstate_ != proc::ps_runnable
+k-cpu.cc:        // re-enqueue old current if necessary
+k-cpu.cc:        if (prev && prev->pstate_ == proc::ps_runnable) {
+k-cpu.cc:            assert(prev->resumable());
+k-cpu.cc:            assert(!prev->runq_links_.is_linked());
+k-cpu.cc:    set_pagetable(current_->pagetable_);
+k-cpu.cc:    current_->resume(); // does not return
+k-cpu.cc:    idle_task_->init_kernel(-1, idle);
+k-devices.cc:#include "k-devices.hh"
+k-devices.cc:#include "k-apic.hh"
+k-devices.cc:#include "k-wait.hh"
+k-devices.cc:// k-devices.cc
+k-devices.cc://    Read a character from the keyboard. Returns -1 if there is no
+k-devices.cc:        '8', '9', '-', '4', '5', '6', '+', '1',
+k-devices.cc:    /*CKEY(10)*/ {{'-', '_', 0, 0x1F}},  /*CKEY(11)*/ {{'=', '+', 0, 0}},
+k-devices.cc:        return -1;
+k-devices.cc:            modifiers &= ~(1 << (ch - KEY_SHIFT));
+k-devices.cc:            ch -= 0x60;
+k-devices.cc:            ch -= 0x20;
+k-devices.cc:        modifiers ^= 1 << (ch - KEY_SHIFT);
+k-devices.cc:        modifiers |= 1 << (ch - KEY_SHIFT);
+k-devices.cc:        ch = complex_keymap[ch - CKEY(0)].map[modifiers & 3];
+k-devices.cc:        case 0x08: // Ctrl-H
+k-devices.cc:                --len_;
+k-devices.cc:        case 0x11: // Ctrl-Q
+k-devices.cc:        case 0x03: // Ctrl-C
+k-devices.cc:        case 0x04: // Ctrl-D
+k-devices.cc:                --cursorpos;
+k-devices.cc:                --cursorpos;
+k-devices.cc:    len_ -= n;
+k-devices.cc:    eol_ -= n;
+k-devices.cc:    size_t namelen = min(strlen(name), size_t(namesize) - 1);
+k-devices.cc:        if (!f->empty()
+k-devices.cc:            && memcmp(f->name_, name, namelen) == 0
+k-devices.cc:            && f->name_[namelen] == 0) {
+k-devices.cc:            return f - initfs;
+k-devices.cc:        } else if (f->empty()
+k-devices.cc:    } else { // build a pre-constructed memfile in the static array
+k-devices.cc:        memcpy(empty->name_, name, namelen);
+k-devices.cc:        empty->name_[namelen] = 0;
+k-devices.cc:        empty->data_ = nullptr;
+k-devices.cc:        empty->len_ = 0;
+k-devices.cc:        empty->capacity_ = 0;
+k-devices.cc:        return empty - initfs;
+k-devices.cc:// `memfile`. See `k-proc.cc` for more on `proc_loader`s.
+k-devices.cc:    } else if (off >= memfile_->len_) {
+k-devices.cc:        *pg = memfile_->data_ + off;
+k-devices.cc:        return memfile_->len_ - off;
+k-devices.hh:    std::atomic<int> displayed_cpos_ = -1;
+k-devices.hh:// memfile: in-memory file system of contiguous files
+k-devices.hh:        - reinterpret_cast<uintptr_t>(first);
+kernel.cc:#include "k-ahci.hh"
+kernel.cc:#include "k-apic.hh"
+kernel.cc:#include "k-chkfs.hh"
+kernel.cc:#include "k-chkfsiter.hh"
+kernel.cc:#include "k-devices.hh"
+kernel.cc:#include "k-vfs.hh"
+kernel.cc:#include "k-vmiter.hh"
+kernel.cc:#include "obj/k-firstprocess.h"
+kernel.cc://    Handles final zombie waitpid-ing.
+kernel.cc:        if (WAITPID_PARANOIA >= 1 && kinit->nchildren_) {
+kernel.cc:            log_printf("Children of ALMIGHTY INIT with PID=%d (bow down): [", kinit->id_);
+kernel.cc:            for (int i = 0; i < (kinit->nchildren_); ++i) {
+kernel.cc:                log_printf("%d ", kinit->childpids_[i]);
+kernel.cc:        if (kinit->syscall_waitpid(&regs) == (uint64_t) E_CHILD) {
+kernel.cc:        for (int i = 0; i < kinit->nchildren_; ++i) {
+kernel.cc:            if (ptable[kinit->childpids_[i]]->pstate_ == proc::ps_broken) {
+kernel.cc:        if (nbroken == kinit->nchildren_) {
+kernel.cc:        init_task->ppid_ = 1;
+kernel.cc:        init_task->init_kernel(1, k_proc_init);
+kernel.cc:        init_task->childpids_[init_task->nchildren_] = 2;
+kernel.cc:        ++init_task->nchildren_;
+kernel.cc:    p->init_user(pid, ld.pagetable_);
+kernel.cc:    p->regs_->reg_rip = ld.entry_rip_;
+kernel.cc:    vmiter(p, MEMSIZE_VIRTUAL - PAGESIZE).map(stkpg, PTE_PWU);
+kernel.cc:    p->regs_->reg_rsp = MEMSIZE_VIRTUAL;
+kernel.cc://    k-exception.S). That code transfers the state to the current kernel
+kernel.cc:    //log_printf("proc %d: exception %d @%p\n", id_, regs->reg_intno, regs->reg_rip);
+kernel.cc:    // Record most recent user-mode %rip.
+kernel.cc:    if ((regs->reg_cs & 3) != 0) {
+kernel.cc:        recent_user_rip_ = regs->reg_rip;
+kernel.cc:    switch (regs->reg_intno) {
+kernel.cc:        if (cpu->cpuindex_ == 0) {
+kernel.cc:                socktable[i]->wake_all();
+kernel.cc:        const char* operation = regs->reg_errcode & PFERR_WRITE
+kernel.cc:        const char* problem = regs->reg_errcode & PFERR_PRESENT
+kernel.cc:        if ((regs->reg_cs & 3) == 0) {
+kernel.cc:            panic_at(regs->reg_rsp, regs->reg_rbp, regs->reg_rip,
+kernel.cc:                     id_, addr, operation, problem, regs->reg_rip);
+kernel.cc:        if (sata_disk && regs->reg_intno == INT_IRQ + sata_disk->irq_) {
+kernel.cc:            sata_disk->handle_interrupt();
+kernel.cc:            panic_at(regs->reg_rsp, regs->reg_rbp, regs->reg_rip,
+kernel.cc:                     "Unexpected exception %d!\n", regs->reg_intno);
+kernel.cc:    // Record most recent user-mode %rip.
+kernel.cc:    recent_user_rip_ = regs->reg_rip;
+kernel.cc:    switch (regs->reg_rax) {
+kernel.cc:        if (kdisplay != (int) regs->reg_rdi) {
+kernel.cc:        kdisplay = regs->reg_rdi;
+kernel.cc:        uintptr_t addr = regs->reg_rdi;
+kernel.cc:            return -1;
+kernel.cc:            return -1;
+kernel.cc:        uintptr_t addr = regs->reg_rdi; // USER VIRTUAL ADDR
+kernel.cc:        uint64_t sz = regs->reg_rsi;
+kernel.cc:            return -1;
+kernel.cc:        if (!ptr) return -1;
+kernel.cc:                return -1;
+kernel.cc:        vmiter it(this, regs->reg_rdi); // %rdi holds UVA
+kernel.cc:            regs->reg_rdi, it.pa() /* , 1UL << blk_order(it.pa()) */);
+kernel.cc:        int drop = regs->reg_rdi;
+kernel.cc:        uintptr_t addr = regs->reg_rdi;
+kernel.cc:        // Assert that the addr is in low-canonical memory and that the addr is page aligned.
+kernel.cc:        log_printf("Process PID=%d: no such system call num=%u\n", id_, regs->reg_rax);
+kernel.cc:    assert(this->canary == CANARY_EV, "Kernel task stack overflow detected via canary corruption\n"); 
+kernel.cc:    auto irqs = parent->lock_pagetable_read();
+kernel.cc:    auto irqs_child = child->lock_pagetable_read();
+kernel.cc:        if (parent->pagetable_ && parent->pagetable_ != early_pagetable) {
+kernel.cc:                    if (try_map_code == -1) {
+kernel.cc:                        log_printf("Try_map failed from parent: %d\n", parent->id_);
+kernel.cc:                        log_printf("[fork::copy_memory] kalloc allocation error from parent: pid = %d\n", parent->id_);
+kernel.cc:                            npg, kptr2pa(npg), parent->id_);
+kernel.cc:                        log_printf("[forktest] Simulating failed child mem copy for parent process %d\n", this->id_);
+kernel.cc:                        try_map_code = -1;
+kernel.cc:                    if (try_map_code == -1) {
+kernel.cc:                        log_printf("[fork::copy_memory] Try_map failed from parent: pid= %d\n", parent->id_);
+kernel.cc:        parent->unlock_pagetable_read(irqs);
+kernel.cc:        child->unlock_pagetable_read(irqs_child);
+kernel.cc:        parent->unlock_pagetable_read(irqs);
+kernel.cc:        child->unlock_pagetable_read(irqs_child);
+kernel.cc:        log_printf("[fork] Fork called by parent process %d\n", this->id_);
+kernel.cc:            log_printf("No open processes, caller PID: %d\n", this->id_);
+kernel.cc:        return -1;
+kernel.cc:            log_printf("Successfully found a free PID = %d to fork from parent PID = %d\n", pid, this->id_);
+kernel.cc:        log_printf("[forktest] Simulating child struct proc failed alloc for parent process %d\n", this->id_);
+kernel.cc:        log_printf("[forktest] Simulating child pt failed alloc for parent process %d\n", this->id_);
+kernel.cc:    child->init_user(pid, child_pt);
+kernel.cc:    memcpy_failed = this->copy_memory_(child);
+kernel.cc:            log_printf("[fork] Copying Memory During Fork FAILED, caller: %d\n", this->id_);
+kernel.cc:    memcpy(child->regs_, regs, sizeof(regstate));
+kernel.cc:    memcpy((void*) &(child->fdtable), (void*) &fdtable, MAX_FD*sizeof(vnode*));
+kernel.cc:            spinlock_guard refguard(fdtable[fd]->open_close_lock_);
+kernel.cc:            ++fdtable[fd]->refcount_;
+kernel.cc:        child->show_fdtable_();
+kernel.cc:    child->regs_->reg_rax = 0; // making sure child returns 0
+kernel.cc:        log_printf("[fork] [pre-return] Child PID=%d to run on CPU %d\n", pid, pid % ncpu);
+kernel.cc:    child->ppid_ = this->id_;
+kernel.cc:    this->childpids_[this->nchildren_] = pid;
+kernel.cc:    this->nchildren_++;
+kernel.cc:        log_printf("[fork] Setting child ppid to %d and updating this parent's metadata\n", child->ppid_);
+kernel.cc:            this->id_, this->nchildren_);
+kernel.cc:        for (int i = 0; i < this->nchildren_; ++i) {
+kernel.cc:            log_printf("%d ", this->childpids_[i]);
+kernel.cc:    int tcase = regs->reg_rdi;
+kernel.cc:        case 0: { // Single-page allocs
+kernel.cc:            log_printf("======= TEST CASE [0] for PROCESS [%d] COMPLETED =======\n", this->id_);
+kernel.cc:            log_printf("======= TEST CASE [1] for PROCESS [%d] COMPLETED =======\n", this->id_);
+kernel.cc:            log_printf("======= TEST CASE [2] for PROCESS [%d] COMPLETED =======\n", this->id_);
+kernel.cc:        case 3: { // smaller random non-PAGESIZE multiple allocations
+kernel.cc:                    sz = rand(1 << MIN_ORDER, 1 << (MAX_ORDER - 5));
+kernel.cc:            log_printf("======= TEST CASE [3] for PROCESS [%d] COMPLETED =======\n", this->id_);
+kernel.cc:        // ----- Slab allocator test starts here! -----
+kernel.cc:            log_printf("======= {SLAB} TEST CASE [4] for PROCESS [%d] COMPLETED =======\n", this->id_);
+kernel.cc:                    sz = rand(1 << 7, (1 << 9) - 8);
+kernel.cc:            log_printf("======= {SLAB} TEST CASE [5] for PROCESS [%d] COMPLETED =======\n", this->id_);
+kernel.cc:                    sz = rand(1 << 2, (1 << 9)- 8);
+kernel.cc:            log_printf("======= {SLAB} TEST CASE [6] for PROCESS [%d] COMPLETED =======\n", this->id_);
+kernel.cc:            log_printf("======= {SLAB} TEST CASE [7] for PROCESS [%d] COMPLETED =======\n", this->id_);
+kernel.cc:    int c = regs->reg_rdi;
+kernel.cc:        case 2: { // Invalid free of non page-aligned pointer
+kernel.cc:            log_printf("[sys_wildalloc] Running wild allocation 2: free non page-aligned pointer\n");
+kernel.cc:    auto irqs = p->lock_pagetable_read();
+kernel.cc:    p->unlock_pagetable_read(irqs);
+kernel.cc:    auto irqs = this->lock_pagetable_read();
+kernel.cc:    this->unlock_pagetable_read(irqs);
+kernel.cc:    pid_t pid = this->id_;
+kernel.cc:            if (!fdtable[fd]->close()) { // If refcount hits 0
+kernel.cc:    kfree(this->pagetable_);
+kernel.cc:    this->pagetable_= nullptr;
+kernel.cc:            this->ppid_, ptable[this->ppid_]->nchildren_);
+kernel.cc:        for (int i = 0; i < ptable[this->ppid_]->nchildren_; ++i) {
+kernel.cc:            log_printf("%d ", ptable[this->ppid_]->childpids_[i]);
+kernel.cc:    ptable[ppid_]->e_intr = E_INTR;
+kernel.cc:    for (int i = 0; i < this->nchildren_; ++i) {
+kernel.cc:       ptable[this->childpids_[i]]->ppid_ = 1; // Reparent to k_proc_init
+kernel.cc:           log_printf("[exit] REPARENTED child process PID=%d, NEW-PPID=%d to k_proc_init\n", 
+kernel.cc:            ptable[this->childpids_[i]]->id_, ptable[this->childpids_[i]]->ppid_);
+kernel.cc:       kinit->childpids_[kinit->nchildren_] = this->childpids_[i];
+kernel.cc:       kinit->nchildren_++;
+kernel.cc:        for (int i = 0; i < ptable[1]->nchildren_; ++i) {
+kernel.cc:            log_printf("%d ", ptable[1]->childpids_[i]);
+kernel.cc:    p->pstate_ = USING_PSEUDO_BLOCKING ? ps_blank : ps_transition;
+kernel.cc:    p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
+kernel.cc:            log_printf("[exit] Flushing time heap to wake all time-sleeping processes\n");
+kernel.cc:        log_printf("[exit] Finished turning process PID=%d into a zombie\n", this->id_);
+kernel.cc:    unsigned long wakeup_time = ticks + (regs->reg_rdi + 9) / 10;
+kernel.cc:        while (long(wakeup_time - ticks) > 0 && e_intr == 0) {
+kernel.cc:                return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
+kernel.cc:                return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
+kernel.cc:    int ch_ind = -1;
+kernel.cc:    for (int i = 0; i < p->nchildren_; ++i) {
+kernel.cc:                p->id_, cpid, i, p->childpids_[i]);
+kernel.cc:        if (cpid == p->childpids_[i]) {
+kernel.cc:                log_printf("[release_child] MATCHED child to arr[%d]=%d\n", i, p->childpids_[i]);
+kernel.cc:    assert(ch_ind != -1);
+kernel.cc:    // Update the child-array to get rid of the fully exited child proc.
+kernel.cc:    for (int i = ch_ind + 1; i < p->nchildren_; ++i) {
+kernel.cc:        p->childpids_[i-1] = p->childpids_[i];
+kernel.cc:    --p->nchildren_;
+kernel.cc:        for (int i = 0; i < ptable[p->id_]->nchildren_; ++i) {
+kernel.cc:            log_printf("%d ", ptable[p->id_]->childpids_[i]);
+kernel.cc:        log_printf("]; num (alive) children = %d\n", p->nchildren_);
+kernel.cc:    pid_t pid = regs->reg_rdi;
+kernel.cc:    int* status = reinterpret_cast<int*>(regs->reg_rsi);
+kernel.cc:    int options = regs->reg_rdx;
+kernel.cc:    if (WAITPID_PARANOIA >= 1 && this->id_ != 1) {
+kernel.cc:            this->id_, pid, status, options);
+kernel.cc:    int ind_found = -1;
+kernel.cc:    for (int i = 0; i < this->nchildren_; ++i) {
+kernel.cc:        if (this->childpids_[i] == pid) {
+kernel.cc:    if ((this->nchildren_ == 0) || (ind_found == -1 && pid != 0)) {
+kernel.cc:        if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                this->id_, pid, this->nchildren_, ind_found);
+kernel.cc:                    if (child->pstate_ == ps_blank) {
+kernel.cc:                        return (child->pstate_ == ps_blank);
+kernel.cc:            uint64_t retpid = (child->retval << 32) + child->id_;
+kernel.cc:            if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                    pid, this->id_);
+kernel.cc:                    child, child->retval);
+kernel.cc:            if (child->pstate_ != ps_blank) { // Child is not free. Return error: try again.
+kernel.cc:                if (WAITPID_PARANOIA >= 1 && this->id_ != 1) {
+kernel.cc:                        this->id_, pid);
+kernel.cc:                uint64_t retpid = (child->retval << 32) + child->id_;
+kernel.cc:            int child_ind = -1;
+kernel.cc:                    for (int i = 0; i < this->nchildren_; ++i) {
+kernel.cc:                        if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                                this->childpids_[i], this->id_);
+kernel.cc:                        if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
+kernel.cc:                            if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                                    this->childpids_[i], this->id_);
+kernel.cc:                    if (child_ind != -1) {
+kernel.cc:                    if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                    for (int i = 0; i < this->nchildren_; ++i) {
+kernel.cc:                        if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                                this->childpids_[i], this->id_);
+kernel.cc:                        if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
+kernel.cc:                            if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                                    this->childpids_[i], this->id_);
+kernel.cc:                    return (child_ind != -1);
+kernel.cc:            proc* child = ptable[this->childpids_[child_ind]];
+kernel.cc:            if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                    this->childpids_[child_ind], child_ind, this->id_);
+kernel.cc:                    child, child->retval, child->id_);
+kernel.cc:            uint64_t retpid = (child->retval << 32) + child->id_;
+kernel.cc:                    log_printf("[waitpid] REAPING ZOMBIE, PID=%d\n", child->id_);
+kernel.cc:                release_child(this, child->id_);
+kernel.cc:                ptable[child->id_] = nullptr;
+kernel.cc:            int child_ind = -1;
+kernel.cc:            for (int i = 0; i < this->nchildren_; ++i) {
+kernel.cc:                if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                        this->childpids_[i], this->id_);
+kernel.cc:                if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
+kernel.cc:                    if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                            this->childpids_[i], this->id_);
+kernel.cc:            if (child_ind == -1) { // No exited processes found
+kernel.cc:                        pid, this->nchildren_, child_ind);
+kernel.cc:                proc* child = ptable[this->childpids_[child_ind]];
+kernel.cc:                if (WAITPID_PARANOIA && this->id_ != 1) {
+kernel.cc:                        this->childpids_[child_ind], child_ind, this->id_);
+kernel.cc:                        child, child->retval);
+kernel.cc:                uint64_t retpid = (child->retval << 32) + child->id_;
+kernel.cc:                            pid, this->nchildren_, child->id_, child_ind);
+kernel.cc:                    release_child(this, child->id_);
+kernel.cc:                    ptable[child->id_] = nullptr;
+kernel.cc:    log_printf("[show_fdtable_] Process PID=%d fdtable HEAD --> [", id_);
+kernel.cc:    for (int fd = 0; fd < MAX_FD-1; ++fd) {
+kernel.cc:    log_printf("%d:%s] <-- TAIL\n", MAX_FD-1, fdtable[MAX_FD-1] ? "T" : "F");
+kernel.cc:                log_printf("[IO_invalid] Invalid I/O addr, not user-accessible memory\n");
+kernel.cc:                log_printf("[IO_invalid] Invalid read-to addr, not writeable memory\n");
+kernel.cc:        log_printf("[IO_invalid] Validated addr 0x%x of sz %lu\n", start, end-start);
+kernel.cc:            log_printf("[pathname_invalid] Invalid filename, entire string not in user-accessible memory\n");
+kernel.cc:                log_printf("[pathname_invalid] Invalid filename, part of string not in user-accessible memory\n");
+kernel.cc:    const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    int flags = regs->reg_rsi;
+kernel.cc:            log_printf("[syscall_open] Failed to k-alloc memfile vnode\n");
+kernel.cc:    mf_vn->set_mf(memfile::initfs + initfs_index); // Set memfile* ptr in vnode
+kernel.cc:    ++mf_vn->refcount_;
+kernel.cc:    int oldfd = regs->reg_rdi;
+kernel.cc:    int newfd = regs->reg_rsi;
+kernel.cc:    } else if (!fdtable[oldfd]) { // Non-open old fd
+kernel.cc:        if (!fdtable[newfd]->close()) { // If refcount hits 0
+kernel.cc:    ++fdtable[newfd]->refcount_;
+kernel.cc:    if (!wr_vn->bbuf_) {
+kernel.cc:    rd_vn = knew<pipe_vnode>(OF_READ, wr_vn->get_bbuf());
+kernel.cc:    ++fdtable[wfd]->refcount_;
+kernel.cc:    ++fdtable[rfd]->refcount_;
+kernel.cc:        delete wr_vn->bbuf_;
+kernel.cc:        wr_vn->bbuf_ = nullptr;
+kernel.cc:    int fd = regs->reg_rdi;
+kernel.cc:    uintptr_t addr = regs->reg_rsi;
+kernel.cc:    size_t sz = regs->reg_rdx;
+kernel.cc:    return fdtable[fd]->read(addr, sz);
+kernel.cc:    int fd = regs->reg_rdi;
+kernel.cc:    uintptr_t addr = regs->reg_rsi;
+kernel.cc:    size_t sz = regs->reg_rdx;
+kernel.cc:    return fdtable[fd]->write(addr, sz);
+kernel.cc:    int fd = regs->reg_rdi;
+kernel.cc:    if (!fdtable[fd]->close()) { // If refcount hits 0
+kernel.cc:    log_printf("argv --> [");
+kernel.cc:    for (int i = 0; i < argc-1; ++i) {
+kernel.cc:    log_printf("'%s']\n", argv[argc-1]);
+kernel.cc:    uintptr_t cpy_kva = stkpg_top_kva - total_length;
+kernel.cc:    uintptr_t cpy_uva = stkpg_uva + PAGESIZE - total_length; // Addresses in the new argv must be user-level
+kernel.cc:    assert(stkpg_top_kva - cpy_kva < MAX_ARGV_LEN);
+kernel.cc:    uintptr_t argv_arr_kva = cpy_kva - sizeof(char*)*(argc+1); // +1 for last element nullptr
+kernel.cc:    uintptr_t argv_arr_uva = stkpg_uva + PAGESIZE - (stkpg_top_kva - argv_arr_kva);
+kernel.cc:        // Copy in the string, and copy in the corresponding user-virtual address to an array.
+kernel.cc:        assert(next_arg_kva == stkpg_top_kva - total_length);
+kernel.cc:        log_printf("[TEST] [copy_argv] NEW char** argv=0x%x is an array of UVA ptrs --> [", 
+kernel.cc:        for (int i = 0; i < argc-1; ++i) {
+kernel.cc:        for (int i = 0; i < argc-1; ++i) {
+kernel.cc:        log_printf("%s}\n", pa2kptr<char*>(vmiter(pt, (uintptr_t) str_arr[argc-1]).pa()));
+kernel.cc:    const char* prgm_name = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    const char** argv = reinterpret_cast<const char**>(regs->reg_rsi);
+kernel.cc:    int argc = regs->reg_rdx;
+kernel.cc:    int stk_map_error = vmiter(pt, MEMSIZE_VIRTUAL-PAGESIZE).try_map(stkpg, PTE_PWU);
+kernel.cc:            MEMSIZE_VIRTUAL-PAGESIZE, CONSOLE_ADDR);
+kernel.cc:    uintptr_t new_argv_uva = copy_argv(pt, (void*) (MEMSIZE_VIRTUAL-PAGESIZE), argc, argv, total_length);
+kernel.cc:    regs_->reg_rip = mld.entry_rip_;
+kernel.cc:    // %rsp starts at the argv array in user-level memory.
+kernel.cc:    regs_->reg_rsp = new_argv_uva;
+kernel.cc:            regs_->reg_rsp, mld.entry_rip_);
+kernel.cc:        char** start = pa2kptr<char**>(vmiter(pt, regs_->reg_rsp).pa());
+kernel.cc:    regs_->reg_rdi = argc;
+kernel.cc:    regs_->reg_rsi = regs_->reg_rsp;
+kernel.cc:            regs_->reg_rdi, regs_->reg_rsi);
+kernel.cc:    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    int stable_ind = -1;
+kernel.cc:    if (stable_ind == -1) {
+kernel.cc:    sock->bind(this); // Bind socket to the server
+kernel.cc:        if (socktable[i] && strcmp(name, socktable[i]->key_) == 0) {
+kernel.cc:    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    return sock->connect(this);
+kernel.cc:    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    return sock->listen();
+kernel.cc:    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    return sock->accept();
+kernel.cc:    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    int fd = regs->reg_rsi;
+kernel.cc:    return sock->write(this, fd);
+kernel.cc:    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    const char* filename = reinterpret_cast<const char*>(regs->reg_rdi);
+kernel.cc:    unsigned char* buf = reinterpret_cast<unsigned char*>(regs->reg_rsi);
+kernel.cc:    size_t sz = regs->reg_rdx;
+kernel.cc:    off_t off = regs->reg_r10;
+kernel.cc:    ino->lock_read();
+kernel.cc:                size_t(ino->size - it.offset()),   // bytes left in file
+kernel.cc:                chkfs::blocksize - b,              // bytes left in block
+kernel.cc:                sz - nread                         // bytes left in request
+kernel.cc:            memcpy(buf + nread, e->buf_ + b, ncopy);
+kernel.cc:            e->put();
+kernel.cc:    ino->unlock_read();
+kernel.cc:    ino->put();
+kernel.cc://    Uses `console_memviewer()`, a function defined in `k-memviewer.cc`.
+kernel.cc:    if (last_redisplay != 0 && ticks - last_redisplay < HZ / 25) {
+kernel.cc:    if (ticks - last_switch >= HZ / 2) {
+kernel.cc:            || !ptable[showing]->pagetable_
+kernel.cc:            || ptable[showing]->pagetable_ == early_pagetable)
+kernel.hh:#include "x86-64.h"
+kernel.hh:#include "k-list.hh"
+kernel.hh:#include "k-lock.hh"
+kernel.hh:#include "k-memrange.hh"
+kernel.hh:#include "k-waitstruct.hh"
+kernel.hh:#define MAX_ARGV_LEN        (PAGESIZE >> 2)-8   // -8 since argv[argc] must be set to nullptr
+kernel.hh:// All declarations of children in k-vfs.hh. This cannot be declared in 
+kernel.hh:    // Write sz bytes to the file. All-or-none paradigm: either write everything
+kernel.hh:    // TODO [MULTITH] Add per-process lock to lock accesses to fdtable, see other flagged TODOs
+kernel.hh:    vnode* fdtable[MAX_FD] = {0};              // Per-process (threads share) file descriptor table
+kernel.hh:    uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
+kernel.hh:// yieldstate: callee-saved registers that must be preserved across
+kernel.hh:    assert(pa < -KTEXT_BASE);
+kernel.hh:    return ka - KTEXT_BASE;
+kernel.hh:    assert(pa < -HIGHMEM_BASE);
+kernel.hh:    return ka - HIGHMEM_BASE;
+kernel.hh:    return kptr - (kptr >= KTEXT_BASE ? KTEXT_BASE : HIGHMEM_BASE);
+kernel.hh:    memcpy(&a, ptr + (reinterpret_cast<uintptr_t>(&(dummy->*member)) - reinterpret_cast<uintptr_t>(dummy)), sizeof(T));
+kernel.hh://    to be page-aligned.
+kernel.hh:    uintptr_t delta = addr - reinterpret_cast<uintptr_t>(this);
+kernel.hh:    uintptr_t delta = addr - reinterpret_cast<uintptr_t>(this);
+kernel.ld:OUTPUT_FORMAT(elf64-x86-64)
+kernel.ld:    /* Boot process uses 0x1000-0x3FFF */
+kernel.ld:    /* Text segment: instructions and read-only globals */
+kernel.ld:    /* Data segment: read/write and zero-initialized globals */
+kernel.ld:    /DISCARD/ : { *(.eh_frame .note.GNU-stack) }
+k-exception.S:// import constants from kernel.hh and x86-64.h
+k-exception.S:#include "obj/k-asm.h"
+k-exception.S:        movq $(cpus + CPUSTACK_SIZE - 8), %rsp
+k-exception.S:           +-----------------------+ <- %rsp
+k-exception.S:        pushq %gs:(CPUSTACK_SIZE - 8)  // %ss
+k-exception.S:        pushq %gs:(CPUSTACK_SIZE - 16) // %rsp
+k-exception.S:        pushq %gs:(CPUSTACK_SIZE - 24) // %rflags
+k-exception.S:        pushq %gs:(CPUSTACK_SIZE - 32) // %cs
+k-exception.S:        pushq %gs:(CPUSTACK_SIZE - 40) // %rip
+k-exception.S:        pushq %gs:(CPUSTACK_SIZE - 48) // error code
+k-exception.S:        pushq %gs:(CPUSTACK_SIZE - 56) // interrupt number
+k-exception.S:        pushq $-1                      // reg_swapgs, reg_intno
+k-exception.S:        // Preserve that, plus all callee-saved registers.
+k-exception.S:        addq $(8 * 15), %rsp           // skip general-purpose registers
+k-exception.S:        // only save callee-saved registers and rflags
+k-exception.S:        // instruction. A no-op instruction is required.
+k-exception.S:        // do we have yieldstate? (is `this->yields_ != nullptr`?)
+k-exception.S:        // assert(this->contains(regs_))
+k-exception.S:        // assert(this->contains(yields_))
+k-exception.S:        // restore stack pointer, clear yieldstate, pop callee-saved regs
+k-exception.S:        .asciz "k-exception.S"
+k-exception.S:        .asciz "this->contains(regs_)"
+k-exception.S:        .asciz "this->contains(yields_)"
+k-exception.S:        pushq %gs:(CPUALTSTACK_SIZE - 8)
+k-exception.S:        pushq %gs:(CPUALTSTACK_SIZE - 16)
+k-exception.S:        pushq %gs:(CPUALTSTACK_SIZE - 24)
+k-exception.S:        pushq %gs:(CPUALTSTACK_SIZE - 32)
+k-exception.S:        pushq %gs:(CPUALTSTACK_SIZE - 40)
+k-exception.S:        pushq %gs:(CPUALTSTACK_SIZE - 48)
+k-exception.S:        pushq %gs:(CPUALTSTACK_SIZE - 56)
+k-exception.S:        movq %gs:(CPUALTSTACK_SIZE - 64), %rax
+k-exception.S:        movq %gs:(CPUALTSTACK_SIZE - 72), %rcx
+k-exception.S:        movq %gs:(CPUALTSTACK_SIZE - 80), %rdx
+k-exception.S://    It must be located at a page-aligned physical address < 0x100000.
+k-exception.S:        // This is called by the STARTUP inter-processor interrupt
+k-exception.S:        // turn on 64-bit mode
+k-exception.S:        // load 64-bit segment descriptors and switch to 64-bit code
+k-exception.S:        // This two-stage jump switches to high virtual addresses.
+k-hardware.cc:#include "k-apic.hh"
+k-hardware.cc:#include "k-devices.hh"
+k-hardware.cc:#include "k-pci.hh"
+k-hardware.cc:#include "k-vmiter.hh"
+k-hardware.cc:// k-hardware.cc
+k-hardware.cc:        memset(&pt->entry[0], 0, sizeof(x86_64_pageentry_t) * 256);
+k-hardware.cc:        memcpy(&pt->entry[256], &early_pagetable->entry[256],
+k-hardware.cc://    Return the next valid PCI function after `addr`, or -1 if there
+k-hardware.cc:            && (x == uint32_t(-1) || !(x & 0x800000))) {
+k-hardware.cc:            return -1;
+k-hardware.cc:        if (x != uint32_t(-1)) {
+k-hardware.cc:        current()->yield();
+k-hardware.cc:        size_t m = l + ((r - l) >> 1);
+k-hardware.cc:            || stack_top_ - rbp_ < 16
+k-hardware.cc://    Loop until user presses Control-C, then poweroff.
+k-hardware.cc://    control-C. Also write the failure message to the log.
+k-hardware.cc:        error_printf(-1, COLOR_ERROR, "PANIC: ");
+k-hardware.cc:        error_vprintf(-1, COLOR_ERROR, format, val);
+k-hardware.cc:            error_printf(-1, COLOR_ERROR, "\n");
+k-hardware.cc:        error_printf(-1, COLOR_ERROR, "PANIC");
+k-hardware.cc:    if (guard->load(std::memory_order_relaxed) == 2) {
+k-hardware.cc:        char old_value = guard->exchange(1);
+k-hardware.cc:            guard->exchange(2);
+k-hardware.cc:    guard->store(2);
+k-init.cc:#include "k-ahci.hh"
+k-init.cc:#include "k-apic.hh"
+k-init.cc:#include "k-devices.hh"
+k-init.cc:    // initialize early-stage virtual memory structures
+k-init.cc:    if (sata_disk && sata_disk->irq_ > 0) {
+k-init.cc:        cpus[ncpu - 1].enable_irq(sata_disk->irq_);
+k-init.cc://    Set up early-stage segment registers and page table.
+k-init.cc://    The early-stage segment registers and global descriptors are
+k-init.cc://    used during hardware and secondary-processor initialization.
+k-init.cc://    early-stage page table is used whenever no appropriate process
+k-init.cc://    when an interrupt or exception happens. See k-interrupt.S.
+k-init.cc:        | ((size - 1) & 0x0FFFFUL)
+k-init.cc:        | (((size - 1) & 0xF0000UL) << 48)
+k-init.cc:    gate->gd_low = (addr & 0x000000000000FFFFUL)
+k-init.cc:    gate->gd_high = addr >> 32;
+k-init.cc:    early_gdt.limit = sizeof(early_gdt_segments) - 1;
+k-init.cc:    // level-4 page table:
+k-init.cc:    // - entry 0 maps first 512GiB of low canonical addresses
+k-init.cc:    // - entry 256 maps first 512GiB of high canonical addresses
+k-init.cc:    // - entry 511 maps last 2GiB of high canonical addresses (kernel text)
+k-init.cc:    early_pagetable->entry[0] = ktext2pa(&early_pagetable[1]) | PTE_P | PTE_W;
+k-init.cc:    early_pagetable->entry[256] = early_pagetable->entry[0];
+k-init.cc:    early_pagetable->entry[511] = ktext2pa(&early_pagetable[2]) | PTE_P | PTE_W;
+k-init.cc:    // first level-3 page table maps first 512GiB of physical memory
+k-init.cc:    // second level-3 page table maps its last 2 slots to the first 2GiB
+k-init.cc:    // Now that boot-time structures (pagetable and global descriptor
+k-init.cc:    // table) have been replaced, we can reuse boot-time memory.
+k-init.cc:    // Macros in `k-exception.S` initialized `interrupt_descriptors[]` with
+k-init.cc:    // weird format x86-64 expects.
+k-init.cc:#define IO_PIC1         0x20    // Master (IRQs 0-7)
+k-init.cc:#define IO_PIC2         0xA0    // Slave (IRQs 8-15)
+k-init.cc:    // initialize per-CPU segments
+k-init.cc:    gdt.limit = sizeof(gdt_segments_) - 1;
+k-init.cc:    idt.limit = sizeof(interrupt_descriptors) - 1;
+k-init.cc:    while ((int64_t) (x - rdtsc()) > 0) {
+k-init.cc:    // 10. convert entry point to an 8-bit vector
+k-init.cc:    // 15. broadcast INIT-SIPI-SIPI
+k-list.hh:    prev_->next_ = next_;
+k-list.hh:    next_->prev_ = prev_;
+k-list.hh:    assert(position->next_ && position->prev_);
+k-list.hh:    prev_ = position->prev_;
+k-list.hh:    position->prev_->next_ = this;
+k-list.hh:    position->prev_ = this;
+k-list.hh:    return (x->*member).next_ == &head_
+k-list.hh:        ? nullptr : from_links((x->*member).next_);
+k-list.hh:    return (x->*member).prev_ == &head_
+k-list.hh:        ? nullptr : from_links((x->*member).prev_);
+k-list.hh:    (x->*member).insert_before(head_.next_);
+k-list.hh:    (x->*member).insert_before(&head_);
+k-list.hh:    (x->*member).erase();
+k-list.hh:    (x->*member).insert_before(position ? &head_ : &(position->*member));
+k-list.hh:    p1->prev_ = p2->next_ = &other.head_;
+k-list.hh:    p1->prev_ = p2->next_ = &head_;
+k-lock.hh:#include "x86-64.h"
+k-lock.hh:        adjust_this_cpu_spinlock_depth(-1);
+k-memrange.hh:#define NUM_SMALL_SLABS PAGESIZE/SMALL_CHUNKSIZE - 1
+k-memrange.hh:#define NUM_BIG_SLABS 2*PAGESIZE/BIG_CHUNKSIZE - 1
+k-memrange.hh:#define SLAB_THRESHOLD BIG_CHUNKSIZE - 8
+k-memrange.hh:#define SMALL_SLAB_THRESHOLD SMALL_CHUNKSIZE - 8
+k-memrange.hh:    unsigned char data[SMALL_CHUNKSIZE - sizeof(int) - 2*sizeof(short)];
+k-memrange.hh:    unsigned char data[BIG_CHUNKSIZE - sizeof(int) - 2*sizeof(short)];
+k-memrange.hh:                return this->chunks + free_ind;
+k-memrange.hh:        assert(sc->ind == ind);
+k-memrange.hh:        assert(sc->sz == SMALL_CHUNKSIZE);
+k-memrange.hh:        assert(sc->canary == SLAB_CANARY, "Boundary overwrite detected during slab free\n");
+k-memrange.hh:        assert(free_chunks[sc-this->chunks] == 0, "Error: attempted free of allocated chunk in slab\n");
+k-memrange.hh:        free_chunks[sc-this->chunks] = 1; // Mark chunk as free in slab
+k-memrange.hh:        if (--nallocs_ > 0) {
+k-memrange.hh:                return this->chunks + free_ind;
+k-memrange.hh:        assert(bc->ind == ind);
+k-memrange.hh:        assert(bc->sz == BIG_CHUNKSIZE);
+k-memrange.hh:        assert(bc->canary == SLAB_CANARY, "Boundary overwrite detected during slab free\n");
+k-memrange.hh:        assert(free_chunks[bc-this->chunks] == 0, "Error: attempted free of allocated chunk in slab\n");
+k-memrange.hh:        free_chunks[bc-this->chunks] = 1; // Mark chunk as free in slab
+k-memrange.hh:        if (--nallocs_ > 0) {
+k-memrange.hh:    return r->type();
+k-memrange.hh:    memmove(&r_[i + 2], &r_[i + 1], (n_ - i) * sizeof(memrange));
+k-memrange.hh:    if (first == r_[i].addr_ && i > 0 && r_[i - 1].type_ == type) {
+k-memrange.hh:        --i;
+k-memrange.hh:        memmove(&r_[i + 1], &r_[j], (n_ + 1 - j) * sizeof(memrange));
+k-memrange.hh:        n_ -= j - (i + 1);
+k-memrange.hh:        assert(i == 0 || r_[i].type_ != r_[i - 1].type_);
+k-memviewer.cc:#include "k-vmiter.hh"
+k-memviewer.cc:#include "k-ahci.hh"
+k-memviewer.cc:// k-memviewer.cc
+k-memviewer.cc:    static constexpr unsigned f_kernel = 1;     // kernel-restricted
+k-memviewer.cc:    static constexpr unsigned f_user = 2;       // user-accessible
+k-memviewer.cc:    // both as kernel-only and process-associated.
+k-memviewer.cc:    for (int pg = 0; pg < (1 << (order(sizeof(ahcistate)) - MIN_ORDER)); ++pg) {
+k-memviewer.cc:        if (range->type() == mem_kernel) {
+k-memviewer.cc:            for (uintptr_t pa = range->first();
+k-memviewer.cc:                 pa != range->last();
+k-memviewer.cc:            auto irqs = p->lock_pagetable_read();
+k-memviewer.cc:            if (p->pagetable_ && p->pagetable_ != early_pagetable) {
+k-memviewer.cc:                mark(ka2pa(p->pagetable_), f_kernel | f_process(pid));
+k-memviewer.cc:            p->unlock_pagetable_read(irqs);
+k-memviewer.cc:        || (pa >= maxpa && range->type() == mem_available)) {
+k-memviewer.cc:        if (range->type() == mem_kernel) {
+k-memviewer.cc:    if (range->type() == mem_console) {
+k-memviewer.cc:    } else if (range->type() == mem_reserved) {
+k-memviewer.cc:    } else if (range->type() == mem_kernel) {
+k-memviewer.cc:    } else if (range->type() == mem_nonexistent) {
+k-memviewer.cc:            // kernel-restricted + user-accessible = error
+k-memviewer.cc:            page_error(pa, "sharing error, kernel-restricted + user-accessible\n",
+k-memviewer.cc:                // non-shared page
+k-memviewer.cc:                   "VIRTUAL ADDRESS SPACE FOR %d\n", vmp->id_);
+k-memviewer.cc:        auto irqs = vmp->lock_pagetable_read();
+k-memviewer.cc:        if (vmp->pagetable_ && vmp->pagetable_ != early_pagetable) {
+k-memviewer.cc:        vmp->unlock_pagetable_read(irqs);
+k-mpspec.cc:#include "k-pci.hh"
+k-mpspec.cc:    for (; len > 0; ++x, --len) {
+k-mpspec.cc:    const uint8_t* end = x + len - sizeof(mpfloat);
+k-mpspec.cc:        if (mpf->check()) {
+k-mpspec.cc:            // `basemem` is reported in KiB - 1KiB
+k-mpspec.cc:        if (mpf && mpf->mpconfig_pa) {
+k-mpspec.cc:            const mpconfig* c = pa2kptr<const mpconfig*>(mpf->mpconfig_pa);
+k-mpspec.cc:            if (c->check()) {
+k-mpspec.cc:    for (auto e = mpc->first(); e < mpc->last(); e = mpc->next(e)) {
+k-mpspec.cc:    int bus_id = -1;
+k-mpspec.cc:    for (auto e = mpc->first(); e < mpc->last(); e = mpc->next(e)) {
+k-mpspec.cc:            if (bus_id == -1 && memcmp(x->bus_type, "PCI   ", 6) == 0) {
+k-mpspec.cc:                bus_id = x->bus_id;
+k-mpspec.cc:            if (x->bus_id == bus_id
+k-mpspec.cc:                && x->bus_irq == bus_irq
+k-mpspec.cc:                && x->apic_id == 0) {
+k-mpspec.cc:                return x->apic_intno;
+k-proc.cc:#include "k-vmiter.hh"
+k-proc.cc:#include "k-devices.hh"
+k-proc.cc:#include "k-vfs.hh"
+k-proc.cc:    // read-only in the first initializiation which is during kernel boot (there are 
+k-proc.cc:            spinlock_guard guard(global_cnode->open_close_lock_);
+k-proc.cc:            ++global_cnode->refcount_;
+k-proc.cc:            fdtable[fd]->close();
+k-proc.cc:    // ensure layout `k-exception.S` expects
+k-proc.cc:    assert(pt->entry[256] == early_pagetable->entry[256]);
+k-proc.cc:    assert(pt->entry[511] == early_pagetable->entry[511]);
+k-proc.cc:    regs_ = reinterpret_cast<regstate*>(addr + PROCSTACK_SIZE) - 1;
+k-proc.cc:    regs_->reg_cs = SEGSEL_APP_CODE | 3;
+k-proc.cc:    regs_->reg_ss = SEGSEL_APP_DATA | 3;
+k-proc.cc:    regs_->reg_rflags = EFLAGS_IF;
+k-proc.cc:    regs_->reg_swapgs = 1;
+k-proc.cc:    regs_ = reinterpret_cast<regstate*>(addr + PROCSTACK_SIZE) - 1;
+k-proc.cc:    regs_->reg_cs = SEGSEL_KERN_CODE;
+k-proc.cc:    regs_->reg_ss = SEGSEL_KERN_DATA;
+k-proc.cc:    regs_->reg_rflags = EFLAGS_IF;
+k-proc.cc:    regs_->reg_rsp = addr + PROCSTACK_SIZE;
+k-proc.cc:    regs_->reg_rip = reinterpret_cast<uintptr_t>(f);
+k-proc.cc:    regs_->reg_rdi = addr;
+k-proc.cc://    Called when `k-exception.S` tries to run a non-runnable proc.
+k-proc.cc:// be stored in an initial-ramdisk file (`memfile_loader`, defined
+k-proc.cc:// in `k-devices.cc`), or on a disk (you'll write such a loader
+k-proc.cc://    `off` is page-aligned. On success, the loader sets `*pg_ptr`
+k-proc.cc:        || u.eh.e_phnum > (len - u.eh.e_phoff) / sizeof(elf_program)
+k-proc.cc://    Load an ELF segment at virtual address `ph->p_va` into this process.
+k-proc.cc://    Loads pages `[src, src + ph->p_filesz)` to `dst`, then clears
+k-proc.cc://    `[ph->p_va + ph->p_filesz, ph->p_va + ph->p_memsz)` to 0.
+k-proc.cc:        || VA_LOWEND - va < ph.p_memsz
+k-proc.cc:    // load binary data into just-allocated memory
+k-proc.cc:            size_t datapg_sz = last_off - off;
+k-proc.cc:            size_t va_sz = min(it.last_va(), end_file) - it.va();
+k-proc.cc:            memcpy(it.kptr<uint8_t*>(), datapg + (off - req_off), copy_sz);
+k-proc.cc:        size_t sz = min(it.last_va(), end_mem) - it.va();
+k-sanitizers.cc:            unsigned long mask = ~((1UL << bit_width()) - 1);
+k-sanitizers.cc:                 data->location.file, data->location.line,
+k-sanitizers.cc:                 data->type->is_signed() ? "signed" : "unsigned",
+k-sanitizers.cc:                 data->type->unparse_value(buf1, sizeof(buf1), lhs), op,
+k-sanitizers.cc:                 data->type->unparse_value(buf2, sizeof(buf2), rhs),
+k-sanitizers.cc:                 data->type->name);
+k-sanitizers.cc:    handle_overflow(data, a, b, '-');
+k-sanitizers.cc:                 "!!!   -(%s) cannot be represented in type %s\n",
+k-sanitizers.cc:                 data->location.file, data->location.line,
+k-sanitizers.cc:                 data->type->is_signed() ? "signed" : "unsigned",
+k-sanitizers.cc:                 data->type->unparse_value(buf, sizeof(buf), a),
+k-sanitizers.cc:                 data->type->name);
+k-sanitizers.cc:    if (data->type->is_signed() && long(data->type->value(b)) == -1L) {
+k-sanitizers.cc:        error_printf("!!! %s:%d: division of %s by -1 cannot be represented in type %s\n",
+k-sanitizers.cc:                     data->location.file, data->location.line,
+k-sanitizers.cc:                     data->type->unparse_value(buf, sizeof(buf), a),
+k-sanitizers.cc:                     data->type->name);
+k-sanitizers.cc:                     data->location.file, data->location.line);
+k-sanitizers.cc:                 data->location.file, data->location.line);
+k-sanitizers.cc:    if (data->rhs_type->is_signed()
+k-sanitizers.cc:        && long(data->rhs_type->value(b)) < 0) {
+k-sanitizers.cc:                     data->rhs_type->unparse_value(buf2, sizeof(buf2), b));
+k-sanitizers.cc:    } else if (data->rhs_type->value(b) >= data->lhs_type->bit_width()) {
+k-sanitizers.cc:                     data->rhs_type->unparse_value(buf2, sizeof(buf2), b),
+k-sanitizers.cc:                     data->lhs_type->name);
+k-sanitizers.cc:                     data->lhs_type->unparse_value(buf1, sizeof(buf1), a),
+k-sanitizers.cc:                     data->rhs_type->unparse_value(buf2, sizeof(buf2), b),
+k-sanitizers.cc:                     data->lhs_type->name);
+k-sanitizers.cc:                     type->name);
+k-sanitizers.cc:    } else if (alignment && (ptr & (alignment - 1)) != 0) {
+k-sanitizers.cc:                     ptr, type->name);
+k-sanitizers.cc:                     ptr, type->name);
+k-sanitizers.cc:    handle_type_mismatch(data->location, data->type, data->alignment,
+k-sanitizers.cc:                         data->type_check_kind, ptr);
+k-sanitizers.cc:    handle_type_mismatch(data->location, data->type, 1UL << data->log_alignment,
+k-sanitizers.cc:                         data->type_check_kind, ptr);
+k-sanitizers.cc:                 data->location.file, data->location.line,
+k-sanitizers.cc:                 data->index_type->unparse_value(buf, sizeof(buf), index),
+k-sanitizers.cc:                 data->array_type->name);
+k-sanitizers.cc:                 location->file, location->line);
+k-sanitizers.cc:    error_printf("!!! %s:%d: execution reached the end of a value-returning function\n"
+k-sanitizers.cc:                 location->file, location->line);
+k-sanitizers.cc:    error_printf("!!! %s:%d: variable length array bound evaluates to non-positive %s\n",
+k-sanitizers.cc:                 data->location.file, data->location.line,
+k-sanitizers.cc:                 data->type->unparse_value(buf, sizeof(buf), bound));
+k-sanitizers.cc:                 data->location.file, data->location.line,
+k-sanitizers.cc:                 data->type->unparse_value(buf, sizeof(buf), val),
+k-sanitizers.cc:                 data->type->name);
+k-sanitizers.cc:                 data->location.file, data->location.line,
+k-sanitizers.cc:                 data->arg_index);
+k-sanitizers.cc:    if (data->attr_location.valid()) {
+k-sanitizers.cc:                     data->attr_location.file, data->attr_location.line);
+k-sanitizers.cc:                 location->file, location->line);
+k-sanitizers.cc:                     location->file, location->line,
+k-sanitizers.cc:                     location->file, location->line, base, result);
+k-sanitizers.cc:    int& status = p ? p->sanitizer_status_ : asan_global_status;
+k-sanitizers.cc:        lp = (addr - KTEXT_BASE) / PAGESIZE;
+k-sanitizers.cc:        rp = (addr + sz - 1 - KTEXT_BASE) / PAGESIZE;
+k-sanitizers.cc:        lp = (addr - HIGHMEM_BASE) / PAGESIZE;
+k-sanitizers.cc:        rp = (addr + sz - 1 - HIGHMEM_BASE) / PAGESIZE;
+k-sanitizers.cc:            lpaddr += KTEXT_BASE - HIGHMEM_BASE;
+k-sanitizers.cc:        --status;
+k-sanitizers.cc:    // physical memory plus all kernel-accessible memory
+k-sanitizers.cc:    uintptr_t asan_pagemap_pa = asan_pagemap_top_pa - asan_pagemap_sz;
+k-sanitizers.cc:           asan_pagemap_sz - (MEMSIZE_PHYSICAL / PAGESIZE));
+k-sanitizers.cc:                   - it.first() / PAGESIZE);
+k-sanitizers.cc:    if (--asan_enabled == 0) {
+k-sanitizers.cc:    size_t rp = (pa + sz - 1) / PAGESIZE;
+k-sanitizers.cc:        asan_pagemap_storage[lp] = poisoned ? -1 : 0;
+k-vfs.cc:#include "k-vfs.hh"
+k-vfs.cc:    if (cap - start > sz) {
+k-vfs.cc:        return cap - start;
+k-vfs.cc:        log_printf("[vnode-close] Generic close called, decrementing refcount to %d\n", 
+k-vfs.cc:            refcount_-1);
+k-vfs.cc:    return --refcount_;
+k-vfs.cc:        log_printf("[kb_c_vnode-destructor] *Closing time...one last call for alcohol*\n");
+k-vfs.cc:        log_printf("[kb_c_vnode-close] KBC close called\n");
+k-vfs.cc:    return --refcount_;
+k-vfs.cc:            // Ctrl-D means EOF
+k-vfs.cc:        log_printf("[memfile-vnode-constructor] memfile vnode constructor called with mode %d\n",
+k-vfs.cc:        log_printf("[memfile_vnode-destructor] *Closing time...one last call for alcohol*\n");
+k-vfs.cc:        log_printf("[memfile_vnode-close] memfile close called\n");
+k-vfs.cc:            log_printf("[memfile_vnode-close] Failed to close: file not open\n");
+k-vfs.cc:    return --refcount_;
+k-vfs.cc:            log_printf("[memfile_vnode-write] Rejected attempted write on read-only node\n");
+k-vfs.cc:    spinlock_guard guard(mf_->lock_);
+k-vfs.cc:    size_t best_sz = ::io_sz(offset_, mf_->len_, sz);
+k-vfs.cc:        if (mf_->set_length(offset_ + sz) == E_NOSPC) {
+k-vfs.cc:                log_printf("[memfile_vnode-write] No space remaining in file\n");
+k-vfs.cc:    void* mf_ptr = reinterpret_cast<void*>(mf_->data_ + offset_);
+k-vfs.cc:    offset_ += sz; // No open close lock--the memfile lock is stronger
+k-vfs.cc:            log_printf("[memfile_vnode-write] Rejected attempted read on write-only node\n");
+k-vfs.cc:    spinlock_guard guard(mf_->lock_);
+k-vfs.cc:    size_t rd_sz = ::io_sz(offset_, mf_->len_, sz);
+k-vfs.cc:    void* mf_ptr = reinterpret_cast<void*>(mf_->data_ + offset_);
+k-vfs.cc:        log_printf("[pipe_bbuf-write] Pipe bbuf now handling a WRITE of %lu size\n", sz);
+k-vfs.cc:        log_printf("[pipe_bbuf-write] Buf dump (to be written): '%s'\n", reinterpret_cast<char*>(addr));
+k-vfs.cc:            log_printf("[pipe_bbuf-write] Pipe bbuf full, blocking\n");
+k-vfs.cc:            log_printf("[pipe_bbuf-write] Read end closed, returning error\n");
+k-vfs.cc:        int available_space = get_min(BBUF_CAP - index, BBUF_CAP - len_);
+k-vfs.cc:        size_t wr_sz = get_min((int) sz - pos, available_space);
+k-vfs.cc:        log_printf("[pipe_bbuf-write] Successfully wrote %d chars, new len_=%d\n", pos, len_);
+k-vfs.cc:        log_printf("[pipe_bbuf-read] Pipe bbuf now handling a READ of %lu size\n", sz);
+k-vfs.cc:            log_printf("[pipe_bbuf-read] Pipe bbuf empty, blocking\n");
+k-vfs.cc:            log_printf("[pipe_bbuf-read] EOF reached, returning\n");
+k-vfs.cc:        size_t available_space = get_min(len_, BBUF_CAP - pos_);
+k-vfs.cc:        size_t n = get_min(sz - pos, available_space);
+k-vfs.cc:        len_ -= n;
+k-vfs.cc:        log_printf("[pipe_bbuf-read] Successfully read %d chars\n", pos);
+k-vfs.cc:                log_printf("[pipe-bbuf] Failed to allocate memory for a bbuf, returning to syscall\n");
+k-vfs.cc:    spinlock_guard guard(bbuf_->lock_);
+k-vfs.cc:        bbuf_->close_read();
+k-vfs.cc:        bbuf_->wrq_.wake_all();
+k-vfs.cc:        bbuf_->close_write();
+k-vfs.cc:        bbuf_->rdq_.wake_all();
+k-vfs.cc:    if (bbuf_->write_closed_ && bbuf_->read_closed_) {
+k-vfs.cc:        log_printf("[pipe_vnode-close] pipe close called\n");
+k-vfs.cc:    return --refcount_;
+k-vfs.cc:    return bbuf_->write(addr, sz);
+k-vfs.cc:    return bbuf_->read(addr, sz);
+k-vfs.cc:    assert(fd_ == -1);
+k-vfs.cc:        log_printf("[uds-constructor] Init key=%s, key_=%s\n", key, key_);
+k-vfs.cc:        log_printf("[uds-destructor] Destructor called\n");
+k-vfs.cc:        log_printf("[uds] Bindding socket to process PID=%d\n", server->id_);
+k-vfs.cc:        log_printf("[uds] UDS bound to server PI D=%d now listening\n", server_->id_);
+k-vfs.cc:        fd_ = -1;
+k-vfs.cc:        vnode* vn = client_->fdtable[fd_];
+k-vfs.cc:        if (!server_->fdtable[fd_]) {
+k-vfs.cc:            newfd = server_->find_open_fd(false, 0);
+k-vfs.cc:                fd_ = -1;
+k-vfs.cc:        server_->fdtable[newfd] = vn;
+k-vfs.cc:        spinlock_guard refguard(vn->open_close_lock_);
+k-vfs.cc:        ++server_->fdtable[newfd]->refcount_;
+k-vfs.cc:        fd_ = -1;
+k-vfs.hh:#include "k-devices.hh"
+k-vfs.hh:#include "k-wait.hh"
+k-vfs.hh:    memfile* mf_;                               // in-memory file, lock defined in here
+k-vfs.hh:    int fd_ = -1;
+k-vfs.hh:    int accept();                       // Sleep-waits for a client connection
+k-vfs.hh:    int connect(proc* client);          // Sleep-waits for server accept
+k-vmiter.cc:#include "k-vmiter.hh"
+k-vmiter.cc:        if (sz > ((int64_t) va() < 0 ? 0 : VA_LOWEND) - va()) {
+k-vmiter.cc:        sz += va() & (rsz - 1);
+k-vmiter.cc:            sz -= rsz;
+k-vmiter.cc:        --level_;
+k-vmiter.cc:        pep_ = &pt->entry[pageindex(va_, level_)];
+k-vmiter.cc:            pep_ = &pt_->entry[pageindex(va, level_)];
+k-vmiter.cc:        pep_ += pageindex(va, level_) - curidx;
+k-vmiter.cc:    if (pa == (uintptr_t) -1 && perm == 0) {
+k-vmiter.cc:    // virtual address is page-aligned
+k-vmiter.cc:        // if mapping present, physical address is page-aligned
+k-vmiter.cc:        assert(pa != (uintptr_t) -1, "vmiter::try_map mapping nonexistent pa");
+k-vmiter.cc:    // imposed by higher-level page tables (`perm_`)
+k-vmiter.cc:            return -1;
+k-vmiter.cc:    pep_ = &pt_->entry[pageindex(va, level_)];
+k-vmiter.cc:                --level_;
+k-vmiter.cc:                pep_ = &pt->entry[pageindex(va_, level_)];
+k-vmiter.cc:                pep_ = &pt_->entry[pageindex(va_, level_)];
+k-vmiter.hh:// `vmiter` and `ptiter` are iterator types for x86-64 page tables.
+k-vmiter.hh:    // or `(uintptr_t) -1` if `va()` is unmapped
+k-vmiter.hh:    // Return a kernel-accessible pointer corresponding to `pa()`,
+k-vmiter.hh:    // Advance to virtual address `va() - delta`; return `*this`
+k-vmiter.hh:    inline vmiter& operator-=(intptr_t delta);
+k-vmiter.hh:    // Move to next larger page-aligned virtual address, skipping large
+k-vmiter.hh:    // non-present regions
+k-vmiter.hh:    // The current virtual address must be page-aligned. Calls `kalloc`
+k-vmiter.hh:    // The current virtual address must be page-aligned. Calls `kalloc`
+k-vmiter.hh:    // and -1 on failure.
+k-vmiter.hh:// returning them in depth-first order.
+k-vmiter.hh:// Note that `ptiter` will never visit the root (level-4) page table page.
+k-vmiter.hh:    // (not including the top-level page table page)
+k-vmiter.hh:    // Return kernel-accessible pointer to the current page table page
+k-vmiter.hh:    // Move to next page table page in depth-first order
+k-vmiter.hh:    // Return level of current page table page (0-2)
+k-vmiter.hh:    : pt_(pt), pep_(&pt_->entry[0]), level_(3), perm_(initial_perm), va_(0) {
+k-vmiter.hh:    : vmiter(p->pagetable_, va) {
+k-vmiter.hh:        return -1;
+k-vmiter.hh:    // Returns 0-0xFFF. (XXX Does not track PTE_XD.)
+k-vmiter.hh:    return ph & -(ph & PTE_P);
+k-vmiter.hh:inline vmiter& vmiter::operator-=(intptr_t delta) {
+k-vmiter.hh:    return find(va_ - delta);
+k-vmiter.hh:    assert((va_ & (PAGESIZE - 1)) == 0);
+k-vmiter.hh:    : ptiter(p->pagetable_) {
+k-vmiter.hh:    return level_ - 1;
+k-vmiter.hh:    return va() + idx * (pageoffmask(level_ - 1) + 1);
+k-vmiter.hh:    return va() + (idx + 1) * (pageoffmask(level_ - 1) + 1);
+k-vmiter.hh:    return kptr()->entry[idx];
+k-wait.hh:#include "k-waitstruct.hh"
+k-wait.hh:// k-wait.hh
+k-wait.hh://    `k-waitstruct.hh` defines the `waiter` and `wait_queue` types.
+k-wait.hh:    // optional error-checking code
+k-wait.hh:    p_->pstate_ = proc::ps_blocked;
+k-wait.hh:        log_printf("[waiter] Set p_->pstate_\n");
+k-wait.hh:    if (p_->pstate_ == proc::ps_blocked) {
+k-wait.hh:        p_->yield();
+k-wait.hh:        log_printf("[clear] Clearing for process PID=%d\n", p_->id_);
+k-wait.hh:    auto irqs = wq_->lock_.lock();
+k-wait.hh:        wq_->show();
+k-wait.hh:        wq_->q_.erase(this);
+k-wait.hh:                this->p_->id_);
+k-wait.hh:        wq_->show();
+k-wait.hh:    wq_->lock_.unlock(irqs);
+k-wait.hh:    p_->wake();
+k-wait.hh:            log_printf("[k-wait] [block_until] Prepared. Predicate VA=%p\n", predicate);
+k-wait.hh:                log_printf("[k-wait] [block_until] Predicate immediately passed without block() called\n");
+k-wait.hh:            log_printf("[k-wait] [block_until] About to block\n");
+k-wait.hh:            log_printf("[k-wait] [block_until] Blocked\n");
+k-wait.hh:        w->wake();
+k-wait.hh:        log_printf("[wake_all] [%p] Waking process VA=%p, pid=%d now\n", this, p, p->id_);
+k-wait.hh:        if (it->p_ == p) {
+k-wait.hh:            it->wake();
+k-wait.hh:    log_printf("WaitQ State: HEAD --> [");
+k-wait.hh:        log_printf("%d ", it->p_->id_);
+k-wait.hh:    log_printf("] <-- TAIL\n");
+k-wait.hh:    // optional error-checking code
+k-wait.hh:        log_printf("[HEAP-waiter] [prepare] wh VA=%p, PA=0x%x\n", &wh, kptr2pa(&wh));
+k-wait.hh:        log_printf("[HEAP-waiter] Set p_ to current(), with PID=%d and wakeup time %lu\n", 
+k-wait.hh:            p_->id_, wakeup_time_);
+k-wait.hh:    auto irqs = wh_->lock_.lock();
+k-wait.hh:        log_printf("[HEAP-waiter] locked\n");
+k-wait.hh:    p_->pstate_ = proc::ps_blocked;
+k-wait.hh:        log_printf("[HEAP-waiter] Set p_->pstate_\n");
+k-wait.hh:        log_printf("[HEAP-waiter] Inserting process PID=%d into wait heap\n", p_->id_);
+k-wait.hh:    wh_->insert(this);
+k-wait.hh:        log_printf("[HEAP-waiter] unlocking\n");
+k-wait.hh:    wh_->lock_.unlock(irqs);
+k-wait.hh:    if (p_->pstate_ == proc::ps_blocked) {
+k-wait.hh:        p_->yield();
+k-wait.hh:        log_printf("[HEAP-clear] Clearing for process PID=%d\n", p_->id_);
+k-wait.hh:    auto irqs = wh_->lock_.lock();
+k-wait.hh:        wh_->show();
+k-wait.hh:    // (This is for design completeness--in practice this is never taken.)
+k-wait.hh:    if (wh_->is_on_heap(this)) {
+k-wait.hh:            log_printf("[HEAP-clear] Found this waiter (PID=%d) on heap, clearing it\n", p_->id_);
+k-wait.hh:        for (int i = 0; i < wh_->size(); ++i) {
+k-wait.hh:            hwaiter* hw = wh_->pop(false);
+k-wait.hh:            wh_->insert(temps[i]);
+k-wait.hh:        log_printf("[HEAP-clear] Clearing complete\n");
+k-wait.hh:        wh_->show();
+k-wait.hh:    wh_->lock_.unlock(irqs);
+k-wait.hh:    p_->wake();
+k-wait.hh:            log_printf("[HEAP-waiter] About to prepare process PID=%d\n", p_->id_);
+k-wait.hh:            log_printf("[HEAP-waiter] Prepared PID=%d. Predicate VA=%p\n", p_->id_, predicate);
+k-wait.hh:            if (p_->e_intr != 0) {
+k-wait.hh:                log_printf("[HEAP-waiter] Predcheck passed. Signal to parent PID=%d\n", p_->id_);
+k-wait.hh:            log_printf("[HEAP-waiter] Predcheck failed: About to block PID=%d\n", 
+k-wait.hh:                p_->id_);
+k-wait.hh:            log_printf("[HEAP-waiter] Blocked PID=%d\n", p_->id_);
+k-wait.hh:    log_printf("WaitH State (PID:waketime) :: ROOT --> [");
+k-wait.hh:        log_printf("%d:%d ", waiter_arr_[i]->p_->id_, waiter_arr_[i]->wakeup_time_);
+k-wait.hh:    log_printf("] <-- LEAVES\n");
+k-wait.hh:    return (child - 1)/2;
+k-wait.hh://    The heap algorithm assumes children of i are min-heaped. Assumes locked.
+k-wait.hh:    if (l < nwaiters_ && waiter_arr_[l]->wakeup_time_ < waiter_arr_[i]->wakeup_time_) {
+k-wait.hh:    if (r < nwaiters_ && waiter_arr_[r]->wakeup_time_ < waiter_arr_[smallest]->wakeup_time_) {
+k-wait.hh:        log_printf("[wait_heap] Inserting waiter with wakeup time %lu\n", hw->wakeup_time_);
+k-wait.hh:    while (i != 0 && waiter_arr_[parent(i)]->wakeup_time_ > waiter_arr_[i]->wakeup_time_) { 
+k-wait.hh:            log_printf("[wait-heap] top_waketime called but no waiters are on the heap\n");
+k-wait.hh:            waiter_arr_[0]->p_->id_, waiter_arr_[0]->wakeup_time_);
+k-wait.hh:    return waiter_arr_[0]->wakeup_time_;
+k-wait.hh:            waiter_arr_[0]->p_->id_, waiter_arr_[0]->wakeup_time_);
+k-wait.hh:        --nwaiters_;
+k-wait.hh:        waiter_arr_[0] = waiter_arr_[--nwaiters_];
+k-wait.hh:            root->p_->id_, root->wakeup_time_);
+k-wait.hh:        root->wake();
+k-wait.hh:        waiter_arr_[i]->wake();
+k-waitstruct.hh:#include "k-list.hh"
+k-waitstruct.hh:// k-waitstruct.hh
+k-waitstruct.hh://    The inline functions declared here are defined in `k-wait.hh`.
+lib.cc:#include "x86-64.h"
+lib.cc:#include "k-devices.hh" /* for consolestate */
+lib.cc:    for (char* d = (char*) dst; n > 0; --n, ++s, ++d) {
+lib.cc:        while (n-- > 0) {
+lib.cc:            *--d = *--s;
+lib.cc:        while (n-- > 0) {
+lib.cc:    for (char* p = (char*) v; n > 0; ++p, --n) {
+lib.cc:    for (; n > 0; ++sa, ++sb, --n) {
+lib.cc:            return (*sa > *sb) - (*sa < *sb);
+lib.cc:    for (ss = (const unsigned char*) s; n != 0; ++ss, --n) {
+lib.cc:    } while (d[-1]);
+lib.cc:        --maxlen;
+lib.cc:        --maxlen;
+lib.cc:            return (ac > bc) - (ac < bc);
+lib.cc:            return (ac > bc) - (ac < bc);
+lib.cc:        ++a, ++b, --n;
+lib.cc:            return (ac > bc) - (ac < bc);
+lib.cc:            return (ac > bc) - (ac < bc);
+lib.cc:        ++a, ++b, --n;
+lib.cc:    bool negative = *s == '-';
+lib.cc:            digit = *s - '0';
+lib.cc:        } else if (base > 10 && *s >= 'a' && *s < 'a' + base - 10) {
+lib.cc:            digit = *s - 'a' + 10;
+lib.cc:        } else if (base > 10 && *s >= 'A' && *s < 'A' + base - 10) {
+lib.cc:            digit = *s - 'A' + 10;
+lib.cc:        if (x > (-1UL - digit) / base) {
+lib.cc:        x = -1UL;
+lib.cc:        x = -x;
+lib.cc:    bool negative = *s == '-';
+lib.cc:    unsigned long bound = (1UL << (8 * sizeof(unsigned long) - 1)) - !negative;
+lib.cc:        u = -u;
+lib.cc://    `max - min <= RAND_MAX`.
+lib.cc:    assert(max - min <= RAND_MAX);
+lib.cc:    return min + (r * (max - min + 1)) / ((unsigned long) RAND_MAX + 1);
+lib.cc:// declare printfmt specializations (g++-6 requires)
+lib.cc:        base = -base;
+lib.cc:    *--numbuf_end = '\0';
+lib.cc:        *--numbuf_end = digits[val % base];
+lib.cc:static const char flag_chars[] = "#0- +";
+lib.cc:                flags |= 1 << (flagc - flag_chars);
+lib.cc:        int width = -1;
+lib.cc:                width = 10 * width + *format++ - '0';
+lib.cc:        int precision = -1;
+lib.cc:                    precision = 10 * precision + *format++ - '0';
+lib.cc:            num = negative ? -x : x;
+lib.cc:            base = -16;
+lib.cc:            base = -16;
+lib.cc:                format--;
+lib.cc:                prefix = "-";
+lib.cc:                   && (base == 16 || base == -16)
+lib.cc:            prefix = (base == -16 ? "0x" : "0X");
+lib.cc:            zeros = precision > datalen ? precision - datalen : 0;
+lib.cc:            zeros = width - datalen - strlen(prefix);
+lib.cc:        width -= datalen + zeros + strlen(prefix);
+lib.cc:        for (; !(flags & FLAG_LEFTJUSTIFY) && width > 0; --width) {
+lib.cc:        for (; zeros > 0; --zeros) {
+lib.cc:        for (; datalen > 0; ++data, --datalen) {
+lib.cc:        for (; width > 0; --width) {
+lib.cc:        sp.end_[-1] = 0;
+lib.cc:                (CONSOLE_ROWS - 1) * CONSOLE_COLUMNS * sizeof(*console));
+lib.cc:        memset(console + (CONSOLE_ROWS - 1) * CONSOLE_COLUMNS,
+lib.cc:        cell_ -= CONSOLE_COLUMNS;
+lib.cc:    cursorpos = cell_ - console;
+lib.cc:        int pos = (cell_ - console) % 80;
+lib.cc:        --len;
+lib.cc:    return cp.cell_ - console;
+lib.cc:    return cp.cell_ - console;
+lib.cc:    console_vprintf(-1, color, format, val);
+lib.cc:    console_vprintf(-1, 0x700, format, val);
+lib.cc:// k-hardware.cc/u-lib.cc supply error_vprintf
+lib.cc:    error_vprintf(-1, color, format, val);
+lib.cc:    error_vprintf(-1, COLOR_ERROR, format, val);
+lib.cc:    size_t spos = pos <= 10 ? 0 : pos - 10;
+lib.cc:                 ellipsis1, int(epos - spos), x + spos, ellipsis2,
+lib.cc:                 ellipsis1, int(epos - spos), y + spos, ellipsis2, pos);
+lib.hh:    return x ? sizeof(x) * 8 - __builtin_clz(x) : 0;
+lib.hh:    return x ? sizeof(x) * 8 - __builtin_clz(x) : 0;
+lib.hh:    return x ? sizeof(x) * 8 - __builtin_clzl(x) : 0;
+lib.hh:    return x ? sizeof(x) * 8 - __builtin_clzl(x) : 0;
+lib.hh:    return x ? sizeof(x) * 8 - __builtin_clzll(x) : 0;
+lib.hh:    return x ? sizeof(x) * 8 - __builtin_clzll(x) : 0;
+lib.hh:    return x - (x % m);
+lib.hh:    return round_down(x + m - 1, m);
+lib.hh:    return x ? T(1) << (msb(x) - 1) : 0;
+lib.hh:    return x ? T(1) << msb(x - 1) : 0;
+lib.hh:    return (unsigned(c) - unsigned('0')) < 10;
+lib.hh:    return (unsigned(c) - unsigned('a')) < 26;
+lib.hh:    return (unsigned(c) - unsigned('A')) < 26;
+lib.hh:    return ((unsigned(c) | 0x20) - unsigned('a')) < 26;
+lib.hh:    return isupper(c) ? c + 'a' - 'A' : c;
+lib.hh:    return islower(c) ? c + 'A' - 'a' : c;
+lib.hh:    // return minimum index of a 1-valued bit with index >= `i`, examining at
+lib.hh:    inline size_t find_lsb(size_t i = 0, size_t n = -1) const;
+lib.hh:    // return minimum index of a 0-valued bit with index >= `i`, examining at
+lib.hh:    inline size_t find_lsz(size_t i = 0, size_t n = -1) const;
+lib.hh:#define E_AGAIN         -11        // Try again
+lib.hh:#define E_BADF          -9         // Bad file number
+lib.hh:#define E_CHILD         -10        // No child processes
+lib.hh:#define E_FAULT         -14        // Bad address
+lib.hh:#define E_FBIG          -27        // File too large
+lib.hh:#define E_INTR          -4         // Interrupted system call
+lib.hh:#define E_INVAL         -22        // Invalid argument
+lib.hh:#define E_IO            -5         // I/O error
+lib.hh:#define E_MFILE         -24        // Too many open files
+lib.hh:#define E_NAMETOOLONG   -36        // File name too long
+lib.hh:#define E_NFILE         -23        // File table overflow
+lib.hh:#define E_NOENT         -2         // No such file or directory
+lib.hh:#define E_NOEXEC        -8         // Exec format error
+lib.hh:#define E_NOMEM         -12        // Out of memory
+lib.hh:#define E_NOSPC         -28        // No space left on device
+lib.hh:#define E_NOSYS         -38        // Invalid system call number
+lib.hh:#define E_NXIO          -6         // No such device or address
+lib.hh:#define E_PERM          -1         // Operation not permitted
+lib.hh:#define E_PIPE          -32        // Broken pipe
+lib.hh:#define E_SPIPE         -29        // Illegal seek
+lib.hh:#define E_SRCH          -3         // No such process
+lib.hh:#define E_TXTBSY        -26        // Text file busy
+lib.hh:#define E_2BIG          -7         // Argument list too long
+lib.hh:#define E_BADCONN       -31        // Socket is not properly set up
+lib.hh:#define E_MSOCK         -35        // Too many sockets in use
+lib.hh:#define E_SAMENAME      -34        // Another socket already has the same name
+lib.hh:#define E_SOCKTIMEOUT   -33        // Socket waited too long on accept or connect
+lib.hh:#define E_SOCKTAKEN     -37        // Socket already taken
+lib.hh:#define E_MINERROR      -100
+lib.hh:// Helper versions that default to printing white-on-black at the cursor.
+lib.hh:inline auto bitset_view::bit::operator=(bool x) -> bit& {
+lib.hh:inline auto bitset_view::bit::operator|=(bool x) -> bit& {
+lib.hh:inline auto bitset_view::bit::operator&=(bool x) -> bit& {
+lib.hh:inline auto bitset_view::bit::operator^=(bool x) -> bit& {
+lib.hh:inline auto bitset_view::operator[](size_t i) -> bit {
+lib.hh:    uint64_t mask = ~(off ? (uint64_t(1) << off) - 1 : uint64_t(0));
+lib.hh:    n = min(n_ - i, n) + i;
+lib.hh:    i -= off;
+lib.hh:        mask = -1;
+lib.hh:    return b ? min(n, i + b - 1) : n;
+lib.hh:    uint64_t mask = ~(off ? (uint64_t(1) << off) - 1 : uint64_t(0));
+lib.hh:    n = min(n_ - i, n) + i;
+lib.hh:    i -= off;
+lib.hh:        mask = -1;
+lib.hh:    return b ? min(n, i + b - 1) : n;
+mkchickadeefs.su:uintn-identity.h:39:1:__uint32_t __uint32_identity(__uint32_t)	16	static
+mkchickadeefs.su:uintn-identity.h:45:1:__uint64_t __uint64_identity(__uint64_t)	16	static
+mkchickadeefs.su:allocator.h:153:7:std::allocator< <template-parameter-1-1> >::~allocator() [with _Tp = unsigned int]	32	static
+mkchickadeefs.su:allocator.h:153:7:std::allocator< <template-parameter-1-1> >::~allocator() [with _Tp = chkfs::dirent]	32	static
+mkchickadeefs.su:allocator.h:153:7:std::allocator< <template-parameter-1-1> >::~allocator() [with _Tp = chkfs::extent]	32	static
+mkchickadeefs.su:allocator.h:138:7:std::allocator< <template-parameter-1-1> >::allocator() [with _Tp = unsigned int]	32	static
+mkchickadeefs.su:stl_iterator.h:823:7:__gnu_cxx::__normal_iterator<_Iterator, _Container>::pointer __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator->() const [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	16	static
+mkchickadeefs.su:allocator.h:138:7:std::allocator< <template-parameter-1-1> >::allocator() [with _Tp = chkfs::dirent]	32	static
+mkchickadeefs.su:allocator.h:138:7:std::allocator< <template-parameter-1-1> >::allocator() [with _Tp = chkfs::extent]	32	static
+mkchickadeefs.su:stl_iterator.h:989:5:typename __gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type __gnu_cxx::operator-(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	48	static
+mkchickadeefs.su:allocator.h:138:7:std::allocator< <template-parameter-1-1> >::allocator() [with _Tp = double]	32	static
+mkchickadeefs.su:allocator.h:153:7:std::allocator< <template-parameter-1-1> >::~allocator() [with _Tp = double]	32	static
+mkchickadeefs.su:stl_vector.h:650:2:std::vector<_Tp, _Alloc>::vector(_InputIterator, _InputIterator, const allocator_type&) [with _InputIterator = const double*; <template-parameter-2-2> = void; _Tp = double; _Alloc = std::allocator<double>]	80	static
+mkchickadeefs.su:stl_iterator.h:989:5:typename __gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type __gnu_cxx::operator-(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = const double*; _Container = std::vector<double>]	48	static
+mkchickadeefs.su:stl_iterator.h:989:5:typename __gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type __gnu_cxx::operator-(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = chkfs::dirent*; _Container = std::vector<chkfs::dirent>]	48	static
+mkchickadeefs.su:allocator.h:141:7:std::allocator< <template-parameter-1-1> >::allocator(const std::allocator< <template-parameter-1-1> >&) [with _Tp = unsigned int]	32	static
+mkchickadeefs.su:stl_iterator.h:867:7:__gnu_cxx::__normal_iterator<_Iterator, _Container> __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator-(__gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type) const [with _Iterator = chkfs::extent*; _Container = std::vector<chkfs::extent>]	64	static
+mkchickadeefs.su:stl_iterator.h:867:7:__gnu_cxx::__normal_iterator<_Iterator, _Container> __gnu_cxx::__normal_iterator<_Iterator, _Container>::operator-(__gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type) const [with _Iterator = chkfs::dirent*; _Container = std::vector<chkfs::dirent>]	64	static
+mkchickadeefs.su:allocator.h:141:7:std::allocator< <template-parameter-1-1> >::allocator(const std::allocator< <template-parameter-1-1> >&) [with _Tp = double]	32	static
+mkchickadeefs.su:stl_iterator.h:989:5:typename __gnu_cxx::__normal_iterator<_Iterator, _Container>::difference_type __gnu_cxx::operator-(const __gnu_cxx::__normal_iterator<_Iterator, _Container>&, const __gnu_cxx::__normal_iterator<_Iterator, _Container>&) [with _Iterator = double*; _Container = std::vector<double>]	48	static
+p-allocator.cc:#include "u-lib.hh"
+p-allocator.cc:        round_down(rdrsp() - 1, PAGESIZE)
+p-allocator.cc:        if (rand(0, ALLOC_SLOWDOWN - 1) < p) {
+p-allocexit.cc:#include "u-lib.hh"
+p-allocexit.cc:        round_down(rdrsp() - 1, PAGESIZE)
+p-allocexit.cc:            nalloc = (heap_top - data_top) / PAGESIZE;
+p-allocexit.cc:            nalloc -= 4;
+p-allocexit.cc:        if (rand(0, 2 * ALLOC_SLOWDOWN - 1) == 0) {
+p-cat.cc:#include "u-lib.hh"
+p-cat.cc:        if (i < argc && strcmp(argv[i], "-") != 0) {
+p-echo.cc:#include "u-lib.hh"
+p-execallocexit.cc:#include "u-lib.hh"
+p-execallocexit.cc:    for (int i = 5; i > 0; --i) {
+p-execargv.cc:#include "u-lib.hh"
+p-exececho.cc:#include "u-lib.hh"
+p-false.cc:#include "u-lib.hh"
+p-nastyalloc.cc:#include "u-lib.hh"
+p-nastyalloc.cc:        round_down(rdrsp() - 1, PAGESIZE)
+p-nastyalloc.cc:        if (rand(0, ALLOC_SLOWDOWN - 1) < p) {
+p-nastyalloc.cc:        if (rand(0, ALLOC_SLOWDOWN - 1) < p) {
+p-readdiskfile.cc:#include "u-lib.hh"
+process.ld:OUTPUT_FORMAT(elf64-x86-64)
+process.ld:OUTPUT_ARCH(i386:x86-64)
+process.ld:    /* Text segment: instructions and read-only globals */
+process.ld:    /* Data segment: read/write and zero-initialized globals */
+process.ld:    /DISCARD/ : { *(.eh_frame .note.GNU-stack) }
+p-runargv.cc:#include "u-lib.hh"
+p-runargv.cc:           argv, reinterpret_cast<uintptr_t>(argv) - rsp);
+p-runargv.cc:               argv[i], reinterpret_cast<uintptr_t>(argv[i]) - rsp,
+p-sh.cc:#include "u-lib.hh"
+p-sh.cc:        // exit if too-long command line
+p-sh.cc:        if (pos == sizeof(buf) - 1) {
+p-sh.cc:        ssize_t n = sys_read(0, buf + pos, sizeof(buf) - pos - 1);
+p-sh.cc:        memmove(buf, buf + i, n - i);
+p-sh.cc:        pos = n - i;
+p-sh.cc:    int skip_status = -1;
+p-sh.cc:    int redir_status = -1;
+p-sh.cc:            if (redir_status != -1) {
+p-sh.cc:                redir_status = -1;
+p-sh.cc:                && redir_status == -1
+p-sh.cc:            assert(redir_status == -1);
+p-sh.cc:                    int r, status = -1;
+p-sh.cc:                    skip_status = -1;
+p-sh.cc:        assert_gt(r, -1);
+p-sh.cc:    int exit_status = -1;
+p-sh.cc:                exit_status = -2;
+p-sh.cc:            exit_status = -2;
+p-sh.cc:        if (exit_status == -1) {
+p-sh.cc:            if (exit_status == -2) {
+p-sh.cc:    if (exit_status != -1) {
+p-sleep.cc:#include "u-lib.hh"
+p-testeintr.cc:#include "u-lib.hh"
+p-testhalt.cc:#include "u-lib.hh"
+p-testhalt.cc:        console_printf("testhalt succeeds if you see 0-2 above and QEMU exits after a second\n");
+p-testkalloc.cc:#include "u-lib.hh"
+p-testkalloc.cc:        round_down(rdrsp() - 1, PAGESIZE)
+p-testkalloc.cc:            if (rand(0, ALLOC_SLOWDOWN - 1) < p) {
+p-testmemfs.cc:#include "u-lib.hh"
+p-testmemfs.cc:    memcpy(page + PAGESIZE - 11, "emerson.txt", 11);
+p-testmemfs.cc:    f2 = sys_open(page + PAGESIZE - 11, OF_READ);
+p-testmsleep.cc:#include "u-lib.hh"
+p-testpipe.cc:#include "u-lib.hh"
+p-testpipe.cc:    int pfd[2] = {-1, -1};
+p-testpipe.cc:    int qfd[2] = {-1, -1};
+p-testpipe.cc:    // inheritance tests with close-on-exit
+p-testpipe.cc:    console_printf("close-on-exit tests...\n");
+p-testppid.cc:#include "u-lib.hh"
+p-testppid.cc:        fork2 = -1;
+p-testppid.cc:        fork3 = -1;
+p-testrwaddr.cc:#include "u-lib.hh"
+p-testrwaddr.cc:    char* pg = reinterpret_cast<char*>(VA_LOWEND - PAGESIZE);
+p-testrwaddr.cc:    memset(pg, '-', PAGESIZE);
+p-testrwaddr.cc:    char* pg_msg2 = pg + PAGESIZE - strlen(msg2);
+p-testthread.cc:#include "u-lib.hh"
+p-testthread.cc:int pfd[2] = {-1, -1};
+p-testvfs.cc:#include "u-lib.hh"
+p-testvfs.cc:    r = dprintf(-1, "Nope\n");
+p-testvfs.cc:    console_printf("If you see 0-10 in sequence, testvfs succeeded.\n");
+p-testwaitpid.cc:#include "u-lib.hh"
+p-testwritefs2.cc:#include "u-lib.hh"
+p-testwritefs2.cc:                 "Chic-chicadeedee", 81);
+p-testwritefs2.cc:    sz = sys_lseek(f, -4, LSEEK_CUR);
+p-testwritefs3.cc:#include "u-lib.hh"
+p-testwritefs3.cc:                 "Chic-chicadeedee", 81);
+p-testwritefs4.cc:#include "u-lib.hh"
+p-testwritefs4.cc:                 "Chic-chicadeedee", 81);
+p-testwritefs4.cc:    assert_memeq(buf, "The Birds begun at Four o'clock -\n", 34);
+p-testwritefs4.cc:    assert_memeq(buf, "Their period for Dawn -\n", 24);
+p-testwritefs4.cc:    n = sys_write(wf, "A Bird, came down the Walk -\n"
+p-testwritefs4.cc:                  "He did not know I saw -\n", 53);
+p-testwritefs4.cc:    assert_memeq(buf, "A Music numerous as space -\n", 28);
+p-testwritefs4.cc:    assert_memeq(buf, "A Bird, came down the Walk -\n", 29);
+p-testwritefs4.cc:    assert_memeq(buf, "But neighboring as Noon -\n", 26);
+p-testwritefs4.cc:    assert_memeq(buf, "He did not know I saw -\n", 24);
+p-testwritefs.cc:#include "u-lib.hh"
+p-testwritefs.cc:                 "Chic-chicadeedee", 81);
+p-testwritefs.cc:                 "Chic-chicadeedee", 81);
+p-testwritefs.cc:                 "Chic-chicadeedee", 81);
+p-testzombie.cc:#include "u-lib.hh"
+p-true.cc:#include "u-lib.hh"
+p-wc.cc:#include "u-lib.hh"
+p-wc.cc:    int mode = -1;
+p-wc.cc:        if (strcmp(argv[argno], "-c") == 0) {
+p-wc.cc:        } else if (strcmp(argv[argno], "-w") == 0) {
+p-wc.cc:        } else if (strcmp(argv[argno], "-l") == 0) {
+p-wc.cc:        } else if (argv[argno][0] == '-' && argv[argno][1]) {
+p-wc.cc:        if (argno < argc && strcmp(argv[argno], "-") != 0) {
+p-wcdiskfile.cc:#include "u-lib.hh"
+p-wcdiskfile.cc:    int mode = -1;
+p-wcdiskfile.cc:        if (strcmp(argv[argno], "-c") == 0) {
+p-wcdiskfile.cc:        } else if (strcmp(argv[argno], "-w") == 0) {
+p-wcdiskfile.cc:        } else if (strcmp(argv[argno], "-l") == 0) {
+p-wcdiskfile.cc:        } else if (argv[argno][0] == '-' && argv[argno][1]) {
+README.md:Quickstart: `make run` or `make run-PROGRAM`
+README.md:------------
+README.md:`make run-console` will run the OS in the console window.
+README.md:`make run-PROGRAM` runs `p-PROGRAM.cc` as the first non-init process. The
+README.md:`make HALT=1 run-PROGRAM` should make QEMU exit once all processes are done.
+README.md:---------------
+README.md:  press `Alt-2`. This will bring up the QEMU Monitor, which looks like this:
+README.md:    QEMU 4.2.0 monitor - type 'help' for more information
+README.md:    If `Alt-2` does not work, you may need to configure your terminal to
+README.md:Run `make run-gdb` to start up the OS with support for GDB debugging. This
+README.md:will start the OS, but not GDB. You must run `gdb -x build/weensyos.gdb` to
+README.md:If you experience runtime errors involving `obj/libqemu-nograb.so.1`, put
+README.md:------------
+README.md:| --------------- | ---------------------------- |
+README.md:| `x86-64.h`      | x86-64 hardware definitions  |
+README.md:| --------------- | ---------------------------- |
+README.md:| ------------------- | ------------------------------------ |
+README.md:| `k-exception.S`     | Kernel entry points                  |
+README.md:| `k-init.cc`         | Kernel initialization                |
+README.md:| `k-lock.hh`         | Kernel spinlock                      |
+README.md:| `k-vmiter.hh/cc`    | Page table iterators                 |
+README.md:| `k-cpu.cc`          | Kernel `cpustate` type               |
+README.md:| `k-proc.cc`         | Kernel `proc` type                   |
+README.md:| `k-memviewer.cc`    | Kernel memory viewer                 |
+README.md:| ------------------- | ------------------------------------ |
+README.md:| `k-memrange.hh`     | Memory range type tracker            |
+README.md:| `k-hardware.cc`     | General hardware access              |
+README.md:| `k-devices.hh/cc`   | Keyboard, console, memory files      |
+README.md:| `k-apic.hh/cc`      | Interrupt controller hardware        |
+README.md:| `k-pci.hh`          | PCI bus hardware                     |
+README.md:| `k-mpspec.cc`       | Boot-time configuration              |
+README.md:| `k-sanitizers.cc`   | Sanitizer support                    |
+README.md:| ----------------- | ------------------------------------------------ |
+README.md:| `u-lib.cc/hh`     | Process library and system call implementations  |
+README.md:| `p-allocator.cc`  | Allocator process                                |
+README.md:| --------------------- | ------------------------------------------------ |
+README.md:-----------
+README.md:| -------------------------- | ------------------------------------ |
+README.md:| `obj/p-PROCESS.asm`, `sym` | Same for process binaries            |
+run-docker:if test "$1" = "-f" -o "$1" = "--fresh"; then
+run-docker:if test "$#" -ne 0; then
+run-docker:    echo "Usage: run-docker [-f | --fresh]" 1>&2
+run-docker:if stat --format %i / >/dev/null 2>&1; then
+run-docker:    statformatarg="--format"
+run-docker:    statformatarg="-f"
+run-docker:while test "$dir" != / -a "$dir" != ""; do
+run-docker:    thisfileid=`stat $statformatarg %d:%i "$dir"/run-docker 2>/dev/null`
+run-docker:    if test -n "$thisfileid" -a "$thisfileid" = "$myfileid"; then
+run-docker:if test -z "$maindir" && expr "${BASH_SOURCE[0]}" : / >/dev/null 2>&1; then
+run-docker:if test -n "$maindir" -a -z "$fresh"; then
+run-docker:    existing_image="`docker ps -f status=running -f ancestor=cs61:latest -f volume=/host_mnt"$maindir" --no-trunc --format "{{.CreatedAt}},{{.ID}}" | sort -r | head -n 1`"
+run-docker:    if test -n "$existing_image"; then
+run-docker:        image12="`echo $image | head -c 12`"
+run-docker:        echo "- To start a new container, exit then \`./run-docker -f\`" 1>&2
+run-docker:        echo "- To kill this container, exit then \`docker kill $image12\`" 1>&2
+run-docker:        exec docker exec -it $image /bin/bash
+run-docker:    if ! netstat -n -a -p tcp | grep '\.6169[  ].*LISTEN' >/dev/null; then
+run-docker:        netarg="$netarg "'--expose=6169/tcp -p 6169:6169/tcp'
+run-docker:    if ! netstat -n -a -p tcp | grep '\.12949[ 	].*LISTEN' >/dev/null; then
+run-docker:        netarg="$netarg "'--expose=12949/tcp -p 12949:12949/tcp'
+run-docker:elif test -x /bin/netstat; then
+run-docker:    if ! netstat -n -a -p tcp | grep '\.6169[  ].*LISTEN' >/dev/null; then
+run-docker:        netarg="$netarg "'--expose=6169/tcp -p 6169:6169/tcp'
+run-docker:    if ! netstat -n -l -t | grep ':12949[ 	]' >/dev/null; then
+run-docker:        netarg="$netarg "'--expose=12949/tcp -p 12949:12949/tcp'
+run-docker:if test -n "$maindir"; then
+run-docker:    exec docker run -it --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -v "$maindir":/home/cs61-user/$destdir -w "/home/cs61-user/$destdir$subdir" $netarg cs61:latest
+run-docker:    exec docker run -it --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined $netarg cs61:latest
+Binary file test matches
+types.h:#define SIZE_MAX  ((unsigned long) -1)
+types.h:    uintptr_t offset = reinterpret_cast<uintptr_t>(&(dummy->*mem_ptr))
+types.h:        - reinterpret_cast<uintptr_t>(dummy);
+types.h:    return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(ptr) - offset);
+u-lib.cc:#include "u-lib.hh"
+u-lib.cc://     Call the SYSCALL_PANIC system call so the kernel loops until Control-C.
+u-lib.cc:    int len = vsnprintf(&buf[7], sizeof(buf) - 7, format, val) + 7;
+u-lib.cc:    if (len > 0 && buf[len - 1] != '\n') {
+u-lib.cc:        strcpy(buf + len - (len == (int) sizeof(buf) - 1), "\n");
+u-lib.hh:#include "x86-64.h"
+u-lib.hh:#error "u-lib.hh should not be used by kernel code."
+u-lib.hh:// u-lib.hh
+u-lib.hh://    Support code for Chickadee user-level code.
+u-lib.hh://    Maps the console at a user-specified virtual address.
+u-lib.hh://    Allocate a page of memory at address `addr`. `Addr` must be page-aligned
+u-lib.hh://    Allocate sz bytes of memory at address `addr`. `Addr` must be page-aligned
+u-lib.hh://    with arguments `argv`. `argv` is a null-terminated array. Returns
+u-lib.hh://    in `u-lib.cc`.
+x86-64.h:// x86-64.h: C code to interface with x86 hardware and CPU.
+x86-64.h://   - Memory and interrupt constants.
+x86-64.h://   - x86_registers: Used in process descriptors to store x86 registers.
+x86-64.h://   - x86 functions: C function wrappers for useful x86 instructions.
+x86-64.h://   - Hardware structures: C structures and constants for initializing
+x86-64.h:#define PAGEOFFMASK     (PAGESIZE - 1)
+x86-64.h:#define PTE_U           0x4UL    // entry is User-accessible
+x86-64.h:// Other special-purpose flags
+x86-64.h:#define PTE_PAMASK      0x000FFFFFFFFFF000UL // physical address in non-PS entry
+x86-64.h:#define VA_NONCANONMAX  0x0000FFFFFFFFFFFFUL // max non-canonical address
+x86-64.h:    return (1UL << (PAGEOFFBITS + level * PAGEINDEXBITS)) - 1;
+x86-64.h:#define INT_NM          2           // Non-maskable interrupt (#NM)
+x86-64.h://     A complete set of x86-64 general-purpose registers, plus some
+x86-64.h://     special-purpose registers. The order and contents are defined to make
+x86-64.h://     it more convenient to use important x86-64 instructions.
+x86-64.h:    // General-purpose registers
+x86-64.h:    // Interrupt number, -1 for syscall
+x86-64.h:    // Error code (supplied by hardware for some x86-64 exceptions)
+x86-64.h:// Pseudo-descriptors used for LGDT, LLDT, and LIDT instructions
+x86-64.h:#define X86SEG_E        (0x4UL << 40) // Expand-down (data segment)
+x86-64.h:// CGA console memory-mapped I/O
+x86-64.h:#define IA32_EFER_LME                0x100           // enable 64-bit mode

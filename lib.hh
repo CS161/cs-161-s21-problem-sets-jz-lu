@@ -272,19 +272,25 @@ struct bitset_view {
 
 // Add new system calls here.
 // Your numbers should be >=128 to avoid conflicts.
-#define SYSCALL_MAP_CONSOLE 128
-#define SYSCALL_NASTY 129           // Nasty recursive alloc to corrupt kernel stack
-#define SYSCALL_VARALLOC 130        // Variable allocations for buddy allocation tests
-#define SYSCALL_FREE 131            // Free memory a ptr points to
-#define SYSCALL_TESTKALLOC 132      // Testing framework for buddy allocator
-#define SYSCALL_WILDALLOC 133       // Wild allocations for assert statements and the sanitizer to catch
-#define SYSCALL_TESTSLABALLOC 134   // Testing framework for slab allocator
-#define SYSCALL_MSLEEP 135          // Sleep for millisecond units
-#define SYSCALL_GETPPID 136         // Get parent pid
-#define SYSCALL_WAITPID 137         // Wait for child to exit, or poll
+#define SYSCALL_MAP_CONSOLE     128
+#define SYSCALL_NASTY           129            // Nasty recursive alloc to corrupt kernel stack
+#define SYSCALL_VARALLOC        130            // Variable allocations for buddy allocation tests
+#define SYSCALL_FREE            131            // Free memory a ptr points to
+#define SYSCALL_TESTKALLOC      132            // Testing framework for buddy allocator
+#define SYSCALL_WILDALLOC       133            // Wild allocations for assert statements and the sanitizer to catch
+#define SYSCALL_TESTSLABALLOC   134            // Testing framework for slab allocator
+#define SYSCALL_MSLEEP          135            // Sleep for millisecond units
+#define SYSCALL_GETPPID         136            // Get parent pid
+#define SYSCALL_WAITPID         137            // Wait for child to exit, or poll
+#define SYSCALL_SOCKET          138            // Server open a unix domain socket (UDS)
+#define SYSCALL_CONNECT         139            // Client connect to an open UDS
+#define SYSCALL_DISCONNECT      140            // Close a UDS (client or server side)
+#define SYSCALL_SENDFD          141            // Send a file descriptor via UDS
+#define SYSCALL_RECEIVEFD       142            // Read a file descriptor via UDS
+#define SYSCALL_LISTEN          143            // Server indicates they are listening
+#define SYSCALL_ACCEPT          144            // Server indicates they are accepting
 
 // System call error return values
-
 #define E_AGAIN         -11        // Try again
 #define E_BADF          -9         // Bad file number
 #define E_CHILD         -10        // No child processes
@@ -309,7 +315,10 @@ struct bitset_view {
 #define E_TXTBSY        -26        // Text file busy
 #define E_2BIG          -7         // Argument list too long
 #define E_BADCONN       -31        // Socket is not properly set up
+#define E_MSOCK         -35        // Too many sockets in use
+#define E_SAMENAME      -34        // Another socket already has the same name
 #define E_SOCKTIMEOUT   -33        // Socket waited too long on accept or connect
+#define E_SOCKTAKEN     -37        // Socket already taken
 
 #define E_MINERROR      -100
 

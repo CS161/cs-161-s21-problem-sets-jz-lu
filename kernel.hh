@@ -140,6 +140,13 @@ struct __attribute__((aligned(4096))) proc {
     uintptr_t syscall_write(regstate* reg);
     int syscall_close(regstate* regs);
     int syscall_execv(regstate* regs);
+    int syscall_socket(regstate* regs);
+    int syscall_listen(regstate* regs);
+    int syscall_accept(regstate* regs);
+    int syscall_connect(regstate* regs);
+    int syscall_disconnect(regstate* regs);
+    int syscall_sendfd(regstate* regs);
+    int syscall_receivefd(regstate* regs);
     uintptr_t syscall_readdiskfile(regstate* regs);
 
     inline irqstate lock_pagetable_read();

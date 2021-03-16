@@ -29,7 +29,8 @@ wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 uint64_t BLOCK_NUM_RESUMES = 0;
 
 // Unix Domain Socket.
-uds* sockets[NSOCK] = {0};
+uds* socktable[NSOCK] = {0};
+spinlock socktable_lock; // Guards all accesses to socktable
 
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
@@ -191,6 +192,14 @@ void proc::exception(regstate* regs) {
                 (uint64_t) ticks);
         }
         // Wake up all the relevant processes in case any need to stop sleeping.
+        {
+        spinlock_guard guard(socktable_lock);
+        for (int i = 0; i < NSOCK; ++i) {
+            if (socktable[i]) {
+                socktable[i]->wake_all();
+            }
+        }
+        }
         if (!USING_TIME_HEAP) {
             time_wheel[((uint64_t) ticks)%NUM_WQS].wake_all();
         }
@@ -426,6 +435,34 @@ uintptr_t proc::syscall(regstate* regs) {
     
     case SYSCALL_WAITPID:
         syscall_retval = syscall_waitpid(regs);
+        break;
+    
+    case SYSCALL_SOCKET:
+        syscall_retval = syscall_socket(regs);
+        break;
+
+    case SYSCALL_CONNECT:
+        syscall_retval = syscall_connect(regs);
+        break;
+
+    case SYSCALL_LISTEN:
+        syscall_retval = syscall_listen(regs);
+        break;
+
+    case SYSCALL_ACCEPT:
+        syscall_retval = syscall_accept(regs);
+        break;
+
+    case SYSCALL_DISCONNECT:
+        syscall_retval = syscall_disconnect(regs);
+        break;
+
+    case SYSCALL_SENDFD:
+        syscall_retval = syscall_sendfd(regs);
+        break;
+
+    case SYSCALL_RECEIVEFD:
+        syscall_retval = syscall_receivefd(regs);
         break;
 
     default:
@@ -932,6 +969,7 @@ void proc::free_auto_allocs(x86_64_pagetable* pt) {
     this->unlock_pagetable_read(irqs);
 }
 
+
 // proc::syscall_exit(regs)
 //    Exits a process without data races
 void proc::syscall_exit(regstate* regs) {
@@ -1193,7 +1231,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
             {
                 spinlock_guard guard(ptable_lock);
                 release_child(this, pid);
-                kfree(child);
+                delete child;
                 ptable[pid] = nullptr;
                 if (WAITPID_PARANOIA >= 1) {
                     log_printf("[waitpid] REAPED ZOMBIE PID=%d\n", pid);
@@ -1213,7 +1251,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                 {
                     spinlock_guard guard(ptable_lock);
                     release_child(this, pid);
-                    kfree(child);
+                    delete child;
                     ptable[pid] = nullptr;
                     if (WAITPID_PARANOIA >= 1) {
                         log_printf("[waitpid] REAPED ZOMBIE PID=%d\n", pid);
@@ -1298,7 +1336,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                 }
                 release_child(this, child->id_);
                 ptable[child->id_] = nullptr;
-                kfree(child);
+                delete child;
                 if (WAITPID_PARANOIA >= 1) {
                     log_printf("[waitpid] REAPED ZOMBIE\n");
                 }
@@ -1348,7 +1386,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
                     }
                     release_child(this, child->id_);
                     ptable[child->id_] = nullptr;
-                    kfree(child);
+                    delete child;
                     if (WAITPID_PARANOIA >= 1) {
                         log_printf("[waitpid] REAPED ZOMBIE\n");
                     }
@@ -1384,7 +1422,7 @@ int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
 // proc::show_fdtable_()
 //   Prints state of the fdtable
 void proc::show_fdtable_() {
-    // TODO lock this function
+    // TODO [MULTITH] lock this function
     log_printf("[show_fdtable_] Process PID=%d fdtable HEAD --> [", id_);
     for (int fd = 0; fd < MAX_FD-1; ++fd) {
         log_printf("%d:%s | ", fd, fdtable[fd] ? "T" : "F"); // T is taken, F is free
@@ -1533,7 +1571,10 @@ int proc::syscall_open(regstate* regs) {
     }
     assert(initfs_index < (int) memfile::namesize);
     mf_vn->set_mf(memfile::initfs + initfs_index); // Set memfile* ptr in vnode
+    {
+    spinlock_guard refguard(mf_vn->open_close_lock_);
     ++mf_vn->refcount_;
+    }
     fdtable[fd] = reinterpret_cast<vnode*>(mf_vn);
     //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
 
@@ -1586,7 +1627,10 @@ int proc::syscall_dup2(regstate* regs) {
 
     // Set the old fd vnode ptr to the new one and increment refcount.
     fdtable[newfd] = fdtable[oldfd];
+    {
+    spinlock_guard refguard(fdtable[newfd]->open_close_lock_);
     ++fdtable[newfd]->refcount_;
+    }
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_dup2] Dup2 done, showing new fdtable state:\n");
         show_fdtable_();
@@ -1660,8 +1704,14 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
     // TODO [MULTITH] lock accesses here.
     fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
     fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
+    {
+    spinlock_guard refguard(fdtable[wfd]->open_close_lock_);
     ++fdtable[wfd]->refcount_;
+    }
+    {
+    spinlock_guard refguard(fdtable[rfd]->open_close_lock_);
     ++fdtable[rfd]->refcount_;
+    }
 
     if (PIPE_PARANOIA >= 2) {
         log_printf("[syscall_pipe] Successfully made pipe, updated state below\n");
@@ -2051,6 +2101,145 @@ int proc::syscall_execv(regstate* regs) {
     // and uses regs_ in the resumption state register set inseead of a yieldstate.
     yield_noreturn();
 }
+
+
+
+// proc::syscall_socket(regs)
+//    Server allocates a new socket. This simplified UDS automatically binds.
+int proc::syscall_socket(regstate* regs) {
+    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+    int name_invalid = pathname_invalid(this, name);
+    if (name_invalid) return name_invalid;
+
+    uds* sock = knew<uds>(name);
+    if (!sock) {
+        return E_NOMEM;
+    }
+
+    spinlock_guard guard(socktable_lock);
+    int stable_ind = -1;
+    for (int i = 0; i < NSOCK; ++i) {
+        if (!socktable[i]) {
+            stable_ind = i;
+            break;
+        }
+    }
+    if (stable_ind == -1) {
+        delete sock;
+        return E_MSOCK;
+    }
+
+    socktable[stable_ind] = sock;
+    sock->bind(this); // Bind socket to the server
+    return 0;
+}
+
+// Searches socket table under lock for given socket name.
+static uds* find_socket(const char* name) {
+    spinlock_guard guard(socktable_lock);
+    for (int i = 0; i < NSOCK; ++i) {
+        if (socktable[i] && strcmp(name, socktable[i]->key_) == 0) {
+            return socktable[i];
+        }
+    }
+    return nullptr;
+}
+
+
+// proc::syscall_socket(regs)
+//    Client connects to socket.
+int proc::syscall_connect(regstate* regs) {
+    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+    int name_invalid = pathname_invalid(this, name);
+    if (name_invalid) return name_invalid;
+    
+    uds* sock = find_socket(name);
+    if (!sock) {
+        return E_NXIO;
+    }
+    return sock->connect(this);
+}
+
+
+// proc::syscall_socket(regs)
+//    Server marint connect_failed =ks socket as listening.
+int proc::syscall_listen(regstate* regs) {
+    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+    int name_invalid = pathname_invalid(this, name);
+    if (name_invalid) return name_invalid;
+    
+    uds* sock = find_socket(name);
+    if (!sock) {
+        return E_NXIO;
+    }
+    return sock->listen();
+}
+
+
+// proc::syscall_socket(regs)
+//    Server marks socket as accepting.
+int proc::syscall_accept(regstate* regs) {
+    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+    int name_invalid = pathname_invalid(this, name);
+    if (name_invalid) return name_invalid;
+
+    uds* sock = find_socket(name);
+    if (!sock) {
+        return E_NXIO;
+    }
+    return sock->accept();
+}
+
+
+// proc::syscall_sendfd(regs)
+//    Client sends a file descriptor to socket.
+int proc::syscall_sendfd(regstate* regs) {
+    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+    int name_invalid = pathname_invalid(this, name);
+    if (name_invalid) return name_invalid;
+    int fd = regs->reg_rsi;
+    // TODO [MULTITH] lock fdtable access
+    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) { // Invalid fd
+        return E_BADF;
+    }
+
+    uds* sock = find_socket(name);
+    if (!sock) {
+        return E_NXIO;
+    }
+    return sock->write(this, fd);
+}
+
+
+// proc::syscall_receivefd(regs)
+//    Server receives a fd and opens it. 
+//    Returns fd of newly opened file on server side.
+int proc::syscall_receivefd(regstate* regs) {
+    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+    int name_invalid = pathname_invalid(this, name);
+    if (name_invalid) return name_invalid;
+
+    uds* sock = find_socket(name);
+    if (!sock) {
+        return E_NXIO;
+    }
+    return sock->read(this);
+}
+
+
+// proc::syscall_disconnect(regs)
+//    Close connection to socket.
+int proc::syscall_disconnect(regstate* regs) {
+    const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
+    int name_invalid = pathname_invalid(this, name);
+    if (name_invalid) return name_invalid;
+    uds* sock = find_socket(name);
+    if (!sock) {
+        return E_NXIO;
+    }
+    return sock->close(this);
+}
+
 
 // proc::syscall_readdiskfile(regs)
 uintptr_t proc::syscall_readdiskfile(regstate* regs) {

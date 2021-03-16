@@ -40,6 +40,7 @@ bool vnode::writeable() {
 }
 
 int vnode::close() {
+    spinlock_guard guard(open_close_lock_);
     if (VFS_PARANOIA >= 2) {
         log_printf("[vnode-close] Generic close called, decrementing refcount to %d\n", 
             refcount_-1);
@@ -421,6 +422,10 @@ uintptr_t pipe_vnode::read(uintptr_t addr, size_t sz) {
 // Assumes key is validated.
 uds::uds(const char* key) {
     strcpy(key_, key);
+    assert(strcmp(key_, key) == 0);
+    assert(!client_ && !server_);
+    assert(!listening_ && !accepting_ && !received_);
+    assert(fd_ == -1);
     if (UDS_PARANOIA >= 2) {
         log_printf("[uds-constructor] Init key=%s, key_=%s\n", key, key_);
     }
@@ -499,6 +504,9 @@ int uds::connect(proc* client) {
         return E_FAULT;
     }
     spinlock_guard guard(client_server_lock_);
+    if (connected()) { // Only 1 client connected at a time.
+        return E_SOCKTAKEN;
+    }
     if (!listening_) { // Can't connect till server is listening.
         return E_BADCONN;
     }
@@ -521,22 +529,33 @@ int uds::connect(proc* client) {
         return 0;
     }
 }
-// TODO implement timeout feature in proc::exception()
 
-int uds::close() {
+
+int uds::close(proc* closer) {
     // Reset everything under lock.
     spinlock_guard guard(client_server_lock_);
-    strcpy(key_, "\0");
-    fd_ = -1;
-    client_ = server_ = nullptr;
-    accepting_ = listening_ = received_ = false;
-    clq_.wake_all();
-    servq_.wake_all();
+    if (closer == server_) {
+        clq_.wake_all();
+        server_ = nullptr;
+        accepting_ = listening_ = false;
+    } else if (closer == client_) {
+        servq_.wake_all();
+        client_ = nullptr;
+    } else {
+        return E_INVAL;
+    }
     return 0;
 }
 
-int uds::write(int fd) {
+int uds::write(proc* p, int fd) {
+    if (p != client_) {
+        return E_PERM;
+    }
+
     spinlock_guard guard(client_server_lock_);
+    if (!accepting_ || !connected()) { // UDS closed
+        return E_BADCONN;
+    }
     long start_time = ticks;
     long end_time = start_time;
     if (!received_) {
@@ -545,10 +564,10 @@ int uds::write(int fd) {
             return (!received_) || (end_time >= start_time + UDS_TIMEOUT);
         }, guard);
     } 
-    if (!connected()) { // UDS closed
+    if (!accepting_ || !connected()) { // UDS closed (have to check again)
         return E_BADCONN;
     } else if (end_time >= start_time + UDS_TIMEOUT) {
-        // Missed it, oh well.
+        // Give up in case of a timeout.
         received_ = true;
         return E_SOCKTIMEOUT;
     } else {
@@ -560,40 +579,64 @@ int uds::write(int fd) {
 
 // * Note: do not call this function holding a fdtable lock.
 // * This will induce a deadlock.
-int uds::read(int fd) {
+int uds::read(proc* p) {
+    if (p != server_) {
+        return E_PERM;
+    }
     spinlock_guard guard(client_server_lock_);
+    if (!accepting_) { // UDS closed
+        return E_BADCONN;
+    }
     long start_time = ticks;
     long end_time = start_time;
-    if (received_) {
+    if (received_) { // Wait for a write, or a timeout
         waiter().block_until(servq_, [&] () {
             end_time = ticks;
             return (!received_) || (end_time >= start_time + UDS_TIMEOUT);
         }, guard);
     }
-    if (!accepting_) { // UDS closed
+    if (!accepting_) { // UDS closed (have to check again)
         return E_BADCONN;
     } else if (end_time >= start_time + UDS_TIMEOUT) {
-        // Missed it, oh well.
+        // If no writes happen before timeout, give up and reset received_
+        // so the client can write fd's.
         received_ = true;
+        fd_ = -1;
         return E_SOCKTIMEOUT;
     } else if (!received_) {
         // Add the file descriptor to the fdtable, if possible.
         // TODO lock access to fdtable
         vnode* vn = client_->fdtable[fd_];
+        if (!vn) { // Client could have closed the file since the send!
+            fd_ = -1;
+            received_ = true;
+            return E_BADF;
+        }
         int newfd;
         if (!server_->fdtable[fd_]) {
             newfd = fd_;
         } else {
             newfd = server_->find_open_fd(false, 0);
             if (newfd == E_MFILE) {
-                received_ = true;
+                // Don't reset like in a timeout, let server try again.
                 return E_MFILE;
             }
         }
         server_->fdtable[newfd] = vn;
+        {
         spinlock_guard refguard(vn->open_close_lock_);
         ++server_->fdtable[newfd]->refcount_;
+        }
+        fd_ = -1;
         received_ = true;
+        return newfd;
+    } else {
+        assert(false);
     }
-    return fd_;
+}
+
+void uds::wake_all() {
+    spinlock_guard guard(client_server_lock_);
+    clq_.wake_all();
+    servq_.wake_all();
 }

@@ -85,11 +85,12 @@ struct uds {
     int accept();                       // Sleep-waits for a client connection
     int connect(proc* client);          // Sleep-waits for server accept
     inline bool connected() {           // * Assumes locked
-        return client_;
+        return (client_ != nullptr);
     }
-    int close();                        // Only one side needs to close to close whole UDS
-    int write(int fd);                  // Client updates the socket fd
-    int read(int fd);                   // Server grabs socket fd
+    int close(proc* closer);
+    int write(proc* p, int fd);                  // Client updates the socket fd
+    int read(proc* p);                   // Server grabs socket fd
+    void wake_all();
 };
 
 #endif
