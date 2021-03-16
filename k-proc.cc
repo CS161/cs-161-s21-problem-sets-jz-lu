@@ -37,7 +37,7 @@ proc::proc() {
 // proc::~proc()
 //    The destructor closes all open file descriptors.
 proc::~proc() {
-    if (PROC_PARANOIA >= 2) {
+    if (PROC_PARANOIA >= 2 || UDS_PARANOIA >= 1) {
         log_printf("[proc] [destructor] proc destructor called\n");
     }
     for (int fd = 3; fd < MAX_FD; ++fd) {

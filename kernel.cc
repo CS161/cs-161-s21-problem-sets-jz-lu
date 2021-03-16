@@ -990,12 +990,20 @@ void proc::syscall_exit(regstate* regs) {
     // TODO [MULTITH] lock fdtable accesses.
     for (int fd = 0; fd < MAX_FD; ++fd) {
         if (fdtable[fd]) {
-            if (!fdtable[fd]->close()) { // If refcount hits 0
+            if (UDS_PARANOIA >= 1) {
+                log_printf("[exit] Closing node fd=%d for PID=%d\n", fd, id_);
+            }
+            int new_refcount = fdtable[fd]->close();
+            if (!new_refcount) { // If refcount hits 0
                 if (VFS_PARANOIA >= 1 || EXIT_PARANOIA >= 2) {
-                    log_printf("[exit] Closing node fd=%d empty, freeing\n", fd);
+                    log_printf("[exit] Closed node fd=%d empty, freeing\n", fd);
                 }
                 delete fdtable[fd];
+                if (VFS_PARANOIA >= 1 || EXIT_PARANOIA >= 2) {
+                    log_printf("[exit] Freed fd=%d\n", fd);
+                }
             }
+            fdtable[fd] = nullptr;
         }
     }
 
@@ -1800,7 +1808,7 @@ uintptr_t proc::syscall_write(regstate* regs) {
 int proc::syscall_close(regstate* regs) {
     // TODO [MULTITH] lock ftable access
     int fd = regs->reg_rdi;
-    if (VFS_PARANOIA >= 2) {
+    if (VFS_PARANOIA >= 2 || UDS_PARANOIA >= 1) {
         log_printf("[syscall_close] Closing fd=%d for process PID=%d\n", fd, id_);
     }
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {

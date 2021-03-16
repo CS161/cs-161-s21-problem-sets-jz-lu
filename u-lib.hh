@@ -285,7 +285,7 @@ inline int sys_listen(const char* sockname) {
 // sys_accept(sockname)
 //    Server marks UDS as accepting.
 inline int sys_accept(const char* sockname) {
-    return make_syscall(SYSCALL_SOCKET, reinterpret_cast<uintptr_t>(sockname));
+    return make_syscall(SYSCALL_ACCEPT, reinterpret_cast<uintptr_t>(sockname));
 }
 
 // sys_connect(sockname)

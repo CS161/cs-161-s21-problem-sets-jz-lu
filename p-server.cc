@@ -19,7 +19,7 @@ void process_main(int argc, char** argv) {
 
     int errcode10 = sys_accept(name);
     assert_eq(errcode10, 0);
-    sys_msleep(200);
+    sys_msleep(50);
 
     if (is_good) {
         console_printf("[ValidUDS] [Server] Now accepting!\n");
@@ -27,16 +27,16 @@ void process_main(int argc, char** argv) {
         assert_ge(fd, 0);
         char buf[200];
         int r = sys_read(fd, buf, 100);
-        assert_eq(r, 56);
-        assert_memeq(buf, "I am in the kernel...I AM THE KERNEL!!! -Anonymous poet", 56);
-        int w = sys_write(1, buf, 56);
-        assert_eq(w, 56);
-        console_printf("[ValidUDS] [Server] Test succeeeded.\n");
+        assert_eq(r, 57);
+        assert_memeq(buf, "I am in the kernel...I AM THE KERNEL!!! -Anonymous poet\n", 57);
+        int w = sys_write(1, buf, 57);
+        assert_eq(w, 57);
+        console_printf(0x8A00, "[ValidUDS] [Server] Test succeeeded.\n");
     } else {
         console_printf("[InvalidUDS] [Server] Now accepting!\n");
         int fd = sys_receivefd(name);
         assert_eq(fd, E_SOCKTIMEOUT);
-        console_printf("[InvalidUDS] [Server] Test succeeded.\n");
+        console_printf(0x8A00, "[InvalidUDS] [Server] Timed out (as expected). Test succeeded.\n");
     }
 
     sys_exit(0);

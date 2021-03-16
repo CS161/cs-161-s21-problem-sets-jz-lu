@@ -41,7 +41,7 @@ bool vnode::writeable() {
 
 int vnode::close() {
     spinlock_guard guard(open_close_lock_);
-    if (VFS_PARANOIA >= 2) {
+    if (VFS_PARANOIA >= 2 || UDS_PARANOIA >= 1) {
         log_printf("[vnode-close] Generic close called, decrementing refcount to %d\n", 
             refcount_-1);
     }
@@ -292,7 +292,7 @@ uintptr_t pipe_bbuf::read(uintptr_t addr, size_t sz) {
 
     // Block if pipe empty.
     if (pipe_empty() && !write_closed_ && sz) {
-        if (PIPE_PARANOIA >= 2) {
+        if (PIPE_PARANOIA >= 1) {
             log_printf("[pipe_bbuf-read] Pipe bbuf empty, blocking\n");
         }
         waiter().block_until(rdq_, [&] () {
@@ -347,9 +347,9 @@ pipe_vnode::pipe_vnode(int mode, pipe_bbuf* bbuf)
     }
 }
 
-pipe_vnode::~pipe_vnode() {    
+pipe_vnode::~pipe_vnode() {
     spinlock_guard guard(bbuf_->lock_);
-    if (PIPE_PARANOIA >= 2) {
+    if (PIPE_PARANOIA >= 1) {
         log_printf("[pipe] pipe %s end destructor called\n",
             mode_ == OF_READ ? "READ" : "WRITE");
     }
@@ -384,8 +384,8 @@ pipe_bbuf* pipe_vnode::get_bbuf() {
 
 int pipe_vnode::close() {
     spinlock_guard guard(open_close_lock_);
-    if (PIPE_PARANOIA >= 1) {
-        log_printf("[pipe_vnode-close] pipe close called\n");
+    if (PIPE_PARANOIA >= 1 || UDS_PARANOIA >= 1) {
+        log_printf("[pipe_vnode-close] Decrementing refcount_ to %d\n", refcount_-1);
     }
     assert(refcount_ > 0);
     return --refcount_;
