@@ -14,7 +14,7 @@ uint8_t* stack_bottom;
 
 void process_main() {
     sys_kdisplay(KDISPLAY_MEMVIEWER);
-    sys_map_console(console); // Map the console to the addr iin lib.hh
+    sys_map_console(console); // Map the console to the addr in lib.hh
     for (int i = 0; i < CONSOLE_ROWS * CONSOLE_COLUMNS; ++i) {
         console[i] = 'T' | 0x8C00; // T as in Troy...? NO YOU PLEBIAN IT'S T AS IN TEST 
     }
@@ -74,10 +74,8 @@ void process_main() {
         sys_wildkalloc(WILDNO);
     }
 
-    // After tests are complete, do nothing forever
+    // After tests are complete, do nothing.
     while (true) {
         sys_yield();
     }
-
-    panic("Should never reach here u bimbo!\n");
 }

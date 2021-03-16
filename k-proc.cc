@@ -13,6 +13,9 @@ proc::proc() {
     if (PROC_PARANOIA >= 2) {
         log_printf("[proc] [constructor] struct proc constructor called\n");
     }
+    // NOTE: there are no race conditions here. Access to global_cnode is only not 
+    // read-only in the first initializiation which is during kernel boot (there are 
+    // no races at boot time since there aren't multiple CPUs competing).
     if (!global_cnode) {
         // Create the global STDIO vnode.
         if (PROC_PARANOIA >= 1) {
@@ -25,7 +28,8 @@ proc::proc() {
         if (fdtable[fd] != global_cnode) {
             assert(!fdtable[fd]);
             fdtable[fd] = global_cnode;
-            ++fdtable[fd]->refcount_;
+            spinlock_guard guard(global_cnode->open_close_lock_);
+            ++global_cnode->refcount_;
         }
     }
 }

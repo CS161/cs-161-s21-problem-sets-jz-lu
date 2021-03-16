@@ -79,16 +79,11 @@ inline void waiter::clear() {
     // Wake up the process.
     wake();
 
-    // Dequeue the waiter off the the wait queue, if it is enqueued.
-    // TODO [Eric]
-    for (waiter *it = wq_->q_.front(); it; it = wq_->q_.next(it)) {
-        if (it == this) {
-            wq_->q_.erase(it);
-            if (WAITQ_PARANOIA >= 2) {
-                log_printf("[Clear] Found this waiter with PID=%d on queue, popping off\n",
-                    this->p_->id_);
-            }
-            break;
+    if (links_.is_linked()) {
+        wq_->q_.erase(this);
+        if (WAITQ_PARANOIA >= 2) {
+            log_printf("[Clear] Found this waiter with PID=%d on queue, popping off\n",
+                this->p_->id_);
         }
     }
 

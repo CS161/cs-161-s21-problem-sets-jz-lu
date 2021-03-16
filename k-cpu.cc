@@ -101,7 +101,6 @@ void cpustate::schedule(proc* yielding_from) {
         yielding_from->pstate_ = proc::ps_blank;
         parent_child_queue.wake_one(ptable[yielding_from->ppid_]);
         parent_child_queue.wake_one(ptable[1]);
-        // parent_child_queue.wake_all();
     }
 
     // increment schedule counter

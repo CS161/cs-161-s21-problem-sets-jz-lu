@@ -21,13 +21,14 @@ struct elf_program;
 #define log_2f log_printf 
 #else 
 #define log_2f(...) false 
-#endif 
+#endif
 
 // VFS constants
 #define MAX_FD              8                   // Number of fd's in list.
 #define MAX_FILENAME_LEN    64                  // Max filename length
 #define MAX_ARGV_LEN        (PAGESIZE >> 2)-8   // -8 since argv[argc] must be set to nullptr
 #define MAX_UDS_KEYLEN      32                  // Max length of UDS key (name string)
+#define NSOCK               8                   // Number of sockets kernel supports
 
 // kernel.hh
 //

@@ -28,6 +28,9 @@ wait_heap time_heap; // Sleep wait heap
 wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 uint64_t BLOCK_NUM_RESUMES = 0;
 
+// Unix Domain Socket.
+uds* sockets[NSOCK] = {0};
+
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
 
@@ -53,21 +56,22 @@ void k_proc_init() {
             log_printf("]\n");
         }
         }
+        // Halt if there are no children, or if the only children are broken.
         if (kinit->syscall_waitpid(&regs) == (uint64_t) E_CHILD) {
-            log_printf("[k_proc_init] Init has no more children\n");
-            if (WAITPID_PARANOIA >= 1) {
-                log_printf("PTABLE STATE --> [");
-                int s = 0;
-                for (int i = 0; i < NPROC-1; ++i) {
-                    if (ptable[i]) {
-                        s = ptable[i]->pstate_;
-                    } else {
-                        s = -314;
-                    }
-                    log_printf("%d@%d, ", s, i);
-                }
+            break; // No children
+        }
+        {
+        spinlock_guard guard(ptable_lock);
+        int nbroken = false;
+        for (int i = 0; i < kinit->nchildren_; ++i) {
+            if (ptable[kinit->childpids_[i]]->pstate_ == proc::ps_broken) {
+                ++nbroken;
+                break;
             }
+        }   
+        if (nbroken == kinit->nchildren_) {
             break;
+        }
         }
     }
     if (TRUEBLOCK_TESTING) {
@@ -99,9 +103,6 @@ void kernel_start(const char* command) {
         ptable[1] = init_task;
         init_task->childpids_[init_task->nchildren_] = 2;
         ++init_task->nchildren_;
-        if (WAITPID_PARANOIA >= 1) {
-            log_printf("[kernel_start] Initializing init_task\n");
-        }
     }
     cpus[0].enqueue(init_task);
 
@@ -130,7 +131,6 @@ void boot_process_start(pid_t pid, const char* name) {
     proc* p = knew<proc>();
     p->init_user(pid, ld.pagetable_);
     p->regs_->reg_rip = ld.entry_rip_;
-    log_printf("[boot_process_start] \%rip set to 0x%x\n", ld.entry_rip_);
 
     void* stkpg = kalloc(PAGESIZE);
     assert(stkpg);
@@ -500,34 +500,10 @@ int proc::copy_memory_(proc* child) {
 
     free_mem_maps:
         // Walk the virtual address space and free all mem
-        for (vmiter itc(child); itc.va() < MEMSIZE_VIRTUAL; ) {
-            if (itc.va() == CONSOLE_ADDR) {
-                itc.next();
-            } else if (itc.user()) {
-                if (FORK_PARANOIA >= 2) {
-                    log_printf("[fork::copy_memory] FREEING va 0x%x / pa 0x%x\n", itc.va(), itc.pa());
-                }
-                itc.kfree_page();
-                itc.next();
-            } else {
-                itc.next_range();
-            }
-        }
+        free_auto_allocs(child);
         if (FORK_TESTING || FORK_PARANOIA >= 2) {
-            log_printf("[copy_memory] Finished freeing with vmiter\n");
+            log_printf("[copy_memory] Finished freeing unfinished child's vmiter/ptiter mem\n");
         }
-
-        // Walk the page tables and free all pages.
-        for (ptiter it(child); it.low(); it.next()) {
-            if (FORK_PARANOIA) {
-                log_printf("[fork::copy_memory] FREEING va 0x%x / pa 0x%x\n", it.va(), it.pa());
-            }
-            it.kfree_ptp();
-        }
-        if (FORK_TESTING || FORK_PARANOIA >= 2) {
-            log_printf("[copy_memory] Finished freeing with ptiter\n");
-        }
-
         parent->unlock_pagetable_read(irqs);
         child->unlock_pagetable_read(irqs_child);
         return E_NOMEM;
@@ -569,8 +545,8 @@ int proc::syscall_fork(regstate* regs) {
         kfree(child);
         child = nullptr;
     }
-    int memcpy_failed = 1; // Initialize flag before goto statements.
-    x86_64_pagetable* child_pt = nullptr; // same deal
+    int memcpy_failed = 1; // Initialize variables before goto statements.
+    x86_64_pagetable* child_pt = nullptr;
 
     if (!child) {
         if (FORK_PARANOIA >= 1) {
@@ -660,7 +636,7 @@ int proc::syscall_fork(regstate* regs) {
         log_printf("[fork] Setting child ppid to %d and updating this parent's metadata\n", child->ppid_);
     }
 
-    // Print updated metrics for waidpid.
+    // Print updated metrics for waitpid.
     if (WAITPID_PARANOIA >= 1) {
         log_printf("[fork] [return] this pid: %i, num_children: %i, child pids: [", 
             this->id_, this->nchildren_);
@@ -674,23 +650,23 @@ int proc::syscall_fork(regstate* regs) {
 
     // Fork failure cleanup methods, accessed via goto.
     free_pt:
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Fork failed, freeing process pagetable\n");
         }
         kfree(child_pt);
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Process pagetable freed\n");
         }
     free_proc:
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Fork failed, freeing struct proc\n");
         }
-        kfree(child); // BE FREE MY CHILD
-        if (FORK_PARANOIA) {
+        kfree(child);
+        if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Struct proc freed\n");
         }
     eret:
-        if (FORK_PARANOIA) {
+        if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Exiting with exit status %d (no memory)\n", E_NOMEM);
         }
         return E_NOMEM;
@@ -903,7 +879,7 @@ int proc::syscall_wildalloc(regstate* regs) {
 //    If freeing a runnable process, assumes locked.
 void proc::free_auto_allocs(proc* p) {
     // Free all allocated pages.
-    auto irqs = this->lock_pagetable_read();
+    auto irqs = p->lock_pagetable_read();
     for (vmiter itc(p); itc.va() < MEMSIZE_VIRTUAL; ) {
         if (itc.va() == CONSOLE_ADDR) {
             itc.next(); // Ignore the console
@@ -925,7 +901,7 @@ void proc::free_auto_allocs(proc* p) {
         }
         it.kfree_ptp();
     }
-    this->unlock_pagetable_read(irqs);
+    p->unlock_pagetable_read(irqs);
 }
 
 
