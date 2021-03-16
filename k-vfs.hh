@@ -71,7 +71,8 @@ struct pipe_vnode:public vnode {
 struct uds {
     char key_[MAX_FILENAME_LEN] = "\0"; // Index of descriptor
     int fd_ = -1;
-    bool listening_ = false, accepting_ = false, received_ = false;
+    bool listening_ = false, accepting_ = false;
+    bool received_ = true;
     proc *server_ = nullptr, *client_ = nullptr;
     spinlock client_server_lock_;       // Any information relevant to client AND server locks
     wait_queue servq_, clq_;            // Server and client blocking queues

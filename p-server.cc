@@ -17,8 +17,9 @@ void process_main(int argc, char** argv) {
     int errcode2 = sys_listen(name);
     assert_eq(errcode2, 0);
 
-    int errcode2 = sys_accept(name);
-    assert_eq(errcode2, 0);
+    int errcode10 = sys_accept(name);
+    assert_eq(errcode10, 0);
+    sys_msleep(200);
 
     if (is_good) {
         console_printf("[ValidUDS] [Server] Now accepting!\n");

@@ -11,7 +11,7 @@ void process_main() {
 
     if (p1 && p2) { // Process 1: test 1 server
         const char* args[] = {
-            "server", "sock1", "good" nullptr
+            "server", "sock1", "good", nullptr
         };
         int r = sys_execv("server", args);
         assert_eq(r, 0);
@@ -25,7 +25,7 @@ void process_main() {
         assert_eq(r, 0);
         sys_exit(0);
     } else { // Process 3
-        sys_msleep(50); // Let the first test finish
+        sys_msleep(400); // Let the first test finish
         sys_write(1, "Running UDS test 2 (invalid fd passing)\n", 41);
         int p3 = sys_fork();
         if (p3) { // Process 3: test 2 server

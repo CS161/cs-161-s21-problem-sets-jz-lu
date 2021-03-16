@@ -2070,7 +2070,7 @@ int proc::syscall_execv(regstate* regs) {
     // Set instruction and stack ptr regs.
     regs_->reg_rip = mld.entry_rip_;
     // %rsp starts at the argv array in user-level memory.
-    regs_->reg_rsp = new_argv_uva;
+    regs_->reg_rsp = new_argv_uva - (new_argv_uva%16) - 8; // C++ stack alignment
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] \%rsp set to 0x%x, \%rip set to 0x%x\n", 
             regs_->reg_rsp, mld.entry_rip_);
@@ -2081,7 +2081,7 @@ int proc::syscall_execv(regstate* regs) {
 
     // Set functional argument regs to argc and the NEW argv pointer in the stack page.
     regs_->reg_rdi = argc;
-    regs_->reg_rsi = regs_->reg_rsp;
+    regs_->reg_rsi = new_argv_uva;
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] set \%rdi=%lu and \%rsi=0x%x\n", 
             regs_->reg_rdi, regs_->reg_rsi);
@@ -2107,6 +2107,9 @@ int proc::syscall_execv(regstate* regs) {
 // proc::syscall_socket(regs)
 //    Server allocates a new socket. This simplified UDS automatically binds.
 int proc::syscall_socket(regstate* regs) {
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[syscall_socket] Called by PID=%d\n", id_);
+    }
     const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
     int name_invalid = pathname_invalid(this, name);
     if (name_invalid) return name_invalid;
@@ -2149,6 +2152,9 @@ static uds* find_socket(const char* name) {
 // proc::syscall_socket(regs)
 //    Client connects to socket.
 int proc::syscall_connect(regstate* regs) {
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[syscall_connect] Called by PID=%d\n", id_);
+    }
     const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
     int name_invalid = pathname_invalid(this, name);
     if (name_invalid) return name_invalid;
@@ -2164,6 +2170,9 @@ int proc::syscall_connect(regstate* regs) {
 // proc::syscall_socket(regs)
 //    Server marint connect_failed =ks socket as listening.
 int proc::syscall_listen(regstate* regs) {
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[syscall_listen] Called by PID=%d\n", id_);
+    }
     const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
     int name_invalid = pathname_invalid(this, name);
     if (name_invalid) return name_invalid;
@@ -2179,6 +2188,9 @@ int proc::syscall_listen(regstate* regs) {
 // proc::syscall_socket(regs)
 //    Server marks socket as accepting.
 int proc::syscall_accept(regstate* regs) {
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[syscall_acceppt] Called by PID=%d\n", id_);
+    }
     const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
     int name_invalid = pathname_invalid(this, name);
     if (name_invalid) return name_invalid;
@@ -2194,6 +2206,9 @@ int proc::syscall_accept(regstate* regs) {
 // proc::syscall_sendfd(regs)
 //    Client sends a file descriptor to socket.
 int proc::syscall_sendfd(regstate* regs) {
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[syscall_sendfd] Called by PID=%d\n", id_);
+    }
     const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
     int name_invalid = pathname_invalid(this, name);
     if (name_invalid) return name_invalid;
@@ -2215,6 +2230,9 @@ int proc::syscall_sendfd(regstate* regs) {
 //    Server receives a fd and opens it. 
 //    Returns fd of newly opened file on server side.
 int proc::syscall_receivefd(regstate* regs) {
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[syscall_receivefd] Called by PID=%d\n", id_);
+    }
     const char* name = reinterpret_cast<const char*>(regs->reg_rdi);
     int name_invalid = pathname_invalid(this, name);
     if (name_invalid) return name_invalid;

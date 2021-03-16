@@ -6,18 +6,18 @@ void process_main(int argc, char** argv) {
     bool is_good = (strcmp(argv[2], "good") == 0);
     console_printf("[Client] Currently running the %s fd case\n", is_good? "valid" : "invalid");
 
-    if (is_good) {
-        console_printf("[ValidUDS] [Client] Connecting to socket...\n");
-    } else {
-        console_printf("[InvalidUDS] [Client] Connecting to socket...\n");
-    }
     int errcode1 = sys_connect(name);
     assert_eq(errcode1, 0);
+    if (is_good) {
+        console_printf("[ValidUDS] [Client] Connected to socket\n");
+    } else {
+        console_printf("[InvalidUDS] [Client] Connected to socket\n");
+    }
 
     if (is_good) {
-        console_printf("[ValidUDS] [Client] Opening a file to send...\n");
         int fd = sys_open("hi.txt", OF_WRITE | OF_CREAT | OF_TRUNC);
         assert_ge(fd, 3);
+        console_printf("[ValidUDS] [Client] Opened a file to send\n");
 
         int w = sys_write(fd, "I am in the kernel...I AM THE KERNEL!!! -Anonymous poet", 56);
         assert_eq(w, 56);
@@ -27,10 +27,10 @@ void process_main(int argc, char** argv) {
 
         console_printf("[ValidUDS] [Client] Client done.\n");
     } else {
-        console_printf("[InvalidUDS] [Client] Sending an invalid fd...\n");
         int errcode3 = sys_sendfd(name, 0);
         assert_eq(errcode3, E_BADF);
-        
+        console_printf("[InvalidUDS] [Client] Sent an invalid fd...\n");
+
         console_printf("[InvalidUDS] [Client] Test succeeded.\n");
     }
 

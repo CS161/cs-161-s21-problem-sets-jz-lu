@@ -424,7 +424,7 @@ uds::uds(const char* key) {
     strcpy(key_, key);
     assert(strcmp(key_, key) == 0);
     assert(!client_ && !server_);
-    assert(!listening_ && !accepting_ && !received_);
+    assert(!listening_ && !accepting_ && received_);
     assert(fd_ == -1);
     if (UDS_PARANOIA >= 2) {
         log_printf("[uds-constructor] Init key=%s, key_=%s\n", key, key_);
@@ -446,7 +446,7 @@ int uds::bind(proc* server) {
     }
     spinlock_guard guard(client_server_lock_);
     if (UDS_PARANOIA >= 2) {
-        log_printf("[uds] Bindding socket to process PID=%d\n", server->id_);
+        log_printf("[uds] Binding socket to process PID=%d\n", server->id_);
     }
     if (server_) {
         return E_MFILE; // A server is already using this socket
@@ -457,9 +457,6 @@ int uds::bind(proc* server) {
 }
 
 int uds::listen() {
-    if (UDS_PARANOIA >= 3) {
-        log_printf("[uds] UDS bound to server PI D=%d now listening\n", server_->id_);
-    }
     spinlock_guard guard(client_server_lock_);
     if (!server_) {
         if (UDS_PARANOIA >= 1) {
@@ -468,6 +465,9 @@ int uds::listen() {
         return E_BADCONN;
     }
     listening_ = true;
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[uds] UDS bound to server PID=%d now listening\n", server_->id_);
+    }
     return 0;
 }
 
@@ -477,10 +477,16 @@ int uds::accept() {
         return E_BADCONN;
     }
     accepting_ = true;
+    if (UDS_PARANOIA >= 3) {
+        log_printf("[uds] UDS bound to server PID=%d now accepting\n", server_->id_);
+    }
     clq_.wake_all(); // Wake up client sleeping on a connect()
     long start_time = ticks;
     long end_time = start_time;
     if (!connected()) {
+        if (UDS_PARANOIA >= 2) {
+            log_printf("[uds-read] Sleeping on accept\n");
+        }
         waiter().block_until(servq_, [&] () {
             end_time = ticks;
             return (connected() || end_time >= start_time + UDS_TIMEOUT);
@@ -510,12 +516,13 @@ int uds::connect(proc* client) {
     if (!listening_) { // Can't connect till server is listening.
         return E_BADCONN;
     }
-    client_ = client;
-    assert(connected());
     servq_.wake_all(); // Wake up server sleeping on an accept()
     long start_time = ticks;
     long end_time = start_time;
     if (!accepting_) {
+        if (UDS_PARANOIA >= 2) {
+            log_printf("[uds-read] Sleeping on connect\n");
+        }
         waiter().block_until(clq_, [&] () {
             end_time = ticks;
             return (accepting_ || end_time >= start_time + UDS_TIMEOUT);
@@ -526,6 +533,11 @@ int uds::connect(proc* client) {
     } else if (end_time >= start_time + UDS_TIMEOUT) {
         return E_SOCKTIMEOUT;
     } else {
+        client_ = client;
+        assert(connected());
+        if (UDS_PARANOIA >= 3) {
+            log_printf("[uds] UDS bound to client PID=%d now connected\n", client_->id_);
+        }
         return 0;
     }
 }
@@ -559,6 +571,9 @@ int uds::write(proc* p, int fd) {
     long start_time = ticks;
     long end_time = start_time;
     if (!received_) {
+        if (UDS_PARANOIA >= 2) {
+            log_printf("[uds-read] Sleeping on write\n");
+        }
         waiter().block_until(clq_, [&] () {
             end_time = ticks;
             return (!received_) || (end_time >= start_time + UDS_TIMEOUT);
@@ -585,11 +600,17 @@ int uds::read(proc* p) {
     }
     spinlock_guard guard(client_server_lock_);
     if (!accepting_) { // UDS closed
+        if (UDS_PARANOIA >= 1) {
+            log_printf("[uds-read] Not accepting yet\n");
+        }
         return E_BADCONN;
     }
     long start_time = ticks;
     long end_time = start_time;
     if (received_) { // Wait for a write, or a timeout
+        if (UDS_PARANOIA >= 2) {
+            log_printf("[uds-read] Sleeping on read\n");
+        }
         waiter().block_until(servq_, [&] () {
             end_time = ticks;
             return (!received_) || (end_time >= start_time + UDS_TIMEOUT);
