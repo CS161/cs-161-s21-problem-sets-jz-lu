@@ -57,22 +57,9 @@ void k_proc_init() {
             log_printf("]\n");
         }
         }
-        // Halt if there are no children, or if the only children are broken.
+        // Halt if there are no children.
         if (kinit->syscall_waitpid(&regs) == (uint64_t) E_CHILD) {
             break; // No children
-        }
-        {
-        spinlock_guard guard(ptable_lock);
-        int nbroken = false;
-        for (int i = 0; i < kinit->nchildren_; ++i) {
-            if (ptable[kinit->childpids_[i]]->pstate_ == proc::ps_broken) {
-                ++nbroken;
-                break;
-            }
-        }   
-        if (nbroken == kinit->nchildren_) {
-            break;
-        }
         }
     }
     if (TRUEBLOCK_TESTING) {
@@ -2144,6 +2131,7 @@ int proc::syscall_socket(regstate* regs) {
     sock->bind(this); // Bind socket to the server
     return 0;
 }
+
 
 // Searches socket table under lock for given socket name.
 static uds* find_socket(const char* name) {

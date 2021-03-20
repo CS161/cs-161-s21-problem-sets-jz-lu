@@ -3,7 +3,7 @@ CS 161 Problem Set 4 Collaboration
 
 Collaborators
 -------------
-(Other students you worked with)
+Aakash Mishra (henceforth to be addressed by his rap name `Big Ka$h`)
 
 Citations
 ---------

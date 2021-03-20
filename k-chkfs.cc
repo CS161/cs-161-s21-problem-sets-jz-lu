@@ -7,6 +7,24 @@ bufcache bufcache::bc;
 bufcache::bufcache() {
 }
 
+// bufcache::evict()
+//    Evict a block from the bufcache, if possible, and
+//    return the index into the bufcache entry array of the free block.
+//    Assumes the bufcache is locked, but the entry need not be (no changes made to it).
+size_t bufcache::evict() {
+    bcentry* blk = evictq_.pop_front();
+    if (!blk) { // Nothing to pop
+        return -1;
+    } else { // Compute the index into the bufcache and return it
+        size_t blk_index = blk - e_;
+        assert(blk_index < ne);
+        blk->lock_.lock_noirq();
+        blk->clear();
+        blk->lock_.unlock_noirq();
+        return blk_index;
+    }
+}
+
 
 // bufcache::get_disk_entry(bn, cleaner)
 //    Reads disk block `bn` into the buffer cache, obtains a reference to it,
@@ -38,10 +56,13 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
     // if not found, use free slot
     if (i == ne) {
         if (empty_slot == size_t(-1)) {
-            // cache full!
-            lock_.unlock(irqs);
-            log_printf("bufcache: no room for block %u\n", bn);
-            return nullptr;
+            // Cache is full--attempt to evict something.
+            empty_slot = evict();
+            if (empty_slot == size_t(-1)) {
+                lock_.unlock(irqs);
+                log_printf("[bufcache] no room for block %u\n", bn);
+                return nullptr;
+            }
         }
         i = empty_slot;
     }
@@ -55,11 +76,13 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
         e_[i].bn_ = bn;
     }
 
-    // no longer need cache lock
-    lock_.unlock_noirq();
-
     // mark reference
     ++e_[i].ref_;
+    if (e_[i].qlink_.is_linked()) {
+        evictq_.erase(&e_[i]);
+    }
+    // no longer need cache lock
+    lock_.unlock_noirq();
 
     // load block
     bool ok = e_[i].load(irqs, cleaner);
@@ -67,8 +90,10 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
     // unlock and return entry
     if (!ok) {
         --e_[i].ref_;
+        e_[i].clear();
     }
     e_[i].lock_.unlock(irqs);
+    
     return ok ? &e_[i] : nullptr;
 }
 
@@ -120,10 +145,12 @@ bool bcentry::load(irqstate& irqs, bcentry_clean_function cleaner) {
 //    not use the entry after this call.
 
 void bcentry::put() {
+    bufcache& bc = bufcache::get();
+    spinlock_guard bcguard(bc.lock_);
     spinlock_guard guard(lock_);
     assert(ref_ != 0);
-    if (--ref_ == 0) {
-        clear();
+    if (--ref_ == 0 && bn_ != 0) {
+        bc.evictq_.push_back(this);
     }
 }
 

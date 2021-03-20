@@ -162,7 +162,7 @@ void process_main() {
 
 
     // inheritance tests with close-on-exit
-    console_printf("close-on-exit tests...(pid=%d)\n", sys_getpid());
+    console_printf("close-on-exit tests...\n");
 
     x = sys_pipe(pfd);
     assert(x == 0 && pfd[0] > 2 && pfd[1] > 2 && pfd[0] != pfd[1]);
@@ -185,7 +185,6 @@ void process_main() {
     }
 
 
-    console_printf("Forked pid=%d\n", p);
     x = sys_msleep(100);
     assert_eq(x, 0);
 

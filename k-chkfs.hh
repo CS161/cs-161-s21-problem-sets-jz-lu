@@ -22,6 +22,7 @@ struct bcentry {
     blocknum_t bn_;                      // disk block number (unless empty)
     unsigned ref_ = 0;                   // reference count
     unsigned char* buf_ = nullptr;       // memory buffer used for entry
+    list_links qlink_;
 
 
     // return the index of this entry in the buffer cache
@@ -49,12 +50,12 @@ struct bcentry {
 struct bufcache {
     using blocknum_t = bcentry::blocknum_t;
 
-    static constexpr size_t ne = 10;
+    static constexpr size_t ne = 10;            // Number of entries in the cache
 
-    spinlock lock_;                  // protects all entries' bn_ and ref_
+    spinlock lock_;                             // protects all entries' bn_ and ref_
     wait_queue read_wq_;
-    bcentry e_[ne];
-
+    bcentry e_[ne];                             // Entries
+    list<bcentry, &bcentry::qlink_> evictq_;    // Eviction queue (refcount 0 blocks only!)
 
     static inline bufcache& get();
 
@@ -67,6 +68,7 @@ struct bufcache {
     static bufcache bc;
 
     bufcache();
+    size_t evict();                             // Evict a block and return newly freed block index
     NO_COPY_OR_ASSIGN(bufcache);
 };
 
@@ -79,7 +81,6 @@ struct chkfsstate {
     using inum_t = chkfs::inum_t;
     using inode = chkfs::inode;
     static constexpr size_t blocksize = chkfs::blocksize;
-
 
     static inline chkfsstate& get();
 

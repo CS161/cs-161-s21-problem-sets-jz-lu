@@ -49,6 +49,7 @@ void process_main(int argc, char** argv) {
     unsigned nfiles = 0;
 
     while (argno < argc) {
+        console_printf("argno = %d, argc = %d\n", argno, argc);
         size_t counts[3] = {0, 0, 0};
         bool inword = false;
         size_t off = 0;
