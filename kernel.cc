@@ -1981,13 +1981,8 @@ int proc::syscall_execv(regstate* regs) {
         return total_length;
     }
 
-    // Look up the process name in memfiles.
-    int initfs_index = memfile::initfs_lookup(prgm_name);
-    if (initfs_index < 0) { // Error code was returned
-        // NOTE: Kernel logs done in the lookup function.
-        return initfs_index;
-    }
-    assert(initfs_index < (int) memfile::namesize);
+    // Look up the process name in inodes.
+    auto ino = chkfsstate::get().lookup_inode(prgm_name);
 
     // Allocate a new pagetable and stack page.
     x86_64_pagetable* pt = kalloc_pagetable();
@@ -2013,16 +2008,20 @@ int proc::syscall_execv(regstate* regs) {
     }
 
     // Load the process.
-    memfile_loader mld(initfs_index, pt);
-    int load_error = load(mld);
-    if (load_error) { // Restore and return error upon load failure
+    diskfile_loader ld(ino, pt);
+    assert(ld.pagetable_ && ld.ino_);
+    ino->lock_read();
+    int r = proc::load(ld);
+    ino->unlock_read();
+    ino->put();
+    if (r < 0) { // Restore and return error upon load failure
         if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_execv] Failed to load new process\n");
         }
         kfree(pt);
         kfree(stkpg);
         free_auto_allocs(pt); // Free any allocations made by loader
-        return load_error;
+        return r;
     } else if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] Process successfully loaded\n",
             pt, kptr2pa(pt));
@@ -2063,12 +2062,12 @@ int proc::syscall_execv(regstate* regs) {
     }
 
     // Set instruction and stack ptr regs.
-    regs_->reg_rip = mld.entry_rip_;
+    regs_->reg_rip = ld.entry_rip_;
     // %rsp starts at the argv array in user-level memory.
     regs_->reg_rsp = new_argv_uva - (new_argv_uva%16) - 8; // C++ stack alignment
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] \%rsp set to 0x%x, \%rip set to 0x%x\n", 
-            regs_->reg_rsp, mld.entry_rip_);
+            regs_->reg_rsp, ld.entry_rip_);
         char** start = pa2kptr<char**>(vmiter(pt, regs_->reg_rsp).pa());
         log_printf("[syscall_execv] \%rsi=%p points to array with first string='%s'\n",
             start, pa2kptr<char**>(vmiter(pt, (uintptr_t) start[0]).pa()));
@@ -2096,7 +2095,6 @@ int proc::syscall_execv(regstate* regs) {
     // and uses regs_ in the resumption state register set inseead of a yieldstate.
     yield_noreturn();
 }
-
 
 
 // proc::syscall_socket(regs)

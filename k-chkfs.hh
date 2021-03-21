@@ -22,7 +22,7 @@ struct bcentry {
     blocknum_t bn_;                      // disk block number (unless empty)
     unsigned ref_ = 0;                   // reference count
     unsigned char* buf_ = nullptr;       // memory buffer used for entry
-    list_links qlink_;
+    list_links qlink_;                   // Bufcache eviction list link
 
 
     // return the index of this entry in the buffer cache
@@ -70,6 +70,19 @@ struct bufcache {
     bufcache();
     size_t evict();                             // Evict a block and return newly freed block index
     NO_COPY_OR_ASSIGN(bufcache);
+};
+
+
+// diskfile::loader: loads a `proc` from a `memfile`
+struct diskfile_loader : public proc_loader {
+    chkfs::inode* ino_;
+    bcentry* curr_pg_ = nullptr;
+    inline diskfile_loader(chkfs::inode* ino, x86_64_pagetable* pt)
+        : proc_loader(pt), ino_(ino) {
+    }
+
+    ssize_t get_page(uint8_t** pg, size_t off) override;
+    void put_page() override;
 };
 
 

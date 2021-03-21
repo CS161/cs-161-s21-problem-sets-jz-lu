@@ -16,7 +16,7 @@ size_t bufcache::evict() {
     if (!blk) { // Nothing to pop
         return -1;
     } else { // Compute the index into the bufcache and return it
-        size_t blk_index = blk - e_;
+        size_t blk_index = blk->index();
         assert(blk_index < ne);
         blk->lock_.lock_noirq();
         blk->clear();
@@ -395,4 +395,32 @@ chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
 auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     // Your code here
     return E_INVAL;
+}
+
+
+// diskfile_loader::get_page
+//    Load a page from the disk into the cache and point *pg to it.
+//    Cannot be called consecutively without calling diskfile_loader::put_page() first.
+ssize_t diskfile_loader::get_page(uint8_t** pg, size_t off) {
+    if (!ino_) {
+        return E_NOENT;
+    } 
+    // read file inode
+    chkfs_fileiter it(ino_);
+        // copy data from current block
+    if (bcentry* e = it.find(off).get_disk_entry()) {
+        unsigned b = it.block_relative_offset();
+        *pg = (uint8_t*)e->buf_ + b;
+        curr_pg_ = e;
+        return chkfs::blocksize - b;              // bytes left in block
+    } else {
+        return -1;
+    }
+
+}
+
+// diskfile_loader::put_page()
+//    Decrement refcount of page retrieved by diskfile_loader::get_page().
+void diskfile_loader::put_page() {
+    curr_pg_->put();
 }
