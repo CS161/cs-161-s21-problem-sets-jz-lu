@@ -1520,6 +1520,10 @@ int proc::syscall_open(regstate* regs) {
         log_printf("[syscall_open] Open called\n");
     }
 
+    if (!sata_disk) {
+        return E_IO;
+    }
+
     // First, validate arguments.
     const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
     if (pathname_invalid(this, pathname)) { // Check filename
@@ -1553,29 +1557,27 @@ int proc::syscall_open(regstate* regs) {
         log_printf("[syscall_open] Found valid fd=%d for new open\n", fd);
     }
 
-    memfile_vnode* mf_vn = knew<memfile_vnode>(mode, nullptr); // Set memfile ptr after fs lookup
-    if (!mf_vn) { // Error!
+    // Read the inode of the directory.
+    auto ino = chkfsstate::get().lookup_inode(pathname);
+    if (!ino) {
+        return E_NOENT;
+    }
+    disk_vnode* dvn = knew<disk_vnode>(ino, mode);
+    if (!dvn) {
         if (VFS_MF_PARANOIA >= 1) {
-            log_printf("[syscall_open] Failed to k-alloc memfile vnode\n");
+            log_printf("[syscall_open] Failed to k-alloc diskfile vnode\n");
         }
         return E_NOMEM;
     }
-    int initfs_index = memfile::initfs_lookup(pathname, create);
-    if (initfs_index < 0) { // Error code was returned
-        return initfs_index;
-    }
-    assert(initfs_index < (int) memfile::namesize);
-    mf_vn->set_mf(memfile::initfs + initfs_index); // Set memfile* ptr in vnode
     {
-    spinlock_guard refguard(mf_vn->open_close_lock_);
-    ++mf_vn->refcount_;
+    spinlock_guard refguard(dvn->open_close_lock_);
+    ++dvn->refcount_;
     }
-    fdtable[fd] = reinterpret_cast<vnode*>(mf_vn);
+    fdtable[fd] = reinterpret_cast<vnode*>(dvn);
     //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
 
     if (trunc) { // Truncate if requested
-        int retstat = memfile::initfs[initfs_index].set_length(0);
-        assert(retstat == 0);
+        assert(false);
     }
 
     if (VFS_MF_PARANOIA >= 2) {

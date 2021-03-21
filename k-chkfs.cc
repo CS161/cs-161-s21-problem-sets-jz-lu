@@ -407,10 +407,10 @@ ssize_t diskfile_loader::get_page(uint8_t** pg, size_t off) {
     } 
     // read file inode
     chkfs_fileiter it(ino_);
-        // copy data from current block
+    // copy data from current block
     if (bcentry* e = it.find(off).get_disk_entry()) {
         unsigned b = it.block_relative_offset();
-        *pg = (uint8_t*)e->buf_ + b;
+        *pg = (uint8_t*) e->buf_ + b;
         curr_pg_ = e;
         return chkfs::blocksize - b;              // bytes left in block
     } else {

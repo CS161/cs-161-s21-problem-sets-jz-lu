@@ -1,4 +1,6 @@
 #include "k-vfs.hh"
+#include "k-ahci.hh"
+#include "k-chkfsiter.hh"
 
 // Helper functions.
 template <typename T>
@@ -417,6 +419,70 @@ uintptr_t pipe_vnode::read(uintptr_t addr, size_t sz) {
         log_printf("[pipe] Valid pipe read called, transferring to bbuf\n");
     }
     return bbuf_->read(addr, sz);
+}
+
+// ===== File system (disk) ===== //
+
+disk_vnode::disk_vnode(chkfs::inode* ino, int mode): vnode(mode) {
+    assert(ino);
+    ino_ = ino;
+}
+
+int disk_vnode::close() {
+    ino_->put();
+    spinlock_guard guard(open_close_lock_);
+    assert(refcount_ > 0);
+    return --refcount_;
+}
+
+uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
+    if (!writeable()) {
+        return E_BADF;
+    }
+    // Your code here!
+    return E_INVAL;
+}
+
+uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
+    if (!readable()) {
+        return E_BADF;
+    }
+    log_printf("read called\n");
+
+    // read file inode
+    // spinlock_guard guard(open_close_lock_);
+    ino_->lock_read();
+    size_t nread = 0;
+
+    chkfs_fileiter it(ino_);
+
+    while (nread < sz) {
+        log_printf("nread=%d, sz=%d%\n", nread, sz);
+        // copy data from current block
+        if (bcentry* e = it.find(offset_).get_disk_entry()) {
+            log_printf("got disk entry\n");
+            unsigned b = it.block_relative_offset();
+            size_t ncopy = min(
+                size_t(ino_->size - it.offset()),   // bytes left in file
+                chkfs::blocksize - b,              // bytes left in block
+                sz - nread                         // bytes left in request
+            );
+            memcpy(reinterpret_cast<void*>(addr + nread), e->buf_ + b, ncopy);
+            e->put();
+            log_printf("putted disk entry\n");
+
+            nread += ncopy;
+            offset_ += ncopy;
+            if (ncopy == 0) {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+
+    ino_->unlock_read();
+    return nread;
 }
 
 // ===== Unix Domain Sockets ===== //

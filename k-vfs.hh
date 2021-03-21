@@ -2,6 +2,7 @@
 #define CHICKADEE_K_VFS_HH
 #include "k-devices.hh"
 #include "k-wait.hh"
+#include "chickadeefs.hh"
 
 #define BBUF_CAP    256                        // Pipe bounded buffer capacity
 #define EOF         0
@@ -61,6 +62,15 @@ struct pipe_vnode:public vnode {
     pipe_bbuf* get_bbuf();
 
     // The below lock when called.
+    int close();
+    uintptr_t write(uintptr_t addr, size_t sz);
+    uintptr_t read(uintptr_t addr, size_t sz);
+};
+
+struct disk_vnode:public vnode {
+    chkfs::inode* ino_;
+    disk_vnode(chkfs::inode* ino, int mode);
+
     int close();
     uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
