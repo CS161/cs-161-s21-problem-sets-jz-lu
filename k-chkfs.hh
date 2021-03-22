@@ -104,9 +104,9 @@ struct chkfsstate {
     inode* get_inode(inum_t inum);
 
     // directory lookup in `dirino`
-    inode* lookup_inode(inode* dirino, const char* name, bool trunc=false);
+    inode* lookup_inode(inode* dirino, const char* name);
     // directory lookup starting at root directory
-    inode* lookup_inode(const char* name, bool trunc=false);
+    inode* lookup_inode(const char* name);
 
     blocknum_t allocate_extent(unsigned count = 1);
 

@@ -214,6 +214,7 @@ int bufcache::sync(int drop) {
         log_printf("Syncing bn = %d\n", e->bn_);
         e->get_write();
         sata_disk->write(e->buf_, chkfs::blocksize, e->bn_ * chkfs::blocksize);
+        log_printf("Write complete\n");
         {
         spinlock_guard eguard(e->lock_);
         e->estate_ = bcentry::es_clean;
@@ -384,7 +385,7 @@ void inode::put() {
 //    the caller should eventually release with `ino->put()`.
 
 chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
-                                       const char* filename, bool trunc) {
+                                       const char* filename) {
     chkfs_fileiter it(dirino);
 
     // read directory to find file inode
@@ -399,17 +400,6 @@ chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
                     break;
                 }
             }
-            if (trunc) { // Truncated inodes must be marked as dirty
-                bufcache& bc = bufcache::get();
-                spinlock_guard bcguard(bc.lock_);
-                spinlock_guard eguard(e->lock_);
-                if (!e->dlink_.is_linked()) {
-                    e->estate_ = bcentry::es_dirty;
-                    bc.dirty_list_.push_back(e);
-                    assert(bc.dirty_list_.front());
-                    assert(e->dlink_.is_linked());
-                }
-            }
             e->put();
         } else {
             return nullptr;
@@ -422,11 +412,11 @@ chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
 // chkfsstate::lookup_inode(filename)
 //    Looks up `filename` in the root directory.
 
-chkfs::inode* chkfsstate::lookup_inode(const char* filename, bool trunc) {
+chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
     auto dirino = get_inode(1);
     if (dirino) {
         dirino->lock_read();
-        auto ino = fs.lookup_inode(dirino, filename, trunc);
+        auto ino = fs.lookup_inode(dirino, filename);
         dirino->unlock_read();
         dirino->put();
         return ino;
