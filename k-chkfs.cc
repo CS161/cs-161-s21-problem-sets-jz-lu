@@ -178,6 +178,15 @@ void bcentry::put_write() {
     wq_.wake_all();
 }
 
+// Debugging helper function: visualize dirty list block numbers.
+static void print_dirty_list() {
+    bufcache& bc = bufcache::get();
+    log_printf("Dirty --> [ ");
+    for (auto it = bc.dirty_list_.front(); it; it = bc.dirty_list_.next(it)) {
+        log_printf("%d ", it->bn_);
+    }
+    log_printf("]\n");
+}
 
 // bufcache::sync(drop)
 //    Writes all dirty buffers to disk, blocking until complete.
@@ -186,6 +195,12 @@ void bcentry::put_write() {
 //    and data blocks are unreferenced.
 
 int bufcache::sync(int drop) {
+    {
+    spinlock_guard guard(lock_);
+    log_printf("Printing dirty list at beginning of sync\n");
+    print_dirty_list();
+    }
+
     // Swap the current list under bufcache lock so it doesn't 
     // sync forever (if another thread keeps adding dirty blocks).
     list<bcentry, &bcentry::dlink_> local_dirty;
@@ -196,12 +211,13 @@ int bufcache::sync(int drop) {
     // Write to the disk and mark the block as clean under bcentry lock.
     // NOTE: the bufcache lock need not be held here since local_dirty is, well, local to the function.
     while (bcentry* e = local_dirty.pop_front()) {
+        log_printf("Syncing bn = %d\n", e->bn_);
         e->get_write();
         sata_disk->write(e->buf_, chkfs::blocksize, e->bn_ * chkfs::blocksize);
         {
         spinlock_guard eguard(e->lock_);
         e->estate_ = bcentry::es_clean;
-        if (e->ref_ == 0 && e->bn_ != 0) {
+        if (e->ref_ == 0 && e->bn_ != 0 && drop <= 0) {
             bc.evictq_.push_back(e);
         }
         }
@@ -368,7 +384,7 @@ void inode::put() {
 //    the caller should eventually release with `ino->put()`.
 
 chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
-                                       const char* filename) {
+                                       const char* filename, bool trunc) {
     chkfs_fileiter it(dirino);
 
     // read directory to find file inode
@@ -383,6 +399,17 @@ chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
                     break;
                 }
             }
+            if (trunc) { // Truncated inodes must be marked as dirty
+                bufcache& bc = bufcache::get();
+                spinlock_guard bcguard(bc.lock_);
+                spinlock_guard eguard(e->lock_);
+                if (!e->dlink_.is_linked()) {
+                    e->estate_ = bcentry::es_dirty;
+                    bc.dirty_list_.push_back(e);
+                    assert(bc.dirty_list_.front());
+                    assert(e->dlink_.is_linked());
+                }
+            }
             e->put();
         } else {
             return nullptr;
@@ -395,11 +422,11 @@ chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
 // chkfsstate::lookup_inode(filename)
 //    Looks up `filename` in the root directory.
 
-chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
+chkfs::inode* chkfsstate::lookup_inode(const char* filename, bool trunc) {
     auto dirino = get_inode(1);
     if (dirino) {
         dirino->lock_read();
-        auto ino = fs.lookup_inode(dirino, filename);
+        auto ino = fs.lookup_inode(dirino, filename, trunc);
         dirino->unlock_read();
         dirino->put();
         return ino;

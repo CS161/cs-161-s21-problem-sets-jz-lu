@@ -1558,10 +1558,11 @@ int proc::syscall_open(regstate* regs) {
     }
 
     // Read the inode of the directory.
-    auto ino = chkfsstate::get().lookup_inode(pathname);
+    auto ino = chkfsstate::get().lookup_inode(pathname, trunc);
     if (!ino) {
         return E_NOENT;
     }
+    log_printf("[open] ino size = %d\n", ino->size);
     disk_vnode* dvn = knew<disk_vnode>(ino, mode);
     if (!dvn) {
         if (VFS_MF_PARANOIA >= 1) {
@@ -1577,7 +1578,7 @@ int proc::syscall_open(regstate* regs) {
     //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
 
     if (trunc) { // Truncate if requested
-        assert(false);
+        ino->size = 0; // TODO
     }
 
     if (VFS_MF_PARANOIA >= 2) {

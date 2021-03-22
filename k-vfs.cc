@@ -489,6 +489,7 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
 
     // read file inode
     // spinlock_guard guard(open_close_lock_); // TODO
+    console_printf("ino size = %d\n", ino_->size);
     ino_->lock_read();
     size_t nread = 0;
 

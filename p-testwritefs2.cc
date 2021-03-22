@@ -109,6 +109,9 @@ void process_main() {
 
     sys_close(f);
 
+    console_printf("trunc tests succeeded\n");
+    while(true) {}
+
 
     // seek within a file
     printf("%s:%d: lseek...\n", __FILE__, __LINE__);
