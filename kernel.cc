@@ -2341,7 +2341,7 @@ off_t proc::syscall_lseek(regstate* regs) {
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
         return E_BADF;
     }
-    
+    return fdtable[fd]->lseek(off, origin);
 }
 
 // memshow()

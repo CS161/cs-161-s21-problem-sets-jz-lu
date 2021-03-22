@@ -107,6 +107,12 @@ struct chkfsstate {
     inode* lookup_inode(inode* dirino, const char* name);
     // directory lookup starting at root directory
     inode* lookup_inode(const char* name);
+    bool block_is_free(void* fbb, blocknum_t bn);
+    void mark_block_free(void* fbb, blocknum_t bn);
+    void mark_blocks_free(void* fbb, blocknum_t first, unsigned count);
+    void mark_block_taken(void* fbb, blocknum_t bn);
+    void mark_blocks_taken(void* fbb, blocknum_t first, unsigned count);
+    blocknum_t find_free_range(void* fbb, unsigned count);
 
     blocknum_t allocate_extent(unsigned count = 1);
 
