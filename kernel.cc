@@ -462,6 +462,7 @@ uintptr_t proc::syscall(regstate* regs) {
     return syscall_retval;
 }
 
+
 // proc::copy_memory_(child)
 //     Copy all user memory to a child process.
 int proc::copy_memory_(proc* child) {
@@ -927,7 +928,6 @@ void proc::free_auto_allocs(proc* p) {
     }
     p->unlock_pagetable_read(irqs);
 }
-
 
 void proc::free_auto_allocs(x86_64_pagetable* pt) {
     // Free all allocated pages.
@@ -1830,6 +1830,7 @@ void proc::show_argv(int argc, const char** argv) {
     }
     log_printf("'%s']\n", argv[argc-1]);
 }
+
 
 // argv_invalid(argc, argv)
 //    Checks whether a argv for execution is valid or not. 

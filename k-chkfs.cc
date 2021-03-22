@@ -149,7 +149,7 @@ void bcentry::put() {
     spinlock_guard bcguard(bc.lock_);
     spinlock_guard guard(lock_);
     assert(ref_ != 0);
-    if (--ref_ == 0 && bn_ != 0) {
+    if (--ref_ == 0 && bn_ != 0 && estate_ != es_dirty) {
         bc.evictq_.push_back(this);
     }
 }
@@ -157,19 +157,25 @@ void bcentry::put() {
 
 // bcentry::get_write()
 //    Obtains a write reference for this entry.
-
 void bcentry::get_write() {
-    // Your code here
-    assert(false);
+    spinlock_guard guard(lock_);
+    assert(wref_ == 0 || wref_ == 1);
+    if (wref_ == 1) {
+        waiter().block_until(wq_, [&] () {
+            return (wref_ == 0);
+        }, guard);
+    } 
+    ++wref_;
 }
 
 
 // bcentry::put_write()
 //    Releases a write reference for this entry.
-
 void bcentry::put_write() {
-    // Your code here
-    assert(false);
+    spinlock_guard guard(lock_);
+    assert(wref_ == 1);
+    --wref_;
+    wq_.wake_all();
 }
 
 
@@ -180,8 +186,27 @@ void bcentry::put_write() {
 //    and data blocks are unreferenced.
 
 int bufcache::sync(int drop) {
-    // write dirty buffers to disk
-    // Your code here!
+    // Swap the current list under bufcache lock so it doesn't 
+    // sync forever (if another thread keeps adding dirty blocks).
+    list<bcentry, &bcentry::dlink_> local_dirty;
+    auto irqs = lock_.lock();
+    local_dirty.swap(dirty_list_);
+    lock_.unlock(irqs);
+
+    // Write to the disk and mark the block as clean under bcentry lock.
+    // NOTE: the bufcache lock need not be held here since local_dirty is, well, local to the function.
+    while (bcentry* e = local_dirty.pop_front()) {
+        e->get_write();
+        sata_disk->write(e->buf_, chkfs::blocksize, e->bn_ * chkfs::blocksize);
+        {
+        spinlock_guard eguard(e->lock_);
+        e->estate_ = bcentry::es_clean;
+        if (e->ref_ == 0 && e->bn_ != 0) {
+            bc.evictq_.push_back(e);
+        }
+        }
+        e->put_write();
+    }
 
     // drop clean buffers if requested
     if (drop > 0) {

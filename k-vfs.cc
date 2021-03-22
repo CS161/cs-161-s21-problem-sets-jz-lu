@@ -439,28 +439,64 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
     if (!writeable()) {
         return E_BADF;
     }
-    // Your code here!
-    return E_INVAL;
+    size_t nwritten = 0;
+    bufcache& bc = bufcache::get();
+    ino_->lock_write();
+    chkfs_fileiter it(ino_);
+    while (nwritten < sz) {
+        // copy data to current block
+        if (bcentry* e = it.find(offset_).get_disk_entry()) {
+            unsigned b = it.block_relative_offset();
+            size_t ncopy = min(
+                size_t(ino_->size - it.offset()),   // bytes left in file
+                chkfs::blocksize - b,               // bytes left in block
+                sz - nwritten                       // bytes left in request
+            );
+            e->get_write();
+            memcpy(e->buf_ + b, reinterpret_cast<void*>(addr + nwritten), ncopy);
+            {
+                spinlock_guard bcguard(bc.lock_);
+                spinlock_guard eguard(e->lock_);
+                if (!e->dlink_.is_linked()) {
+                    e->estate_ = bcentry::es_dirty;
+                    bc.dirty_list_.push_back(e);
+                    assert(bc.dirty_list_.front());
+                    assert(e->dlink_.is_linked());
+                }
+            }
+            e->put_write();
+            e->put();
+
+            nwritten += ncopy;
+            offset_ += ncopy;
+            if (ncopy == 0) {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    ino_->unlock_write();
+
+    return nwritten;
 }
+
 
 uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
     if (!readable()) {
         return E_BADF;
     }
-    log_printf("read called\n");
 
     // read file inode
-    // spinlock_guard guard(open_close_lock_);
+    // spinlock_guard guard(open_close_lock_); // TODO
     ino_->lock_read();
     size_t nread = 0;
 
     chkfs_fileiter it(ino_);
 
     while (nread < sz) {
-        log_printf("nread=%d, sz=%d%\n", nread, sz);
         // copy data from current block
         if (bcentry* e = it.find(offset_).get_disk_entry()) {
-            log_printf("got disk entry\n");
             unsigned b = it.block_relative_offset();
             size_t ncopy = min(
                 size_t(ino_->size - it.offset()),   // bytes left in file
@@ -469,7 +505,6 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
             );
             memcpy(reinterpret_cast<void*>(addr + nread), e->buf_ + b, ncopy);
             e->put();
-            log_printf("putted disk entry\n");
 
             nread += ncopy;
             offset_ += ncopy;

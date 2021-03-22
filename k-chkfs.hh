@@ -13,7 +13,7 @@ struct bcentry {
     using blocknum_t = chkfs::blocknum_t;
 
     enum estate_t {
-        es_empty, es_allocated, es_loading, es_clean
+        es_empty, es_allocated, es_loading, es_clean, es_dirty
     };
 
     std::atomic<int> estate_ = es_empty;
@@ -21,8 +21,10 @@ struct bcentry {
     spinlock lock_;                      // protects most `estate_` changes
     blocknum_t bn_;                      // disk block number (unless empty)
     unsigned ref_ = 0;                   // reference count
+    std::atomic<unsigned int> wref_ = 0; // Write reference "lock"
     unsigned char* buf_ = nullptr;       // memory buffer used for entry
-    list_links qlink_;                   // Bufcache eviction list link
+    wait_queue wq_;                      // Write reference wait queue
+    list_links qlink_, dlink_;           // Bufcache eviction, dirty list link
 
 
     // return the index of this entry in the buffer cache
@@ -50,12 +52,13 @@ struct bcentry {
 struct bufcache {
     using blocknum_t = bcentry::blocknum_t;
 
-    static constexpr size_t ne = 10;            // Number of entries in the cache
+    static constexpr size_t ne = 10;                // Number of entries in the cache
 
-    spinlock lock_;                             // protects all entries' bn_ and ref_
+    spinlock lock_;                                 // protects all entries' bn_ and ref_
     wait_queue read_wq_;
-    bcentry e_[ne];                             // Entries
-    list<bcentry, &bcentry::qlink_> evictq_;    // Eviction queue (refcount 0 blocks only!)
+    bcentry e_[ne];                                 // Entries
+    list<bcentry, &bcentry::qlink_> evictq_;        // Eviction queue (refcount 0 blocks only!)
+    list<bcentry, &bcentry::dlink_> dirty_list_;    // List of dirty blocks
 
     static inline bufcache& get();
 
