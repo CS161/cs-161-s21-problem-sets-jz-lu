@@ -451,6 +451,10 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_RECEIVEFD:
         syscall_retval = syscall_receivefd(regs);
         break;
+    
+    case SYSCALL_LSEEK:
+        syscall_lseek(regs);
+        break;
 
     default:
         // no such system call
@@ -2321,6 +2325,24 @@ uintptr_t proc::syscall_readdiskfile(regstate* regs) {
     return nread;
 }
 
+
+// proc::syscall_lseek(regstate* regs)
+//    Reppopsitions file offset to the given offset based on flags.
+//    Does not support seeking to outside the file bounds via extensions.
+off_t proc::syscall_lseek(regstate* regs) {
+    int fd = regs->reg_rdi;
+    off_t off = regs->reg_rsi;
+    int origin = regs->reg_rdx;
+    if (!(origin == LSEEK_CUR || origin == LSEEK_END 
+        || origin == LSEEK_SET || origin == LSEEK_SIZE)) {
+        return E_INVAL;
+    }
+    // TODO [MULTITH] lock ftable access
+    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+        return E_BADF;
+    }
+    
+}
 
 // memshow()
 //    Draw a picture of memory (physical and virtual) on the CGA console.

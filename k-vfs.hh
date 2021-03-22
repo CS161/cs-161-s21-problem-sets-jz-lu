@@ -74,6 +74,8 @@ struct disk_vnode:public vnode {
     int close();
     uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
+    off_t lseek(off_t off, int origin);
+    bool seek_invalid(off_t off, int origin);
 };
 
 // Simplified Unix domain socket. A single client and a single server process

@@ -128,6 +128,13 @@ uintptr_t kb_c_vnode::read(uintptr_t addr, size_t sz) {
     return n;
 }
 
+
+// Default behavior of seek.
+off_t vnode::lseek(off_t off, int origin) {
+    return E_SPIPE;
+}
+
+
 // mf can be a nullptr, but then set_mf(mf) must be called before any I/O.
 // syscall_open() uses this feature to prevent memory leaks.
 memfile_vnode::memfile_vnode(int mode, memfile* mf) : vnode(mode) {
@@ -214,6 +221,7 @@ uintptr_t memfile_vnode::read(uintptr_t addr, size_t sz) {
     offset_ += rd_sz;
     return rd_sz;
 }
+
 
 // Assumes lock held.
 bool pipe_bbuf::pipe_empty() {
@@ -520,6 +528,65 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
     ino_->unlock_read();
     return nread;
 }
+
+
+// Helper function: validates a seek. Called by lseek().
+// INVARIANT: assumes inode write locked.
+bool disk_vnode::seek_invalid(off_t off, int origin) {
+    bool invalid = false;
+    long fsz = ino_->size;
+    if ( (origin == LSEEK_SET && off > fsz) 
+        || (origin == LSEEK_CUR && off + offset_> fsz)
+        || (origin == LSEEK_END && off > 0) ) {
+        invalid = true;
+    }
+    return invalid;
+}
+
+
+// Assumes origin is valid. The 
+off_t disk_vnode::lseek(off_t off, int origin) {
+    // Handle the size case separately, which doesn't require a write lock.
+    if (origin == LSEEK_SIZE) {
+        ino_->lock_read();
+        uint64_t sz = ino_->size;
+        ino_->unlock_read();
+        return sz;
+    }
+
+    // Validate the offset and perform the seek. It must be done entirely with the write lock,
+    // even the validation (it only reads, but it must hold the write lock),
+    // to prevent a race condition where the seek is validated, then another thread 
+    // changes the size before the seek is made.
+    ino_->lock_write();
+    if (seek_invalid(off, origin)) {
+        ino_->unlock_write();
+        return E_INVAL;
+    }
+
+    switch (origin) {
+        case LSEEK_SET: {
+            offset_ = off;
+            break;
+        }
+
+        case LSEEK_CUR: {
+            offset_ += off;
+            break;
+        }
+
+        case LSEEK_END: {
+            offset_ = ino_->size + off;
+            break;
+        }
+
+        default:
+            assert(false, "VFS disk vnode lseek assumptions violated\n");
+    }
+    ino_->unlock_write();
+    return offset_;
+}
+
 
 // ===== Unix Domain Sockets ===== //
 

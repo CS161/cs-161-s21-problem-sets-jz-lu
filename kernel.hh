@@ -64,6 +64,11 @@ struct vnode {
     // Read at most sz bytes from the file. Best case paradigm: read as much
     // as possible and return what is read. 
     virtual uintptr_t read(uintptr_t addr, size_t sz);
+
+
+    // Seek to a position in a file, if vnode points to a mem/disk file
+    virtual off_t lseek(off_t off, int origin);
+
     virtual ~vnode();
 };
 
@@ -148,6 +153,7 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_sendfd(regstate* regs);
     int syscall_receivefd(regstate* regs);
     uintptr_t syscall_readdiskfile(regstate* regs);
+    off_t syscall_lseek(regstate* regs);
 
     inline irqstate lock_pagetable_read();
     inline void unlock_pagetable_read(irqstate& irqs);
