@@ -17,11 +17,6 @@ struct elf_program;
 #define NPROC 16
 #define CANARY_EV 894753471348                  // Expected canary value
 
-#ifdef log_2f 
-#define log_2f log_printf 
-#else 
-#define log_2f(...) false 
-#endif
 
 // VFS constants
 #define MAX_FD              8                   // Number of fd's in list.

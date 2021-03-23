@@ -143,6 +143,7 @@ void process_main() {
     assert_memeq(buf, "moon", 4);
 
     sys_close(f);
+    console_printf("lseek test succeeded\n");
 
 
     // extend the file
@@ -175,7 +176,6 @@ void process_main() {
 
     n = sys_read(f, buf, 40);
     assert_eq(n, 40);
-    console_printf("%s\n", buf);
     assert_memeq(buf, "there were any body else whom I knew as ", 40);
 
     sys_close(f);
@@ -184,6 +184,7 @@ void process_main() {
     assert_eq(sz, 8800);
 
     sys_close(wf);
+    console_printf("basic extend tests succeeded\n");
 
 
     // synchronize disk
@@ -222,6 +223,7 @@ void process_main() {
     assert_memeq(buf, "there were any body else whom I knew as ", 40);
 
     sys_close(f);
+    console_printf("more read tests succeeeded\n");
 
 
     // make a big file
@@ -247,6 +249,7 @@ void process_main() {
     assert_eq(sz, 405890);
 
     sys_close(wf);
+    console_printf("big extend test succeeded\n");
 
 
     // compute crc32c

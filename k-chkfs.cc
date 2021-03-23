@@ -3,8 +3,6 @@
 #include "k-chkfsiter.hh"
 
 bufcache bufcache::bc;
-std::atomic<chkfs::blocknum_t> fbb_bn = 0; // Kernel static "cache" of important bn
-std::atomic<chkfs::blocknum_t> data_bn = 0;
 
 bufcache::bufcache() {
 }
@@ -25,6 +23,40 @@ size_t bufcache::evict() {
         blk->lock_.unlock_noirq();
         return blk_index;
     }
+}
+
+
+// bufcache::full()
+//    Returns true if all entries taken.
+bool bufcache::full() {
+    spinlock_guard guard(lock_);
+    for (size_t i = 0; i != ne; ++i) {
+        if (e_[i].empty()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+// bufcache::has_uref_dirty_blocks
+//    Examines the dirty list and checks if there are any unreferenced blocks
+//    so we can call sync on them.
+//    Assumes the bufcache is locked.
+bool bufcache::has_uref_dirty_blocks() {
+    bool has = false;
+    size_t count = 0;
+    for (auto it = dirty_list_.front(); it && count < 2*ne; // Emergency stopping condition
+            it = dirty_list_.next(it), ++count) {
+        auto irqs = it->lock_.lock();
+        if (it->ref_ == 0) {
+            has = true;
+            it->lock_.unlock(irqs);
+            break;
+        }
+        it->lock_.unlock(irqs);
+    }
+    return has;
 }
 
 
@@ -61,9 +93,18 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
             // Cache is full--attempt to evict something.
             empty_slot = evict();
             if (empty_slot == size_t(-1)) {
-                lock_.unlock(irqs);
-                log_printf("[bufcache] no room for block %u\n", bn);
-                return nullptr;
+                log_printf("[bufcache] no room for block %u, attempting to free up buffer\n", bn);
+                if (has_uref_dirty_blocks()) {
+                    log_printf("[bufcache] Buffer has spare room, freeing and trying again\n");
+                    lock_.unlock(irqs);
+                    sync(1); // Drop unreferenced dirty blocks
+                    return get_disk_entry(bn, cleaner);
+                } else {
+                    log_printf("[bufcache] Unable to free up buffer\n");
+                    lock_.unlock(irqs);
+                    return nullptr;
+                }
+                
             }
         }
         i = empty_slot;
@@ -94,6 +135,8 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
     if (!ok) {
         --e_[i].ref_;
         e_[i].clear();
+        log_printf("Load failed in get_disk_entry\n");
+        assert(false);
     }
 
     e_[i].lock_.unlock(irqs);
@@ -184,7 +227,7 @@ void bcentry::put_write() {
 }
 
 // Debugging helper function: visualize dirty list block numbers.
-static void print_dirty_list() {
+[[maybe_unused]] static void print_dirty_list() {
     bufcache& bc = bufcache::get();
     log_printf("Dirty --> [ ");
     for (auto it = bc.dirty_list_.front(); it; it = bc.dirty_list_.next(it)) {
@@ -437,33 +480,14 @@ void chkfsstate::mark_block_free(void* fbb, blocknum_t bn) {
     fbb_view[bn] = true;
 }
 
-void chkfsstate::mark_blocks_free(void* fbb, blocknum_t first, unsigned count) {
-    bitset_view fbb_view(reinterpret_cast<uint64_t*>(fbb), chkfs::bitsperblock);
-    for (blocknum_t bn = first; count > 0; ++bn) {
-        fbb_view[bn] = true;
-        --count;
-    }
-}
-
 void chkfsstate::mark_block_taken(void* fbb, blocknum_t bn) {
     bitset_view fbb_view(reinterpret_cast<uint64_t*>(fbb), chkfs::bitsperblock);
     fbb_view[bn] = false;
 }
 
-void chkfsstate::mark_blocks_taken(void* fbb, blocknum_t first, unsigned count) {
+auto chkfsstate::find_free_range(void* fbb, unsigned count, size_t start) -> blocknum_t {
     bitset_view fbb_view(reinterpret_cast<uint64_t*>(fbb), chkfs::bitsperblock);
-    assert(fbb_view[first]);
-    for (blocknum_t bn = first; count > 0; ++bn) {
-        assert(fbb_view[bn]);
-        fbb_view[bn] = false;
-        assert(!fbb_view[bn]);
-        --count;
-    }
-}
-
-auto chkfsstate::find_free_range(void* fbb, unsigned count) -> blocknum_t {
-    bitset_view fbb_view(reinterpret_cast<uint64_t*>(fbb), chkfs::bitsperblock);
-    size_t last_searched = data_bn; // Index of bit most recently searched
+    size_t last_searched = start; // Index of bit most recently searched
     while (true) {
         // a. Find the next available free block.
         size_t next_available_block = fbb_view.find_lsb(last_searched);
@@ -476,12 +500,28 @@ auto chkfsstate::find_free_range(void* fbb, unsigned count) -> blocknum_t {
 
         // b. Check if the entire contiguous array is available. If so, mark and break.
         last_searched = fbb_view.find_lsz(next_available_block, count); // Next un-free block
-        log_printf("last_searched = %d, next_available = %d, count = %d\n",
+        log_printf("last_searched (lsz) = %d, next_available (lsb) = %d, count = %d\n",
             last_searched, next_available_block, count);
         assert(last_searched > next_available_block);
         if (last_searched - next_available_block == count) {
             return next_available_block;
         }
+    }
+}
+
+void chkfsstate::free_extent(unsigned first, unsigned count) {
+    auto& bc = bufcache::get();
+    auto superblock_entry = bc.get_disk_entry(0);
+    assert(superblock_entry);
+    auto& sb = *reinterpret_cast<chkfs::superblock*>
+        (&superblock_entry->buf_[chkfs::superblock_offset]);
+    superblock_entry->put();
+    log_printf("Data bn = %d, fbb bn = %d\n", sb.data_bn, sb.fbb_bn);
+    auto fbb = bc.get_disk_entry(sb.fbb_bn);
+    unsigned i = 0;
+    for (blocknum_t bn = first; i < count; ++bn, ++i) {
+        mark_block_free(reinterpret_cast<void*>(fbb->buf_), bn);
+        assert(block_is_free(reinterpret_cast<void*>(fbb->buf_), bn));
     }
 }
 
@@ -502,23 +542,19 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
 
     // 1. Load the free block bitmap into the buffer cache and get a pointer to it.
     auto& bc = bufcache::get();
-    if (!(fbb_bn && data_bn)) {
-        auto superblock_entry = bc.get_disk_entry(0);
-        assert(superblock_entry);
-        auto& sb = *reinterpret_cast<chkfs::superblock*>
-            (&superblock_entry->buf_[chkfs::superblock_offset]);
-        superblock_entry->put();
-        fbb_bn = sb.fbb_bn;
-        data_bn = sb.data_bn;
-        log_printf("Initialized data bn = %d, fbb bn = %d\n", sb.data_bn, sb.fbb_bn);
-    }
-    bcentry* fbb = bc.get_disk_entry(fbb_bn);
+    auto superblock_entry = bc.get_disk_entry(0);
+    assert(superblock_entry);
+    auto& sb = *reinterpret_cast<chkfs::superblock*>
+        (&superblock_entry->buf_[chkfs::superblock_offset]);
+    superblock_entry->put();
+    log_printf("Data bn = %d, fbb bn = %d\n", sb.data_bn, sb.fbb_bn);
+    auto fbb = bc.get_disk_entry(sb.fbb_bn);
 
     // 2. Lock that entry and walk through it, attempting to find a contiguous range
     // of `count` blocks. Keep track of the first one. If one is found, walk from the first 
     // one to the last one, use the taken version of `mark_block_free`.
     spinlock_guard guard(fbb->lock_);
-    blocknum_t first = find_free_range(reinterpret_cast<void*>(fbb), count);
+    blocknum_t first = find_free_range(reinterpret_cast<void*>(fbb->buf_), count, 0);
     if (first == (blocknum_t) -1) {
         return E_NOSPC;
     }
@@ -526,8 +562,8 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     // mark_blocks_taken(reinterpret_cast<void*>(fbb), first, count);
     unsigned i = 0;
     for (blocknum_t bn = first; i < count; ++bn, ++i) {
-        mark_block_taken(reinterpret_cast<void*>(fbb), bn);
-        assert(!block_is_free(reinterpret_cast<void*>(fbb), bn));
+        mark_block_taken(reinterpret_cast<void*>(fbb->buf_), bn);
+        assert(!block_is_free(reinterpret_cast<void*>(fbb->buf_), bn));
     }
     return first;
 }

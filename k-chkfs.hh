@@ -61,6 +61,7 @@ struct bufcache {
     list<bcentry, &bcentry::dlink_> dirty_list_;    // List of dirty blocks
 
     static inline bufcache& get();
+    bool full();
 
     bcentry* get_disk_entry(blocknum_t bn,
                             bcentry_clean_function cleaner = nullptr);
@@ -72,6 +73,7 @@ struct bufcache {
 
     bufcache();
     size_t evict();                             // Evict a block and return newly freed block index
+    bool has_uref_dirty_blocks();               // Checks if any dirty blocks are unref'd
     NO_COPY_OR_ASSIGN(bufcache);
 };
 
@@ -109,10 +111,9 @@ struct chkfsstate {
     inode* lookup_inode(const char* name);
     bool block_is_free(void* fbb, blocknum_t bn);
     void mark_block_free(void* fbb, blocknum_t bn);
-    void mark_blocks_free(void* fbb, blocknum_t first, unsigned count);
     void mark_block_taken(void* fbb, blocknum_t bn);
-    void mark_blocks_taken(void* fbb, blocknum_t first, unsigned count);
-    blocknum_t find_free_range(void* fbb, unsigned count);
+    void free_extent(unsigned first, unsigned count);
+    blocknum_t find_free_range(void* fbb, unsigned count, size_t start);
 
     blocknum_t allocate_extent(unsigned count = 1);
 

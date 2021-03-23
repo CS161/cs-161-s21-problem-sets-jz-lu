@@ -455,6 +455,7 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
     chkfs_fileiter it(ino_);
     while (nwritten < sz) {
         // copy data to current block
+        log_printf("hello\n");
         if (bcentry* e = it.find(offset_).get_disk_entry()) {
             unsigned b = it.block_relative_offset();
             size_t ncopy = min(
@@ -491,6 +492,7 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
                     allocsz += ex->count * chkfs::blocksize;
                     if (allocsz - ino_->size > sz - nwritten) {
                         ino_->size += sz - nwritten;
+                        log_printf("fsize changed to %d (exceed) \n", ino_->size);
                         sz_updated = true;
                         break;
                     }
@@ -498,41 +500,28 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
                 if (!sz_updated) {
                     if (allocsz > ino_->size) {
                         ino_->size = allocsz;
+                        log_printf("fsize changed to %d (allocsz) \n", ino_->size);
                     } else {
                         break;
                     }
                 }
             }
         } else {
-            log_printf("About to extend\n");
-            // If no blocks were available, then we must allocate new ones. Round up
-            // remaining write size to nearest blocksize.
             unsigned count = round_up(sz - nwritten, chkfs::blocksize) / chkfs::blocksize;
-            chkfs::extent* ex = ino_->direct;
-            int ex_index = 0;
-            for (; ex->count; ++ex, ++ex_index) {}
-            if (ex_index == chkfs::ndirect-1) {
-                // Out of room in direct extent space!
-                break;
-            }
-
             chkfsstate& fs = chkfsstate::get();
             chkfs::blocknum_t first = fs.allocate_extent(count);
             if (first >= chkfs::blocknum_t(E_MINERROR)) {
                 break;
-            } else {
-                ex->first = first;
-                ex->count = count;
-                ++ex; // Shift null terminator to next entry
-                ex->first = 0;
-                ex->count = 0;
-                ino_->size += chkfs::blocksize * count;
+            }
+            int r = it.insert(first, count);
+            if (r < 0) {
+                fs.free_extent(first, count);
+                break;
             }
         }
     }
     ino_->unlock_write();
-
-    log_printf("Write complete\n");
+    log_printf("write done\n");
     return nwritten;
 }
 
