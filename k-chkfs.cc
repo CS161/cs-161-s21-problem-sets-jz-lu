@@ -89,12 +89,15 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
     // load block
     bool ok = e_[i].load(irqs, cleaner);
 
+
     // unlock and return entry
     if (!ok) {
         --e_[i].ref_;
         e_[i].clear();
     }
+
     e_[i].lock_.unlock(irqs);
+
     
     return ok ? &e_[i] : nullptr;
 }
@@ -281,6 +284,7 @@ void inode::unlock_read() {
 }
 
 void inode::lock_write() {
+    assert(!has_write_lock());
     mlock_t v = 0;
     while (!mlock.compare_exchange_weak(v, mlock_t(-1),
                                         std::memory_order_acquire)) {
@@ -437,6 +441,7 @@ void chkfsstate::mark_blocks_free(void* fbb, blocknum_t first, unsigned count) {
     bitset_view fbb_view(reinterpret_cast<uint64_t*>(fbb), chkfs::bitsperblock);
     for (blocknum_t bn = first; count > 0; ++bn) {
         fbb_view[bn] = true;
+        --count;
     }
 }
 
@@ -447,22 +452,34 @@ void chkfsstate::mark_block_taken(void* fbb, blocknum_t bn) {
 
 void chkfsstate::mark_blocks_taken(void* fbb, blocknum_t first, unsigned count) {
     bitset_view fbb_view(reinterpret_cast<uint64_t*>(fbb), chkfs::bitsperblock);
+    assert(fbb_view[first]);
     for (blocknum_t bn = first; count > 0; ++bn) {
+        assert(fbb_view[bn]);
         fbb_view[bn] = false;
+        assert(!fbb_view[bn]);
+        --count;
     }
 }
 
 auto chkfsstate::find_free_range(void* fbb, unsigned count) -> blocknum_t {
     bitset_view fbb_view(reinterpret_cast<uint64_t*>(fbb), chkfs::bitsperblock);
-    size_t last_searched = 0; // Index of bit most recently searched
-    while (true) { // TODO exit condition on find?
+    size_t last_searched = data_bn; // Index of bit most recently searched
+    while (true) {
         // a. Find the next available free block.
-        size_t next_available_block = fbb_view.find_lsz(last_searched);
+        size_t next_available_block = fbb_view.find_lsb(last_searched);
+        if (next_available_block == (unsigned long) -1 
+            || next_available_block == (1 << 15)) {
+            log_printf("No data blocks left to allocate in chckfs\n");
+            return -1;
+        }
+        assert(block_is_free(reinterpret_cast<void*>(fbb), next_available_block));
 
         // b. Check if the entire contiguous array is available. If so, mark and break.
-        last_searched = fbb_view.find_lsb(next_available_block); // Next un-free block
+        last_searched = fbb_view.find_lsz(next_available_block, count); // Next un-free block
+        log_printf("last_searched = %d, next_available = %d, count = %d\n",
+            last_searched, next_available_block, count);
         assert(last_searched > next_available_block);
-        if (last_searched - next_available_block >= count) {
+        if (last_searched - next_available_block == count) {
             return next_available_block;
         }
     }
@@ -493,6 +510,7 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
         superblock_entry->put();
         fbb_bn = sb.fbb_bn;
         data_bn = sb.data_bn;
+        log_printf("Initialized data bn = %d, fbb bn = %d\n", sb.data_bn, sb.fbb_bn);
     }
     bcentry* fbb = bc.get_disk_entry(fbb_bn);
 
@@ -501,8 +519,16 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     // one to the last one, use the taken version of `mark_block_free`.
     spinlock_guard guard(fbb->lock_);
     blocknum_t first = find_free_range(reinterpret_cast<void*>(fbb), count);
-    // TODO failure condition
-    mark_blocks_taken(reinterpret_cast<void*>(fbb), first, count);
+    if (first == (blocknum_t) -1) {
+        return E_NOSPC;
+    }
+    log_printf("free range from bn=%d of count=%d found\n", first, count);
+    // mark_blocks_taken(reinterpret_cast<void*>(fbb), first, count);
+    unsigned i = 0;
+    for (blocknum_t bn = first; i < count; ++bn, ++i) {
+        mark_block_taken(reinterpret_cast<void*>(fbb), bn);
+        assert(!block_is_free(reinterpret_cast<void*>(fbb), bn));
+    }
     return first;
 }
 

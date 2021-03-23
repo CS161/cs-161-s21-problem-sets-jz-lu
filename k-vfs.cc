@@ -1,6 +1,7 @@
 #include "k-vfs.hh"
 #include "k-ahci.hh"
 #include "k-chkfsiter.hh"
+#include "k-chkfs.hh"
 
 // Helper functions.
 template <typename T>
@@ -447,6 +448,7 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
     if (!writeable()) {
         return E_BADF;
     }
+    
     size_t nwritten = 0;
     bufcache& bc = bufcache::get();
     ino_->lock_write();
@@ -461,7 +463,9 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
                 sz - nwritten                       // bytes left in request
             );
             e->get_write();
+            assert(ino_->has_write_lock());
             memcpy(e->buf_ + b, reinterpret_cast<void*>(addr + nwritten), ncopy);
+            assert(ino_->has_write_lock());
             {
                 spinlock_guard bcguard(bc.lock_);
                 spinlock_guard eguard(e->lock_);
@@ -478,14 +482,57 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
             nwritten += ncopy;
             offset_ += ncopy;
             if (ncopy == 0) {
-                break;
+                // Don't break just yet--if the file has preallocated extents we just need to
+                // increase the size variable of the inode without further action.
+                log_printf("Pseudo-extending a preallocation\n");
+                uint32_t allocsz = 0;
+                bool sz_updated = false;
+                for (chkfs::extent* ex = ino_->direct; ex->count; ++ex) {
+                    allocsz += ex->count * chkfs::blocksize;
+                    if (allocsz - ino_->size > sz - nwritten) {
+                        ino_->size += sz - nwritten;
+                        sz_updated = true;
+                        break;
+                    }
+                }
+                if (!sz_updated) {
+                    if (allocsz > ino_->size) {
+                        ino_->size = allocsz;
+                    } else {
+                        break;
+                    }
+                }
             }
         } else {
-            break;
+            log_printf("About to extend\n");
+            // If no blocks were available, then we must allocate new ones. Round up
+            // remaining write size to nearest blocksize.
+            unsigned count = round_up(sz - nwritten, chkfs::blocksize) / chkfs::blocksize;
+            chkfs::extent* ex = ino_->direct;
+            int ex_index = 0;
+            for (; ex->count; ++ex, ++ex_index) {}
+            if (ex_index == chkfs::ndirect-1) {
+                // Out of room in direct extent space!
+                break;
+            }
+
+            chkfsstate& fs = chkfsstate::get();
+            chkfs::blocknum_t first = fs.allocate_extent(count);
+            if (first >= chkfs::blocknum_t(E_MINERROR)) {
+                break;
+            } else {
+                ex->first = first;
+                ex->count = count;
+                ++ex; // Shift null terminator to next entry
+                ex->first = 0;
+                ex->count = 0;
+                ino_->size += chkfs::blocksize * count;
+            }
         }
     }
     ino_->unlock_write();
 
+    log_printf("Write complete\n");
     return nwritten;
 }
 
@@ -496,8 +543,6 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
     }
 
     // read file inode
-    // spinlock_guard guard(open_close_lock_); // TODO
-    console_printf("ino size = %d\n", ino_->size);
     ino_->lock_read();
     size_t nread = 0;
 
@@ -550,6 +595,7 @@ off_t disk_vnode::lseek(off_t off, int origin) {
     if (origin == LSEEK_SIZE) {
         ino_->lock_read();
         uint64_t sz = ino_->size;
+        log_printf("File has ino_->sz = %d\n", sz);
         ino_->unlock_read();
         return sz;
     }
@@ -590,7 +636,7 @@ off_t disk_vnode::lseek(off_t off, int origin) {
 
 // ===== Unix Domain Sockets ===== //
 
-// Assumes key is validated.
+// Assumes key is valid.
 uds::uds(const char* key) {
     strcpy(key_, key);
     assert(strcmp(key_, key) == 0);
@@ -712,7 +758,6 @@ int uds::connect(proc* client) {
         return 0;
     }
 }
-
 
 int uds::close(proc* closer) {
     // Reset everything under lock.

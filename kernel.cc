@@ -453,7 +453,7 @@ uintptr_t proc::syscall(regstate* regs) {
         break;
     
     case SYSCALL_LSEEK:
-        syscall_lseek(regs);
+        syscall_retval = syscall_lseek(regs);
         break;
 
     default:
@@ -1586,7 +1586,9 @@ int proc::syscall_open(regstate* regs) {
         ino->size = 0; // TODO
         ino->unlock_write();
         bufcache& bc = bufcache::get();
+        ino->lock_read();
         bcentry* e = ino->entry();
+        ino->unlock_read();
         spinlock_guard guard(bc.lock_);
         spinlock_guard eguard(e->lock_);
         if (!e->dlink_.is_linked()) {

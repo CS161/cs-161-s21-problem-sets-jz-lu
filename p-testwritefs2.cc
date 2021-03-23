@@ -88,7 +88,6 @@ void process_main() {
 
     sys_close(f);
 
-
     // synchronize disk
     printf("%s:%d: sync...\n", __FILE__, __LINE__);
 
@@ -176,6 +175,7 @@ void process_main() {
 
     n = sys_read(f, buf, 40);
     assert_eq(n, 40);
+    console_printf("%s\n", buf);
     assert_memeq(buf, "there were any body else whom I knew as ", 40);
 
     sys_close(f);
