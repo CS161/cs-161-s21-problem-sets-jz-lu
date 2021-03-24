@@ -108,8 +108,7 @@ void process_main() {
 
     sys_close(f);
 
-    console_printf("trunc tests succeeded\n");
-    sys_msleep(500);
+    console_printf(0xA00, "trunc tests succeeded\n");
 
     // seek within a file
     printf("%s:%d: lseek...\n", __FILE__, __LINE__);
@@ -143,7 +142,7 @@ void process_main() {
     assert_memeq(buf, "moon", 4);
 
     sys_close(f);
-    console_printf("lseek test succeeded\n");
+    console_printf(0xA00, "lseek test succeeded\n");
 
 
     // extend the file
@@ -184,7 +183,7 @@ void process_main() {
     assert_eq(sz, 8800);
 
     sys_close(wf);
-    console_printf("basic extend tests succeeded\n");
+    console_printf(0xA00, "basic extend tests succeeded\n");
 
 
     // synchronize disk
@@ -223,7 +222,7 @@ void process_main() {
     assert_memeq(buf, "there were any body else whom I knew as ", 40);
 
     sys_close(f);
-    console_printf("more read tests succeeeded\n");
+    console_printf(0xA00, "more read tests succeeeded\n");
 
 
     // make a big file
@@ -249,7 +248,7 @@ void process_main() {
     assert_eq(sz, 405890);
 
     sys_close(wf);
-    console_printf("big extend test succeeded\n");
+    console_printf(0xA00, "big extend test succeeded\n");
 
 
     // compute crc32c
@@ -274,6 +273,7 @@ void process_main() {
     assert_eq(crc, 0x76954FBBU);
 
     sys_close(f);
+    console_printf(0xA00, "first checksum test succeeded\n");
 
 
     // synchronize disk
@@ -305,6 +305,7 @@ void process_main() {
     assert_eq(crc, 0x76954FBBU);
 
     sys_close(f);
+    console_printf(0xA00, "checksum tests succeeded\n");
 
 
     // extend two files through alternating writes, encouraging creation of
@@ -343,6 +344,8 @@ void process_main() {
     sys_close(f);
     sys_close(f2);
 
+    console_printf(0xA00, "basic extension tests succeeded\n");
+
 
     // synchronize disk
     printf("%s:%d: sync...\n", __FILE__, __LINE__);
@@ -355,6 +358,7 @@ void process_main() {
     printf("%s:%d: check checksums", __FILE__, __LINE__);
 
     f = sys_open("thoreau.txt", OF_READ);
+    assert_eq(sys_lseek(f, 0, LSEEK_SIZE), 527650);
 
     crc = 0;
     sz = 0;
@@ -393,7 +397,9 @@ void process_main() {
 
     sys_close(f);
 
+    console_printf(0xA00, "multipel extension tests succeeded.\n");
 
-    printf("testwritefs2 succeeded.\n");
+
+    console_printf(0xB00, "testwritefs2 succeeded.\n");
     sys_exit(0);
 }

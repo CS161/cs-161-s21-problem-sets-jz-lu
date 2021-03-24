@@ -34,7 +34,7 @@ void process_main(int argc, char** argv) {
         assert_eq(errcode3, E_BADF);
         console_printf("[InvalidUDS] [Client] Sent an invalid fd...\n");
 
-        console_printf(0x8A00, "[InvalidUDS] [Client] Test succeeded.\n");
+        console_printf(0xA00, "[InvalidUDS] [Client] Test succeeded.\n");
     }
 
     sys_exit(0);

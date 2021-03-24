@@ -452,10 +452,10 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
     size_t nwritten = 0;
     bufcache& bc = bufcache::get();
     ino_->lock_write();
+    uint32_t old_ino_sz = ino_->size;
     chkfs_fileiter it(ino_);
     while (nwritten < sz) {
         // copy data to current block
-        log_printf("hello\n");
         if (bcentry* e = it.find(offset_).get_disk_entry()) {
             unsigned b = it.block_relative_offset();
             size_t ncopy = min(
@@ -486,42 +486,77 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
                 // Don't break just yet--if the file has preallocated extents we just need to
                 // increase the size variable of the inode without further action.
                 log_printf("Pseudo-extending a preallocation\n");
-                uint32_t allocsz = 0;
-                bool sz_updated = false;
-                for (chkfs::extent* ex = ino_->direct; ex->count; ++ex) {
-                    allocsz += ex->count * chkfs::blocksize;
-                    if (allocsz - ino_->size > sz - nwritten) {
-                        ino_->size += sz - nwritten;
-                        log_printf("fsize changed to %d (exceed) \n", ino_->size);
-                        sz_updated = true;
-                        break;
-                    }
+                {// uint32_t allocsz = 0;
+                // bool sz_updated = false;
+                // for (chkfs::extent* ex = ino_->direct; ex->count; ++ex) {
+                //     allocsz += ex->count * chkfs::blocksize;
+                //     if (allocsz - ino_->size > sz - nwritten) {
+                //         ino_->size += sz - nwritten;
+                //         log_printf("fsize changed to %d (exceed) \n", ino_->size);
+                //         sz_updated = true;
+                //         break;
+                //     }
+                // }
+                // if (!sz_updated) {
+                //     if (allocsz > ino_->size) {
+                //         ino_->size = allocsz;
+                //         log_printf("fsize changed to %d (allocsz) \n", ino_->size);
+                //     } else {
+                //         break;
+                //     }}
                 }
-                if (!sz_updated) {
-                    if (allocsz > ino_->size) {
-                        ino_->size = allocsz;
-                        log_printf("fsize changed to %d (allocsz) \n", ino_->size);
-                    } else {
-                        break;
+                
+                if (it.find(offset_+sz-nwritten).active()) {
+                    ino_->size += sz - nwritten;
+                    log_printf("fsize changed to %d (weak exceed)\n", ino_->size);
+                } else {
+                    it.find(offset_);
+                    log_printf("Currently at %d, want to be at %d\n", 
+                        offset_, offset_+sz-nwritten);
+                    uint32_t total_sz_diff = 0;
+                    while (it.active()) {
+                        off_t old_off = it.offset();
+                        it.next();
+                        log_printf("current offset = %d, new offset = %d\n", old_off, it.offset());
+                        total_sz_diff += it.offset() - old_off;
                     }
+                    ino_->size += total_sz_diff;
+                    log_printf("fsize changed by %d to %d (allocsz)\n", total_sz_diff, ino_->size);
                 }
             }
+
         } else {
+            log_printf("About to true alloc, need %d more bytes\n", sz-nwritten);
             unsigned count = round_up(sz - nwritten, chkfs::blocksize) / chkfs::blocksize;
             chkfsstate& fs = chkfsstate::get();
             chkfs::blocknum_t first = fs.allocate_extent(count);
             if (first >= chkfs::blocknum_t(E_MINERROR)) {
+                log_printf("Error in allocate_extent: unable to allocate new extent\n");
                 break;
             }
             int r = it.insert(first, count);
             if (r < 0) {
+                log_printf("Error in insert: unable to add new extent to indirect\n");
                 fs.free_extent(first, count);
                 break;
             }
+            ino_->size += sz - nwritten;
+            assert(it.find(ino_->size-1).active());
+            log_printf("fsize changed to %d (true extend) \n", ino_->size);
+        }
+    }
+    if (old_ino_sz != ino_->size) {
+        spinlock_guard bcguard(bc.lock_);
+        bcentry* ie = ino_->entry();
+        spinlock_guard eguard(ie->lock_);
+        if (!ie->dlink_.is_linked()) {
+            ie->estate_ = bcentry::es_dirty;
+            bc.dirty_list_.push_back(ie);
+            assert(bc.dirty_list_.front());
+            assert(ie->dlink_.is_linked());
         }
     }
     ino_->unlock_write();
-    log_printf("write done\n");
     return nwritten;
 }
 
@@ -555,10 +590,11 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
                 break;
             }
         } else {
+            log_printf("Reached inactive file offset %d\n", it.offset());
+            assert(it.empty());
             break;
         }
     }
-
     ino_->unlock_read();
     return nread;
 }
@@ -584,7 +620,6 @@ off_t disk_vnode::lseek(off_t off, int origin) {
     if (origin == LSEEK_SIZE) {
         ino_->lock_read();
         uint64_t sz = ino_->size;
-        log_printf("File has ino_->sz = %d\n", sz);
         ino_->unlock_read();
         return sz;
     }

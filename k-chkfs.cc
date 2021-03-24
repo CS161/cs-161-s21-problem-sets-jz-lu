@@ -97,7 +97,7 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
                 if (has_uref_dirty_blocks()) {
                     log_printf("[bufcache] Buffer has spare room, freeing and trying again\n");
                     lock_.unlock(irqs);
-                    sync(1); // Drop unreferenced dirty blocks
+                    sync(0);
                     return get_disk_entry(bn, cleaner);
                 } else {
                     log_printf("[bufcache] Unable to free up buffer\n");
@@ -254,7 +254,9 @@ int bufcache::sync(int drop) {
     // NOTE: the bufcache lock need not be held here since local_dirty is, well, local to the function.
     while (bcentry* e = local_dirty.pop_front()) {
         e->get_write();
+        log_printf("sata disk write starting\n");
         sata_disk->write(e->buf_, chkfs::blocksize, e->bn_ * chkfs::blocksize);
+        log_printf("sata disk write done\n");
         {
         spinlock_guard eguard(e->lock_);
         e->estate_ = bcentry::es_clean;
@@ -547,7 +549,6 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     auto& sb = *reinterpret_cast<chkfs::superblock*>
         (&superblock_entry->buf_[chkfs::superblock_offset]);
     superblock_entry->put();
-    log_printf("Data bn = %d, fbb bn = %d\n", sb.data_bn, sb.fbb_bn);
     auto fbb = bc.get_disk_entry(sb.fbb_bn);
 
     // 2. Lock that entry and walk through it, attempting to find a contiguous range

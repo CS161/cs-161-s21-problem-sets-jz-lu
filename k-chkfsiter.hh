@@ -41,7 +41,7 @@ class chkfs_fileiter {
     // Like `find(offset() - delta)`
     inline chkfs_fileiter& operator-=(ssize_t delta);
 
-
+    
     // Move the iterator to the next larger file offset with a different
     // present block. At the end of the file, the iterator becomes `!active()`.
     void next();
@@ -99,6 +99,8 @@ inline off_t chkfs_fileiter::offset() const {
     return off_;
 }
 inline bool chkfs_fileiter::active() const {
+    if (!eptr_) log_printf("eptr_ null\n");
+    else if (eptr_->count == 0) log_printf("count == 0\n");
     return eptr_ && eptr_->count != 0;
 }
 inline unsigned chkfs_fileiter::block_relative_offset() const {
@@ -116,7 +118,6 @@ inline auto chkfs_fileiter::blocknum() const -> blocknum_t {
 }
 inline bcentry* chkfs_fileiter::get_disk_entry() const {
     blocknum_t bn = blocknum();
-    log_printf("it bn = %d\n", bn);
     return bn ? bufcache::get().get_disk_entry(bn) : nullptr;
 }
 
