@@ -452,14 +452,17 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
     size_t nwritten = 0;
     bufcache& bc = bufcache::get();
     ino_->lock_write();
+    log_printf("write starting with ino vn %p, size = %d, offset_ = %d\n", 
+        this, ino_->size, offset_);
     uint32_t old_ino_sz = ino_->size;
     chkfs_fileiter it(ino_);
     while (nwritten < sz) {
+        log_printf("loop start offset_ = %d\n", offset_);
         // copy data to current block
         if (bcentry* e = it.find(offset_).get_disk_entry()) {
             unsigned b = it.block_relative_offset();
             size_t ncopy = min(
-                size_t(ino_->size - it.offset()),   // bytes left in file
+                // size_t(ino_->size - it.offset()),   // bytes left in file
                 chkfs::blocksize - b,               // bytes left in block
                 sz - nwritten                       // bytes left in request
             );
@@ -482,50 +485,16 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
 
             nwritten += ncopy;
             offset_ += ncopy;
+            assert(!it.find(offset_-1).empty());
+            log_printf("offset_ updated to %d that is%s mod 4096\n", 
+                offset_, offset_%chkfs::blocksize ? " NOT" : "");
             if (ncopy == 0) {
-                // Don't break just yet--if the file has preallocated extents we just need to
-                // increase the size variable of the inode without further action.
-                log_printf("Pseudo-extending a preallocation\n");
-                {// uint32_t allocsz = 0;
-                // bool sz_updated = false;
-                // for (chkfs::extent* ex = ino_->direct; ex->count; ++ex) {
-                //     allocsz += ex->count * chkfs::blocksize;
-                //     if (allocsz - ino_->size > sz - nwritten) {
-                //         ino_->size += sz - nwritten;
-                //         log_printf("fsize changed to %d (exceed) \n", ino_->size);
-                //         sz_updated = true;
-                //         break;
-                //     }
-                // }
-                // if (!sz_updated) {
-                //     if (allocsz > ino_->size) {
-                //         ino_->size = allocsz;
-                //         log_printf("fsize changed to %d (allocsz) \n", ino_->size);
-                //     } else {
-                //         break;
-                //     }}
-                }
-                
-                if (it.find(offset_+sz-nwritten).active()) {
-                    ino_->size += sz - nwritten;
-                    log_printf("fsize changed to %d (weak exceed)\n", ino_->size);
-                } else {
-                    it.find(offset_);
-                    log_printf("Currently at %d, want to be at %d\n", 
-                        offset_, offset_+sz-nwritten);
-                    uint32_t total_sz_diff = 0;
-                    while (it.active()) {
-                        off_t old_off = it.offset();
-                        it.next();
-                        log_printf("current offset = %d, new offset = %d\n", old_off, it.offset());
-                        total_sz_diff += it.offset() - old_off;
-                    }
-                    ino_->size += total_sz_diff;
-                    log_printf("fsize changed by %d to %d (allocsz)\n", total_sz_diff, ino_->size);
-                }
+                // break;
             }
 
         } else {
+            log_printf("ALLOC offset_ = %d, mod = %d\n", offset_, offset_ % chkfs::blocksize);
+            assert(it.offset() % chkfs::blocksize == 0);
             log_printf("About to true alloc, need %d more bytes\n", sz-nwritten);
             unsigned count = round_up(sz - nwritten, chkfs::blocksize) / chkfs::blocksize;
             chkfsstate& fs = chkfsstate::get();
@@ -540,15 +509,18 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
                 fs.free_extent(first, count);
                 break;
             }
-            ino_->size += sz - nwritten;
-            assert(it.find(ino_->size-1).active());
-            log_printf("fsize changed to %d (true extend) \n", ino_->size);
+            // ino_->size += sz - nwritten;
+            // log_printf("it offset = %d, ino size = %d\n", it.offset(), ino_->size);
+            // assert(it.find(ino_->size-1).active());
+            // log_printf("fsize changed to %d (true extend) \n", ino_->size);
         }
+        ino_->size = max((uint64_t) ino_->size, offset_ + sz - nwritten);
     }
     if (old_ino_sz != ino_->size) {
         spinlock_guard bcguard(bc.lock_);
         bcentry* ie = ino_->entry();
         spinlock_guard eguard(ie->lock_);
+        log_printf("inode bn=%d marked as dirty with newsize = %d\n", ie->bn_, ino_->size);
         if (!ie->dlink_.is_linked()) {
             ie->estate_ = bcentry::es_dirty;
             bc.dirty_list_.push_back(ie);
@@ -616,6 +588,7 @@ bool disk_vnode::seek_invalid(off_t off, int origin) {
 
 // Assumes origin is valid. The 
 off_t disk_vnode::lseek(off_t off, int origin) {
+    spinlock_guard guard(open_close_lock_);
     // Handle the size case separately, which doesn't require a write lock.
     if (origin == LSEEK_SIZE) {
         ino_->lock_read();
@@ -633,6 +606,7 @@ off_t disk_vnode::lseek(off_t off, int origin) {
         ino_->unlock_write();
         return E_INVAL;
     }
+    log_printf("LSEEK CALLED\n");
 
     switch (origin) {
         case LSEEK_SET: {
@@ -901,3 +875,4 @@ void uds::wake_all() {
     clq_.wake_all();
     servq_.wake_all();
 }
+

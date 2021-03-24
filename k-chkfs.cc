@@ -212,7 +212,7 @@ void bcentry::get_write() {
         waiter().block_until(wq_, [&] () {
             return (wref_ == 0);
         }, guard);
-    } 
+    }
     ++wref_;
 }
 
@@ -596,3 +596,4 @@ ssize_t diskfile_loader::get_page(uint8_t** pg, size_t off) {
 void diskfile_loader::put_page() {
     curr_pg_->put();
 }
+
