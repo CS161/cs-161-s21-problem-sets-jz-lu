@@ -113,6 +113,7 @@ struct chkfsstate {
     void mark_block_free(void* fbb, blocknum_t bn);
     void mark_block_taken(void* fbb, blocknum_t bn);
     void free_extent(unsigned first, unsigned count);
+    bool examine_block(blocknum_t bn);
     blocknum_t find_free_range(void* fbb, unsigned count, size_t start);
 
     blocknum_t allocate_extent(unsigned count = 1);

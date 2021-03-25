@@ -206,12 +206,21 @@ void bcentry::put() {
 // bcentry::get_write()
 //    Obtains a write reference for this entry.
 void bcentry::get_write() {
+    bufcache& bc = bufcache::get();
+    spinlock_guard bcguard(bc.lock_);
     spinlock_guard guard(lock_);
     assert(wref_ == 0 || wref_ == 1);
     if (wref_ == 1) {
         waiter().block_until(wq_, [&] () {
             return (wref_ == 0);
         }, guard);
+    }
+    if (!dlink_.is_linked()) {
+        estate_ = bcentry::es_dirty;
+        bc.dirty_list_.push_back(this);
+        assert(bc.dirty_list_.front());
+        assert(dlink_.is_linked());
+        log_printf("Pushed bn=%d onto dirty list\n", bn_);
     }
     ++wref_;
 }
@@ -518,13 +527,31 @@ void chkfsstate::free_extent(unsigned first, unsigned count) {
     auto& sb = *reinterpret_cast<chkfs::superblock*>
         (&superblock_entry->buf_[chkfs::superblock_offset]);
     superblock_entry->put();
-    log_printf("Data bn = %d, fbb bn = %d\n", sb.data_bn, sb.fbb_bn);
+    log_printf("Free extent called\n");
     auto fbb = bc.get_disk_entry(sb.fbb_bn);
+    auto irqs = fbb->lock_.lock();
     unsigned i = 0;
     for (blocknum_t bn = first; i < count; ++bn, ++i) {
         mark_block_free(reinterpret_cast<void*>(fbb->buf_), bn);
         assert(block_is_free(reinterpret_cast<void*>(fbb->buf_), bn));
     }
+    fbb->lock_.unlock(irqs);
+    fbb->put();
+}
+
+bool chkfsstate::examine_block(blocknum_t bn) {
+    auto& bc = bufcache::get();
+    auto superblock_entry = bc.get_disk_entry(0);
+    assert(superblock_entry);
+    auto& sb = *reinterpret_cast<chkfs::superblock*>
+        (&superblock_entry->buf_[chkfs::superblock_offset]);
+    superblock_entry->put();
+    auto fbb = bc.get_disk_entry(sb.fbb_bn);
+    auto irqs = fbb->lock_.lock();
+    bool isfree = block_is_free(fbb, bn);
+    fbb->lock_.unlock(irqs);
+    fbb->put();
+    return isfree;
 }
 
 // chkfsstate::allocate_extent(unsigned count)
@@ -539,6 +566,7 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     // First just verify that count isn't insane--must be less than 2^15 since
     // that's what our bitmap has.
     if (count > (1 << 15)) {
+        log_printf("chkfs unable to handle allocation of %d size\n", count);
         return E_FBIG;
     }
 
@@ -554,7 +582,7 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     // 2. Lock that entry and walk through it, attempting to find a contiguous range
     // of `count` blocks. Keep track of the first one. If one is found, walk from the first 
     // one to the last one, use the taken version of `mark_block_free`.
-    spinlock_guard guard(fbb->lock_);
+    auto irqs = fbb->lock_.lock();
     blocknum_t first = find_free_range(reinterpret_cast<void*>(fbb->buf_), count, 0);
     if (first == (blocknum_t) -1) {
         return E_NOSPC;
@@ -566,6 +594,8 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
         mark_block_taken(reinterpret_cast<void*>(fbb->buf_), bn);
         assert(!block_is_free(reinterpret_cast<void*>(fbb->buf_), bn));
     }
+    fbb->lock_.unlock(irqs);
+    fbb->put();
     return first;
 }
 

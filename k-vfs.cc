@@ -450,19 +450,41 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
     }
     
     size_t nwritten = 0;
-    bufcache& bc = bufcache::get();
     ino_->lock_write();
     log_printf("write starting with ino vn %p, size = %d, offset_ = %d\n", 
         this, ino_->size, offset_);
-    uint32_t old_ino_sz = ino_->size;
     chkfs_fileiter it(ino_);
+
+    // Compute allocation size ("true" inode size).
+    while (it.active()) {
+        it.next();
+    }
+    uint32_t allocation_sz = it.offset();
+
+    if (offset_ + sz > allocation_sz) {
+        log_printf("ALLOC offset_ = %d, mod = %d, need %d more bytes\n", 
+            offset_, offset_ % chkfs::blocksize, offset_ + sz - allocation_sz);
+        unsigned count = round_up(offset_ + sz - allocation_sz, chkfs::blocksize) / chkfs::blocksize;
+        chkfsstate& fs = chkfsstate::get();
+        chkfs::blocknum_t first = fs.allocate_extent(count);
+        if (first >= chkfs::blocknum_t(E_MINERROR)) {
+            log_printf("Error in allocate_extent: unable to allocate new extent\n");
+        }
+        int r = it.insert(first, count);
+        if (r < 0) {
+            log_printf("Error in insert: unable to add new extent to indirect\n");
+            fs.free_extent(first, count);
+        }
+    }
+
+    allocation_sz = min(offset_ + sz, (uint64_t) allocation_sz);
+    
     while (nwritten < sz) {
         log_printf("loop start offset_ = %d\n", offset_);
         // copy data to current block
         if (bcentry* e = it.find(offset_).get_disk_entry()) {
             unsigned b = it.block_relative_offset();
             size_t ncopy = min(
-                // size_t(ino_->size - it.offset()),   // bytes left in file
                 chkfs::blocksize - b,               // bytes left in block
                 sz - nwritten                       // bytes left in request
             );
@@ -470,64 +492,27 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
             assert(ino_->has_write_lock());
             memcpy(e->buf_ + b, reinterpret_cast<void*>(addr + nwritten), ncopy);
             assert(ino_->has_write_lock());
-            {
-                spinlock_guard bcguard(bc.lock_);
-                spinlock_guard eguard(e->lock_);
-                if (!e->dlink_.is_linked()) {
-                    e->estate_ = bcentry::es_dirty;
-                    bc.dirty_list_.push_back(e);
-                    assert(bc.dirty_list_.front());
-                    assert(e->dlink_.is_linked());
-                }
-            }
             e->put_write();
             e->put();
 
             nwritten += ncopy;
             offset_ += ncopy;
-            assert(!it.find(offset_-1).empty());
             log_printf("offset_ updated to %d that is%s mod 4096\n", 
                 offset_, offset_%chkfs::blocksize ? " NOT" : "");
             if (ncopy == 0) {
-                // break;
+                log_printf("Wrote nothing\n");
             }
+        } else { // Allocate a new extent
+            break;
+        }
+    }
+    if (ino_->size < offset_) {
+        ino_->entry()->get_write();
+        ino_->size = offset_;
+        ino_->entry()->put_write();
+    }
 
-        } else {
-            log_printf("ALLOC offset_ = %d, mod = %d\n", offset_, offset_ % chkfs::blocksize);
-            assert(it.offset() % chkfs::blocksize == 0);
-            log_printf("About to true alloc, need %d more bytes\n", sz-nwritten);
-            unsigned count = round_up(sz - nwritten, chkfs::blocksize) / chkfs::blocksize;
-            chkfsstate& fs = chkfsstate::get();
-            chkfs::blocknum_t first = fs.allocate_extent(count);
-            if (first >= chkfs::blocknum_t(E_MINERROR)) {
-                log_printf("Error in allocate_extent: unable to allocate new extent\n");
-                break;
-            }
-            int r = it.insert(first, count);
-            if (r < 0) {
-                log_printf("Error in insert: unable to add new extent to indirect\n");
-                fs.free_extent(first, count);
-                break;
-            }
-            // ino_->size += sz - nwritten;
-            // log_printf("it offset = %d, ino size = %d\n", it.offset(), ino_->size);
-            // assert(it.find(ino_->size-1).active());
-            // log_printf("fsize changed to %d (true extend) \n", ino_->size);
-        }
-        ino_->size = max((uint64_t) ino_->size, offset_ + sz - nwritten);
-    }
-    if (old_ino_sz != ino_->size) {
-        spinlock_guard bcguard(bc.lock_);
-        bcentry* ie = ino_->entry();
-        spinlock_guard eguard(ie->lock_);
-        log_printf("inode bn=%d marked as dirty with newsize = %d\n", ie->bn_, ino_->size);
-        if (!ie->dlink_.is_linked()) {
-            ie->estate_ = bcentry::es_dirty;
-            bc.dirty_list_.push_back(ie);
-            assert(bc.dirty_list_.front());
-            assert(ie->dlink_.is_linked());
-        }
-    }
+    log_printf("wrote %d chars\n", nwritten);
     ino_->unlock_write();
     return nwritten;
 }

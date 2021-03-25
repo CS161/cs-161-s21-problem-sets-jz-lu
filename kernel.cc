@@ -1583,20 +1583,10 @@ int proc::syscall_open(regstate* regs) {
 
     if (trunc) { // Truncate if requested
         ino->lock_write();
-        ino->size = 0; // TODO
+        ino->entry()->get_write();
+        ino->size = 0;
+        ino->entry()->put_write();
         ino->unlock_write();
-        bufcache& bc = bufcache::get();
-        ino->lock_read();
-        bcentry* e = ino->entry();
-        ino->unlock_read();
-        spinlock_guard guard(bc.lock_);
-        spinlock_guard eguard(e->lock_);
-        if (!e->dlink_.is_linked()) {
-            e->estate_ = bcentry::es_dirty;
-            bc.dirty_list_.push_back(e);
-            assert(bc.dirty_list_.front());
-            assert(e->dlink_.is_linked());
-        }
     }
 
     if (VFS_MF_PARANOIA >= 2) {
