@@ -529,13 +529,13 @@ void chkfsstate::free_extent(unsigned first, unsigned count) {
     superblock_entry->put();
     log_printf("Free extent called\n");
     auto fbb = bc.get_disk_entry(sb.fbb_bn);
-    auto irqs = fbb->lock_.lock();
+    fbb->get_write();
     unsigned i = 0;
     for (blocknum_t bn = first; i < count; ++bn, ++i) {
         mark_block_free(reinterpret_cast<void*>(fbb->buf_), bn);
         assert(block_is_free(reinterpret_cast<void*>(fbb->buf_), bn));
     }
-    fbb->lock_.unlock(irqs);
+    fbb->put_write();
     fbb->put();
 }
 
@@ -547,9 +547,7 @@ bool chkfsstate::examine_block(blocknum_t bn) {
         (&superblock_entry->buf_[chkfs::superblock_offset]);
     superblock_entry->put();
     auto fbb = bc.get_disk_entry(sb.fbb_bn);
-    auto irqs = fbb->lock_.lock();
     bool isfree = block_is_free(fbb, bn);
-    fbb->lock_.unlock(irqs);
     fbb->put();
     return isfree;
 }
@@ -582,7 +580,7 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     // 2. Lock that entry and walk through it, attempting to find a contiguous range
     // of `count` blocks. Keep track of the first one. If one is found, walk from the first 
     // one to the last one, use the taken version of `mark_block_free`.
-    auto irqs = fbb->lock_.lock();
+    fbb->get_write();
     blocknum_t first = find_free_range(reinterpret_cast<void*>(fbb->buf_), count, 0);
     if (first == (blocknum_t) -1) {
         return E_NOSPC;
@@ -594,7 +592,7 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
         mark_block_taken(reinterpret_cast<void*>(fbb->buf_), bn);
         assert(!block_is_free(reinterpret_cast<void*>(fbb->buf_), bn));
     }
-    fbb->lock_.unlock(irqs);
+    fbb->put_write();
     fbb->put();
     return first;
 }
