@@ -16,6 +16,7 @@ size_t bufcache::evict() {
     if (!blk) { // Nothing to pop
         return -1;
     } else { // Compute the index into the bufcache and return it
+        log_printf("EVICTING block %d\n", blk->bn_);
         size_t blk_index = blk->index();
         assert(blk_index < ne);
         blk->lock_.lock_noirq();
@@ -91,6 +92,7 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
     if (i == ne) {
         if (empty_slot == size_t(-1)) {
             // Cache is full--attempt to evict something.
+            log_printf("ABOUT TO EVICT: making room for %d\n", bn);
             empty_slot = evict();
             if (empty_slot == size_t(-1)) {
                 log_printf("[bufcache] no room for block %u, attempting to free up buffer\n", bn);
@@ -124,6 +126,15 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
     if (e_[i].qlink_.is_linked()) {
         evictq_.erase(&e_[i]);
     }
+    log_printf("CACHE STATE -->[ ");
+    for (int j = 0; j < ne; ++j) {
+        if (e_[j].estate_ != bcentry::es_empty) {
+            log_printf("%d:%d ", e_[j].bn_, e_[j].ref_);
+        } else {
+            log_printf("-:- ");
+        }
+    }
+    log_printf("]\n");
     // no longer need cache lock
     lock_.unlock_noirq();
 
@@ -200,6 +211,7 @@ void bcentry::put() {
     if (--ref_ == 0 && bn_ != 0 && estate_ != es_dirty) {
         bc.evictq_.push_back(this);
     }
+    log_printf("REF-UPDATE of bn %d to %d\n", bn_, ref_);
 }
 
 
@@ -554,7 +566,7 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     // 2. Lock that entry and walk through it, attempting to find a contiguous range
     // of `count` blocks. Keep track of the first one. If one is found, walk from the first 
     // one to the last one, use the taken version of `mark_block_free`.
-    spinlock_guard guard(fbb->lock_);
+    fbb->get_write();
     blocknum_t first = find_free_range(reinterpret_cast<void*>(fbb->buf_), count, 0);
     if (first == (blocknum_t) -1) {
         return E_NOSPC;
@@ -566,6 +578,19 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
         mark_block_taken(reinterpret_cast<void*>(fbb->buf_), bn);
         assert(!block_is_free(reinterpret_cast<void*>(fbb->buf_), bn));
     }
+
+    {
+        spinlock_guard bcguard(bc.lock_);
+        spinlock_guard eguard(fbb->lock_);
+        if (!fbb->dlink_.is_linked()) {
+            fbb->estate_ = bcentry::es_dirty;
+            bc.dirty_list_.push_back(fbb);
+            assert(bc.dirty_list_.front());
+            assert(fbb->dlink_.is_linked());
+        }
+    }
+    fbb->put_write();
+    fbb->put();
     return first;
 }
 
