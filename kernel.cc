@@ -1503,7 +1503,7 @@ static int pathname_invalid(proc* p, const char* pathname) {
         }
     }
 
-    if (pos >= MAX_FILENAME_LEN) {
+    if (pos >= chkfs::maxnamelen) {
         if (VFS_MF_PARANOIA >= 1) {
             log_printf("[pathname_invalid] Invalid file name: too long. Ensure buf ptr is correct\n");
         }
@@ -1523,18 +1523,17 @@ int proc::syscall_open(regstate* regs) {
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_open] Open called\n");
     }
-
     if (!sata_disk) {
         return E_IO;
     }
 
     // First, validate arguments.
     const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
-    if (pathname_invalid(this, pathname)) { // Check filename
+    if (int r = pathname_invalid(this, pathname)) { // Check filename
         if (VFS_PARANOIA >= 1) {
             log_printf("[syscall_open] Invalid pathname\n");
         }
-        return E_FAULT;
+        return r;
     }
     int flags = regs->reg_rsi;
     bool create = (flags & OF_CREAT);
@@ -1564,9 +1563,13 @@ int proc::syscall_open(regstate* regs) {
     // Read the inode of the directory.
     auto ino = chkfsstate::get().lookup_inode(pathname);
     if (!ino) {
-        return E_NOENT;
+        if (create && (mode & OF_WRITE)) {
+            // Create a new file and set ino to point to its new inode.
+            ino = disk_vnode::create_file(pathname);
+        } else {
+            return E_NOENT;
+        }
     }
-    log_printf("[open] ino size = %d\n", ino->size);
     disk_vnode* dvn = knew<disk_vnode>(ino, mode);
     if (!dvn) {
         if (VFS_MF_PARANOIA >= 1) {
@@ -1581,22 +1584,12 @@ int proc::syscall_open(regstate* regs) {
     fdtable[fd] = reinterpret_cast<vnode*>(dvn);
     //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
 
-    if (trunc) { // Truncate if requested
-        ino->lock_write();
-        ino->size = 0; // TODO
+    if (trunc) { // Truncate if requested.
+        ino->lock_write(); // TODO are both locks necessary
+        ino->entry()->get_write();
+        ino->size = 0;
+        ino->entry()->put_write();
         ino->unlock_write();
-        bufcache& bc = bufcache::get();
-        ino->lock_read();
-        bcentry* e = ino->entry();
-        ino->unlock_read();
-        spinlock_guard guard(bc.lock_);
-        spinlock_guard eguard(e->lock_);
-        if (!e->dlink_.is_linked()) {
-            e->estate_ = bcentry::es_dirty;
-            bc.dirty_list_.push_back(e);
-            assert(bc.dirty_list_.front());
-            assert(e->dlink_.is_linked());
-        }
     }
 
     if (VFS_MF_PARANOIA >= 2) {

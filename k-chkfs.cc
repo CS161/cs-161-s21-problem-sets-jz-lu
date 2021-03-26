@@ -16,7 +16,6 @@ size_t bufcache::evict() {
     if (!blk) { // Nothing to pop
         return -1;
     } else { // Compute the index into the bufcache and return it
-        log_printf("EVICTING block %d\n", blk->bn_);
         size_t blk_index = blk->index();
         assert(blk_index < ne);
         blk->lock_.lock_noirq();
@@ -92,7 +91,6 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
     if (i == ne) {
         if (empty_slot == size_t(-1)) {
             // Cache is full--attempt to evict something.
-            log_printf("ABOUT TO EVICT: making room for %d\n", bn);
             empty_slot = evict();
             if (empty_slot == size_t(-1)) {
                 log_printf("[bufcache] no room for block %u, attempting to free up buffer\n", bn);
@@ -126,15 +124,6 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
     if (e_[i].qlink_.is_linked()) {
         evictq_.erase(&e_[i]);
     }
-    log_printf("CACHE STATE -->[ ");
-    for (int j = 0; j < ne; ++j) {
-        if (e_[j].estate_ != bcentry::es_empty) {
-            log_printf("%d:%d ", e_[j].bn_, e_[j].ref_);
-        } else {
-            log_printf("-:- ");
-        }
-    }
-    log_printf("]\n");
     // no longer need cache lock
     lock_.unlock_noirq();
 
@@ -151,8 +140,6 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
     }
 
     e_[i].lock_.unlock(irqs);
-
-    
     return ok ? &e_[i] : nullptr;
 }
 
@@ -211,13 +198,14 @@ void bcentry::put() {
     if (--ref_ == 0 && bn_ != 0 && estate_ != es_dirty) {
         bc.evictq_.push_back(this);
     }
-    log_printf("REF-UPDATE of bn %d to %d\n", bn_, ref_);
 }
 
 
 // bcentry::get_write()
 //    Obtains a write reference for this entry.
-void bcentry::get_write() {
+
+void bcentry::get_write(bool push) {
+    {
     spinlock_guard guard(lock_);
     assert(wref_ == 0 || wref_ == 1);
     if (wref_ == 1) {
@@ -226,6 +214,19 @@ void bcentry::get_write() {
         }, guard);
     } 
     ++wref_;
+    }
+    if (push) {
+        bufcache& bc = bufcache::get();
+        spinlock_guard bcguard(bc.lock_);
+        spinlock_guard guard(lock_);
+        
+        if (!dlink_.is_linked()) {
+            estate_ = bcentry::es_dirty;
+            bc.dirty_list_.push_back(this);
+            assert(bc.dirty_list_.front());
+            assert(dlink_.is_linked());
+        }
+    }
 }
 
 
@@ -255,20 +256,15 @@ void bcentry::put_write() {
 //    and data blocks are unreferenced.
 
 int bufcache::sync(int drop) {
-    // Swap the current list under bufcache lock so it doesn't 
-    // sync forever (if another thread keeps adding dirty blocks).
+    // write dirty buffers to disk
     list<bcentry, &bcentry::dlink_> local_dirty;
     auto irqs = lock_.lock();
     local_dirty.swap(dirty_list_);
     lock_.unlock(irqs);
 
-    // Write to the disk and mark the block as clean under bcentry lock.
-    // NOTE: the bufcache lock need not be held here since local_dirty is, well, local to the function.
     while (bcentry* e = local_dirty.pop_front()) {
-        e->get_write();
-        log_printf("sata disk write starting\n");
+        e->get_write(false); // Don't mark the block as dirty!
         sata_disk->write(e->buf_, chkfs::blocksize, e->bn_ * chkfs::blocksize);
-        log_printf("sata disk write done\n");
         {
         spinlock_guard eguard(e->lock_);
         e->estate_ = bcentry::es_clean;
@@ -480,6 +476,42 @@ chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
     }
 }
 
+
+// chkfsstate::allocate_inode(type)
+//    Returns inode number `inum` for newly allocate inode,
+//    or returns 0 if none available. (0 is a reserved "always free" inum.)
+chkfs::inum_t chkfsstate::allocate_inode(int type) {
+    auto& bc = bufcache::get();
+    auto superblock_entry = bc.get_disk_entry(0);
+    assert(superblock_entry);
+    auto& sb = *reinterpret_cast<chkfs::superblock*>
+        (&superblock_entry->buf_[chkfs::superblock_offset]);
+    superblock_entry->put();
+
+    chkfs::inode* ino = nullptr;
+    for (inum_t in = 2; in < sb.ninodes; ++in) { // Start at inum 2, 0 is free, 1 is root dir
+        auto bn = sb.inode_bn + in / chkfs::inodesperblock;
+        if (auto inode_entry = bc.get_disk_entry(bn, clean_inode_block)) {
+            ino = reinterpret_cast<inode*>(inode_entry->buf_ );
+            ino += in%chkfs::inodesperblock;
+            if (ino->type == 0) {
+                ino->lock_write(); // TODO ask TF is this is necessary
+                ino->entry()->get_write();
+                ino->type = type;
+                ino->size = 0;
+                ino->nlink = 1; // One file referring to this upon allocation
+                ino->entry()->put_write();
+                ino->unlock_write();
+                ino->put();
+                return in;
+            }
+            ino->put();
+        }
+    }
+    return 0;
+}
+
+
 // ===== Bitset helper functions ====== //
 // NOTE: all bitset helper functions below assume that the fbb cache entry
 // is locked by the caller.
@@ -514,8 +546,6 @@ auto chkfsstate::find_free_range(void* fbb, unsigned count, size_t start) -> blo
 
         // b. Check if the entire contiguous array is available. If so, mark and break.
         last_searched = fbb_view.find_lsz(next_available_block, count); // Next un-free block
-        log_printf("last_searched (lsz) = %d, next_available (lsb) = %d, count = %d\n",
-            last_searched, next_available_block, count);
         assert(last_searched > next_available_block);
         if (last_searched - next_available_block == count) {
             return next_available_block;
@@ -523,6 +553,9 @@ auto chkfsstate::find_free_range(void* fbb, unsigned count, size_t start) -> blo
     }
 }
 
+
+// chkfsstate::free_extent(first, count)
+//    Free allocations made by chkfsstate::allocate_extent() in FBB.
 void chkfsstate::free_extent(unsigned first, unsigned count) {
     auto& bc = bufcache::get();
     auto superblock_entry = bc.get_disk_entry(0);
@@ -530,13 +563,15 @@ void chkfsstate::free_extent(unsigned first, unsigned count) {
     auto& sb = *reinterpret_cast<chkfs::superblock*>
         (&superblock_entry->buf_[chkfs::superblock_offset]);
     superblock_entry->put();
-    log_printf("Data bn = %d, fbb bn = %d\n", sb.data_bn, sb.fbb_bn);
     auto fbb = bc.get_disk_entry(sb.fbb_bn);
+    fbb->get_write();
     unsigned i = 0;
     for (blocknum_t bn = first; i < count; ++bn, ++i) {
         mark_block_free(reinterpret_cast<void*>(fbb->buf_), bn);
         assert(block_is_free(reinterpret_cast<void*>(fbb->buf_), bn));
     }
+    fbb->put_write();
+    fbb->put();
 }
 
 // chkfsstate::allocate_extent(unsigned count)
@@ -571,7 +606,6 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     if (first == (blocknum_t) -1) {
         return E_NOSPC;
     }
-    log_printf("free range from bn=%d of count=%d found\n", first, count);
     // mark_blocks_taken(reinterpret_cast<void*>(fbb), first, count);
     unsigned i = 0;
     for (blocknum_t bn = first; i < count; ++bn, ++i) {
@@ -579,16 +613,6 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
         assert(!block_is_free(reinterpret_cast<void*>(fbb->buf_), bn));
     }
 
-    {
-        spinlock_guard bcguard(bc.lock_);
-        spinlock_guard eguard(fbb->lock_);
-        if (!fbb->dlink_.is_linked()) {
-            fbb->estate_ = bcentry::es_dirty;
-            bc.dirty_list_.push_back(fbb);
-            assert(bc.dirty_list_.front());
-            assert(fbb->dlink_.is_linked());
-        }
-    }
     fbb->put_write();
     fbb->put();
     return first;

@@ -397,7 +397,7 @@ void process_main() {
 
     sys_close(f);
 
-    console_printf(0xA00, "multipel extension tests succeeded.\n");
+    console_printf(0xA00, "multiple extension tests succeeded.\n");
 
 
     console_printf(0xB00, "testwritefs2 succeeded.\n");

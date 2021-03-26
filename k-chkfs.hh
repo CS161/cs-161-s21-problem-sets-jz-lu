@@ -40,7 +40,7 @@ struct bcentry {
     void put();
 
     // obtain/release a write reference to this entry
-    void get_write();
+    void get_write(bool push=true);
     void put_write();
 
 
@@ -109,6 +109,8 @@ struct chkfsstate {
     inode* lookup_inode(inode* dirino, const char* name);
     // directory lookup starting at root directory
     inode* lookup_inode(const char* name);
+    // allocate new inode of a specific type
+    inum_t allocate_inode(int type);
     bool block_is_free(void* fbb, blocknum_t bn);
     void mark_block_free(void* fbb, blocknum_t bn);
     void mark_block_taken(void* fbb, blocknum_t bn);

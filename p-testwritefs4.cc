@@ -160,6 +160,6 @@ void process_main() {
     assert_ge(r, 0);
 
 
-    printf("testwritefs4 succeeded.\n");
+    console_printf(0xA00, "testwritefs4 succeeded.\n");
     sys_exit(0);
 }
