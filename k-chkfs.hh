@@ -13,7 +13,7 @@ struct bcentry {
     using blocknum_t = chkfs::blocknum_t;
 
     enum estate_t {
-        es_empty, es_allocated, es_loading, es_clean, es_dirty
+        es_empty, es_allocated, es_loading, es_clean, es_dirty, es_prefetching
     };
 
     std::atomic<int> estate_ = es_empty;
@@ -25,6 +25,7 @@ struct bcentry {
     unsigned char* buf_ = nullptr;       // memory buffer used for entry
     wait_queue wq_;                      // Write reference wait queue
     list_links qlink_, dlink_;           // Bufcache eviction, dirty list link
+    std::atomic<int> pfstatus = E_AGAIN; // Prefetching status, used only when prefetching
 
 
     // return the index of this entry in the buffer cache

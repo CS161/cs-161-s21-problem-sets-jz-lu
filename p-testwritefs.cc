@@ -148,6 +148,6 @@ void process_main() {
     sys_close(f);
 
 
-    printf("testwritefs succeeded.\n");
+    console_printf(0xA00, "testwritefs succeeded.\n");
     sys_exit(0);
 }
