@@ -84,6 +84,8 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
             }
         } else if (e_[i].bn_ == bn) {
             break;
+            // If the block is prefetching here, set it to loading
+            // and proceed as usual. (And pop off prefetching queue).
         }
     }
 
@@ -492,17 +494,17 @@ chkfs::inum_t chkfsstate::allocate_inode(int type) {
     for (inum_t in = 2; in < sb.ninodes; ++in) { // Start at inum 2, 0 is free, 1 is root dir
         auto bn = sb.inode_bn + in / chkfs::inodesperblock;
         if (auto inode_entry = bc.get_disk_entry(bn, clean_inode_block)) {
-            ino = reinterpret_cast<inode*>(inode_entry->buf_ );
-            ino += in%chkfs::inodesperblock;
+            ino = reinterpret_cast<inode*>(inode_entry->buf_);
+            ino += in % chkfs::inodesperblock;
             if (ino->type == 0) {
-                ino->lock_write(); // TODO ask TF is this is necessary
+                ino->lock_write();
                 ino->entry()->get_write();
                 ino->type = type;
                 ino->size = 0;
                 ino->nlink = 1; // One file referring to this upon allocation
                 ino->entry()->put_write();
                 ino->unlock_write();
-                ino->put();
+                // Don't put the inode back (we're using it in the vnode!)
                 return in;
             }
             ino->put();

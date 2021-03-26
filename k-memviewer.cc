@@ -1,6 +1,7 @@
 #include "kernel.hh"
 #include "k-vmiter.hh"
 #include "k-ahci.hh"
+#include "k-chkfs.hh"
 
 // k-memviewer.cc
 //
@@ -76,9 +77,17 @@ void memusage::refresh() {
     memset(v_, 0, (maxpa / PAGESIZE) * sizeof(*v_));
     mark(ka2pa(v_), f_kernel);
 
-    // Mark the ahcistate for the SATADISK allocated in kernel_start()
+    // Mark the ahcistate for the SATA disk allocated in kernel_start()
     for (int pg = 0; pg < (1 << (order(sizeof(ahcistate)) - MIN_ORDER)); ++pg) {
         mark(ka2pa(sata_disk) + pg*PAGESIZE, f_kernel);
+    }
+
+    // Mark the buffer cache entries if they are allocated.
+    bufcache& bc = bufcache::get();
+    for (size_t i = 0; i < bc.ne; ++i) {
+        if (bc.e_[i].buf_) {
+            mark(ka2pa(bc.e_[i].buf_), f_kernel);
+        }
     }
 
     for (auto i = 0; i < ncpu; ++i) {

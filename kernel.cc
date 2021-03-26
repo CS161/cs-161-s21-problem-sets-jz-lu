@@ -1998,6 +1998,9 @@ int proc::syscall_execv(regstate* regs) {
 
     // Look up the process name in inodes.
     auto ino = chkfsstate::get().lookup_inode(prgm_name);
+    if (!ino) {
+        return E_NOENT;
+    }
 
     // Allocate a new pagetable and stack page.
     x86_64_pagetable* pt = kalloc_pagetable();
@@ -2005,6 +2008,7 @@ int proc::syscall_execv(regstate* regs) {
         if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_execv] Failed to allocate a new pagetable\n");
         }
+        ino->put();
         return E_NOMEM;
     } else if (VFS_PARANOIA >= 2 || VFS_MF_PARANOIA >= 2) {
         log_printf("[syscall_execv] New pt alloc at KVA=%p, PA=0x%x\n",
@@ -2015,6 +2019,7 @@ int proc::syscall_execv(regstate* regs) {
         if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_execv] Failed to allocate a new stack page\n");
         }
+        ino->put();
         kfree(pt);
         return E_NOMEM;
     } else if (VFS_PARANOIA >= 2 || VFS_MF_PARANOIA >= 2) {
@@ -2036,6 +2041,7 @@ int proc::syscall_execv(regstate* regs) {
         kfree(pt);
         kfree(stkpg);
         free_auto_allocs(pt); // Free any allocations made by loader
+        ino->put();
         return r;
     } else if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] Process successfully loaded\n",
@@ -2055,6 +2061,7 @@ int proc::syscall_execv(regstate* regs) {
         if (stk_map_error) {
             kfree(stkpg); // If map didn't work then free_auto_allocs() won't free stack pg.
         }
+        ino->put();
         return E_NOMEM;
     } else if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] Stack / Console successfully mapped to UVA=0x%x / 0x%x\n",
