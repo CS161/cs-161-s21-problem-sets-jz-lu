@@ -499,7 +499,6 @@ int chkfsstate::rename_direntry(inode* dirino,
             for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
                 if (strcmp(dirent->name, newname) == 0) {
                     name_already_exists = true;
-                    put = true;
                     break;
                 } else if (dirent->inum && strcmp(dirent->name, oldname) == 0) {
                     de = dirent;

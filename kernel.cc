@@ -1876,7 +1876,7 @@ int proc::syscall_rename(regstate* regs) {
         return r1;
     } else if (int r2 = pathname_invalid(this, newpath)) {
         log_printf("[syscall_rename] Invalid new pathname\n");
-        return r1;
+        return r2;
     }
 
     // Walk the directory until the inode old file is found; rename it.
