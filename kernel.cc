@@ -379,6 +379,10 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_CLOSE:
         syscall_retval = syscall_close(regs);
         break;
+    
+    case SYSCALL_UNLINK:
+        syscall_retval = syscall_unlink(regs);
+        break;
 
     case SYSCALL_EXECV:
         syscall_retval = syscall_execv(regs);
@@ -1503,7 +1507,7 @@ static int pathname_invalid(proc* p, const char* pathname) {
         }
     }
 
-    if (pos >= MAX_FILENAME_LEN) {
+    if (pos >= chkfs::maxnamelen) {
         if (VFS_MF_PARANOIA >= 1) {
             log_printf("[pathname_invalid] Invalid file name: too long. Ensure buf ptr is correct\n");
         }
@@ -1523,18 +1527,15 @@ int proc::syscall_open(regstate* regs) {
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_open] Open called\n");
     }
-
     if (!sata_disk) {
         return E_IO;
     }
 
     // First, validate arguments.
     const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
-    if (pathname_invalid(this, pathname)) { // Check filename
-        if (VFS_PARANOIA >= 1) {
-            log_printf("[syscall_open] Invalid pathname\n");
-        }
-        return E_FAULT;
+    if (int r = pathname_invalid(this, pathname)) { // Check filename
+        log_printf("[syscall_open] Invalid pathname\n");
+        return r;
     }
     int flags = regs->reg_rsi;
     bool create = (flags & OF_CREAT);
@@ -1561,33 +1562,55 @@ int proc::syscall_open(regstate* regs) {
         log_printf("[syscall_open] Found valid fd=%d for new open\n", fd);
     }
 
-    // Read the inode of the directory.
-    auto ino = chkfsstate::get().lookup_inode(pathname);
-    if (!ino) {
-        return E_NOENT;
-    }
-    log_printf("[open] ino size = %d\n", ino->size);
-    disk_vnode* dvn = knew<disk_vnode>(ino, mode);
-    if (!dvn) {
-        if (VFS_MF_PARANOIA >= 1) {
-            log_printf("[syscall_open] Failed to k-alloc diskfile vnode\n");
-        }
-        return E_NOMEM;
-    }
-    {
-    spinlock_guard refguard(dvn->open_close_lock_);
-    ++dvn->refcount_;
-    }
-    fdtable[fd] = reinterpret_cast<vnode*>(dvn);
-    //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
+    bool is_dev_null = !strcmp(pathname, "/dev/null");
+    bool is_dev_rand = !strcmp(pathname, "/dev/random");
 
-    if (trunc) { // Truncate if requested
-        ino->lock_write();
-        ino->entry()->get_write();
-        ino->size = 0;
-        ino->entry()->put_write();
-        ino->unlock_write();
+    if (is_dev_null || is_dev_rand) { // /dev/null
+        special_vnode::sfile_t stype = is_dev_null ? special_vnode::null : special_vnode::random;
+        special_vnode* svn = knew<special_vnode>(stype, mode);
+        if (!svn) {
+            return E_NOMEM;
+        }
+        fdtable[fd] = reinterpret_cast<vnode*>(svn);
+        {
+        spinlock_guard refguard(svn->open_close_lock_);
+        ++svn->refcount_;
+        }
+    } else { // Normal disk file
+        // Read the inode of the directory.
+        auto ino = chkfsstate::get().lookup_inode(pathname);
+        if (!ino) {
+            if (create && (mode & OF_WRITE)) {
+                // Create a new file and set ino to point to its new inode.
+                ino = disk_vnode::create_file(pathname);
+            } else {
+                return E_NOENT;
+            }
+        }
+        if (trunc) { // Truncate if requested.
+            ino->lock_write();
+            ino->entry()->get_write();
+            ino->size = 0;
+            ino->entry()->put_write();
+            ino->unlock_write();
+        }
+        disk_vnode* dvn = knew<disk_vnode>(ino, mode);
+        if (!dvn) {
+            if (VFS_MF_PARANOIA >= 1) {
+                log_printf("[syscall_open] Failed to k-alloc diskfile vnode\n");
+            }
+            // TODO free inode
+            return E_NOMEM;
+        }
+        fdtable[fd] = reinterpret_cast<vnode*>(dvn);
+        {
+        spinlock_guard refguard(dvn->open_close_lock_);
+        ++dvn->refcount_;
+        }
     }
+
+    
+    //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
 
     if (VFS_MF_PARANOIA >= 2) {
         log_printf("[syscall_open] Open successful\n");
@@ -1742,6 +1765,7 @@ uintptr_t proc::syscall_read(regstate* regs) {
     // This is a slow system call, so allow interrupts by default
     sti();
     int fd = regs->reg_rdi;
+    log_printf("read called\n");
     // TODO [MULTITH] lock ftable access
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
@@ -1827,6 +1851,13 @@ int proc::syscall_close(regstate* regs) {
         show_fdtable_();
     }
     return 0;
+}
+
+
+// proc::syscall_unlink(regs)
+//    Unlink (delete from chkfs) a file.
+int proc::syscall_unlink(regstate* regs) {
+    return E_INVAL;
 }
 
 
@@ -1995,6 +2026,9 @@ int proc::syscall_execv(regstate* regs) {
 
     // Look up the process name in inodes.
     auto ino = chkfsstate::get().lookup_inode(prgm_name);
+    if (!ino) {
+        return E_NOENT;
+    }
 
     // Allocate a new pagetable and stack page.
     x86_64_pagetable* pt = kalloc_pagetable();
@@ -2002,6 +2036,7 @@ int proc::syscall_execv(regstate* regs) {
         if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_execv] Failed to allocate a new pagetable\n");
         }
+        ino->put();
         return E_NOMEM;
     } else if (VFS_PARANOIA >= 2 || VFS_MF_PARANOIA >= 2) {
         log_printf("[syscall_execv] New pt alloc at KVA=%p, PA=0x%x\n",
@@ -2012,6 +2047,7 @@ int proc::syscall_execv(regstate* regs) {
         if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_execv] Failed to allocate a new stack page\n");
         }
+        ino->put();
         kfree(pt);
         return E_NOMEM;
     } else if (VFS_PARANOIA >= 2 || VFS_MF_PARANOIA >= 2) {
@@ -2033,6 +2069,7 @@ int proc::syscall_execv(regstate* regs) {
         kfree(pt);
         kfree(stkpg);
         free_auto_allocs(pt); // Free any allocations made by loader
+        ino->put();
         return r;
     } else if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] Process successfully loaded\n",
@@ -2052,6 +2089,7 @@ int proc::syscall_execv(regstate* regs) {
         if (stk_map_error) {
             kfree(stkpg); // If map didn't work then free_auto_allocs() won't free stack pg.
         }
+        ino->put();
         return E_NOMEM;
     } else if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] Stack / Console successfully mapped to UVA=0x%x / 0x%x\n",

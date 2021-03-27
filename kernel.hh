@@ -34,7 +34,7 @@ struct elf_program;
 // because its a 
 struct vnode {
     const int mode_ = 0; // Read, write, or both
-    off_t offset_ = 0; // Offset from file, to be incremented on read/writes
+    std::atomic<off_t> offset_ = 0; // Offset from file, to be incremented on read/writes
     int refcount_ = 0; // Number of processes with entry in fd table pointing here
     spinlock open_close_lock_; // To decrement refcount and offset if necessary
     // Locks declared in inheriters.
@@ -139,6 +139,7 @@ struct __attribute__((aligned(4096))) proc {
     uintptr_t syscall_read(regstate* reg);
     uintptr_t syscall_write(regstate* reg);
     int syscall_close(regstate* regs);
+    int syscall_unlink(regstate* regs);
     int syscall_execv(regstate* regs);
     int syscall_socket(regstate* regs);
     int syscall_listen(regstate* regs);

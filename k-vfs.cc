@@ -448,39 +448,37 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
     if (!writeable()) {
         return E_BADF;
     }
-    
+
     size_t nwritten = 0;
     ino_->lock_write();
-    log_printf("write starting with ino vn %p, size = %d, offset_ = %d\n", 
-        this, ino_->size, offset_);
     chkfs_fileiter it(ino_);
 
-    // Compute allocation size ("true" inode size).
+    // Walk to the end of the current allocated size (space given to file, always weakly
+    // larger than ino_->size which is what the user sees as the size).
     while (it.active()) {
         it.next();
     }
-    uint32_t allocation_sz = it.offset();
+    uint32_t alloc_sz = it.offset();
 
-    if (offset_ + sz > allocation_sz) {
-        log_printf("ALLOC offset_ = %d, mod = %d, need %d more bytes\n", 
-            offset_, offset_ % chkfs::blocksize, offset_ + sz - allocation_sz);
-        unsigned count = round_up(offset_ + sz - allocation_sz, chkfs::blocksize) / chkfs::blocksize;
+    // Allocate any extra space needed beyond file's current allocation size.
+    if (offset_ + sz > alloc_sz) {
         chkfsstate& fs = chkfsstate::get();
+        unsigned count = round_up(offset_ + sz - alloc_sz, 
+            chkfs::blocksize) / chkfs::blocksize;
+
         chkfs::blocknum_t first = fs.allocate_extent(count);
         if (first >= chkfs::blocknum_t(E_MINERROR)) {
             log_printf("Error in allocate_extent: unable to allocate new extent\n");
-        }
-        int r = it.insert(first, count);
-        if (r < 0) {
-            log_printf("Error in insert: unable to add new extent to indirect\n");
-            fs.free_extent(first, count);
+        } else {
+            int r = it.insert(first, count);
+            if (r < 0) {
+                log_printf("Error in insert: unable to add new extent to indirect\n");
+                fs.free_extent(first, count);
+            }
         }
     }
 
-    allocation_sz = min(offset_ + sz, (uint64_t) allocation_sz);
-    
     while (nwritten < sz) {
-        log_printf("loop start offset_ = %d\n", offset_);
         // copy data to current block
         if (bcentry* e = it.find(offset_).get_disk_entry()) {
             unsigned b = it.block_relative_offset();
@@ -488,31 +486,23 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
                 chkfs::blocksize - b,               // bytes left in block
                 sz - nwritten                       // bytes left in request
             );
+
             e->get_write();
-            assert(ino_->has_write_lock());
             memcpy(e->buf_ + b, reinterpret_cast<void*>(addr + nwritten), ncopy);
-            assert(ino_->has_write_lock());
             e->put_write();
             e->put();
 
             nwritten += ncopy;
             offset_ += ncopy;
-            log_printf("offset_ updated to %d that is%s mod 4096\n", 
-                offset_, offset_%chkfs::blocksize ? " NOT" : "");
-            if (ncopy == 0) {
-                log_printf("Wrote nothing\n");
-            }
-        } else { // Allocate a new extent
+        } else {
             break;
         }
     }
-    if (ino_->size < offset_) {
-        ino_->entry()->get_write();
-        ino_->size = offset_;
-        ino_->entry()->put_write();
-    }
 
-    log_printf("wrote %d chars\n", nwritten);
+    ino_->entry()->get_write();
+    // Set size to new offset (due to extensions, old or new) if it exceeds current size.
+    ino_->size = max(ino_->size, (uint32_t) offset_);
+    ino_->entry()->put_write();    
     ino_->unlock_write();
     return nwritten;
 }
@@ -614,6 +604,147 @@ off_t disk_vnode::lseek(off_t off, int origin) {
     }
     ino_->unlock_write();
     return offset_;
+}
+
+
+// disk_vnode::create_file(filename)
+//    Creates a new file by allocation of a new inode and direntry
+//    Returns inode ptr to new file; inode initialized to size 0, type file, nlink 1.
+chkfs::inode* disk_vnode::create_file(const char* filename) {
+    chkfsstate &fs = chkfsstate::get();
+    chkfs::inode* ino = nullptr;
+    chkfs::inum_t in = 0;
+    auto dirino = fs.get_inode(1);
+    if (!dirino) {
+        return nullptr;
+    } 
+
+    dirino->lock_write();
+
+    chkfs_fileiter it(dirino);
+    chkfs::dirent* open_entry = nullptr;
+    bcentry* de = nullptr;
+    // Traverse the directory until a free entry is found.
+    for (size_t diroff = 0; !open_entry; diroff += chkfs::blocksize) { // Block walk
+        if (bcentry* e = it.find(diroff).get_disk_entry()) {
+            auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
+            size_t bsz = min(dirino->size - diroff, chkfs::blocksize);
+            for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) { // direntry walk in block
+                if (dirent->inum == 0) {
+                    open_entry = dirent;
+                    assert(open_entry);
+                    de = e;
+                    break;
+                }
+            }
+            if (!de) {
+                e->put();
+            }
+        } else {
+            // Allocate a new directory block and add to extent. No need to walk the individual
+            // direntries this time--since it is a new allocation the first direntry is free.
+            chkfs::blocknum_t first = fs.allocate_extent(1);
+            if (first >= chkfs::blocknum_t(E_MINERROR)) {
+                log_printf("Error in allocate_extent: unable to allocate new directory block\n");
+            } else {
+                int r = it.insert(first, 1);
+                if (r < 0) {
+                    log_printf("Error in insert: unable to insert new directory block\n");
+                    fs.free_extent(first, 1);
+                }
+            }
+            de = it.find(diroff).get_disk_entry();
+            if (!de) goto alloc_fail;
+            open_entry = reinterpret_cast<chkfs::dirent*>(de->buf_);
+        }
+    }
+
+    // Allocate and initialize new inode for file.
+    in = fs.allocate_inode(chkfs::type_regular);
+    if (!in) goto alloc_fail;
+
+    // Grab the inode from the disk.
+    // TODO free inode upon failure.
+    ino = fs.get_inode(in);
+    if (!ino) goto alloc_fail;
+
+    // Set the direntry inum and name.
+    de->get_write();
+    open_entry->inum = in;
+    strcpy(open_entry->name, filename);
+    de->put_write();
+    de->put();
+
+    dirino->unlock_write();
+    dirino->entry()->put();
+    return ino;
+
+    alloc_fail:
+        // Put back the directory entry if gotten, and unlock.
+        // TODO free inode
+        if (de) {     
+            de->put();
+        }
+        dirino->unlock_write();
+        dirino->entry()->put();
+        return nullptr;
+}
+
+
+// ===== Special files ====== //
+
+special_vnode::special_vnode(sfile_t type, int mode) 
+    : vnode(mode), type_(type) {
+    assert(type == null || type == random);
+}
+
+
+int special_vnode::close() {
+    spinlock_guard guard(open_close_lock_);
+    assert(refcount_ > 0);
+    return --refcount_;
+}
+
+
+uintptr_t special_vnode::write(uintptr_t addr, size_t sz) {
+    if (!writeable()) {
+        return E_BADF;
+    }
+
+    if (type_ == null) {
+        log_printf("/dev/null write\n");
+        return sz; // Do nothing
+    } 
+    else {
+        log_printf("/dev/random write\n");
+        return 0;
+    }
+}
+
+
+uintptr_t special_vnode::read(uintptr_t addr, size_t sz) {
+    if (!readable()) {
+        return E_BADF;
+    }
+
+    if (type_ == null) {
+        log_printf("/dev/null read\n");
+        if (sz == 0) {
+            return 0;
+        }
+        char* c = reinterpret_cast<char*>(addr);
+        c[0] = '\0';
+        return 1;
+    }
+    else {
+        log_printf("/dev/random read\n");
+        char* ptr = reinterpret_cast<char*>(addr);
+        off_t off = 0;
+        while (sz > (size_t) off) {
+            ptr[off++] = rand(0, 255);
+        }
+        return sz;
+    }
 }
 
 

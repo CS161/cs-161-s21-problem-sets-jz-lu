@@ -107,6 +107,6 @@ void process_main() {
     sys_close(wf);
 
 
-    printf("testwritefs3 succeeded.\n");
+    console_printf(0xA00, "testwritefs3 succeeded.\n");
     sys_exit(0);
 }

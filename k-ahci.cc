@@ -107,17 +107,24 @@ int ahcistate::read_or_write(idecommand command, void* buf, size_t sz,
     // obtain lock
     auto irqs = lock_.lock();
 
-    // block until ready for command
+    // Block until ready for command. Use all the slots!
+    int slot = -1;
     waiter().block_until(wq_, [&] () {
-            return !slots_outstanding_mask_;
+            for (unsigned i = 0; i < nslots_; ++i) {
+                if (!((slots_outstanding_mask_ >> i) & 1)) {
+                    slot = i;
+                    break;
+                }
+            }
+            return (slot != -1);
         }, lock_, irqs);
 
     // send command, record buffer and status storage
     std::atomic<int> r = E_AGAIN;
-    clear(0);
-    push_buffer(0, buf, sz);
-    issue_ncq(0, command, off / sectorsize);
-    slot_status_[0] = &r;
+    clear(slot);
+    push_buffer(slot, buf, sz);
+    issue_ncq(slot, command, off / sectorsize);
+    slot_status_[slot] = &r;
 
     lock_.unlock(irqs);
 

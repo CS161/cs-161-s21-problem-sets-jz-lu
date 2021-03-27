@@ -72,10 +72,23 @@ struct disk_vnode:public vnode {
     disk_vnode(chkfs::inode* ino, int mode);
 
     int close();
+    static chkfs::inode* create_file(const char* filename);
     uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
     off_t lseek(off_t off, int origin);
     bool seek_invalid(off_t off, int origin);
+};
+
+struct special_vnode:public vnode {
+    enum sfile_t {
+        null, random
+    };
+    const int type_;
+    special_vnode(sfile_t type, int mode);
+
+    int close();
+    uintptr_t write(uintptr_t addr, size_t sz);
+    uintptr_t read(uintptr_t addr, size_t sz);
 };
 
 // Simplified Unix domain socket. A single client and a single server process

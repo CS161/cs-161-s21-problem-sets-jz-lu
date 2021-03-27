@@ -99,8 +99,6 @@ inline off_t chkfs_fileiter::offset() const {
     return off_;
 }
 inline bool chkfs_fileiter::active() const {
-    if (!eptr_) log_printf("eptr_ null\n");
-    else if (eptr_->count == 0) log_printf("count == 0\n");
     return eptr_ && eptr_->count != 0;
 }
 inline unsigned chkfs_fileiter::block_relative_offset() const {
