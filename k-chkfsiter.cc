@@ -121,13 +121,10 @@ int chkfs_fileiter::insert(blocknum_t first, unsigned count) {
     if (eidx_ < chkfs::ndirect) {
         entry = ino_entry;
         eptr_ = &ino_->direct[eidx_];
-        log_printf("NEW direct extent at index %d of count %d\n", eidx_, count);
     } else {
         entry = indirect_entry_;
         eptr_ = reinterpret_cast<chkfs::extent*>(indirect_entry_->buf_)
             + (eidx_ - chkfs::ndirect) % chkfs::extentsperblock;
-        log_printf("NEW indirect extent at index %d of count %d\n", 
-            eidx_- chkfs::ndirect, count);
     }
     entry->get_write();
     if (eidx_ >= chkfs::ndirect

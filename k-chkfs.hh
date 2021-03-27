@@ -26,6 +26,7 @@ struct bcentry {
     wait_queue wq_;                      // Write reference wait queue
     list_links qlink_, dlink_;           // Bufcache eviction, dirty list link
     std::atomic<int> pfstatus = E_AGAIN; // Prefetching status, used only when prefetching
+    bool linked = true;                  // Changes to false when unlink is called.
 
 
     // return the index of this entry in the buffer cache
@@ -106,23 +107,26 @@ struct chkfsstate {
     // obtain an inode by number
     inode* get_inode(inum_t inum);
 
-    // inode lookup in directory `dirino`
+    // inode lookup in directory `dirino`, assumes locked
     inode* lookup_inode(inode* dirino, const char* name);
     // inode lookup starting at root directory
     inode* lookup_inode(const char* name);
-    // direntry rename in directory `dirino`
+    // direntry rename in directory `dirino`, assumes locked
     int rename_direntry(inode* dirino, const char* oldname, const char* newname);
     // directory rename starting at root directory
     int rename_direntry(const char* oldname, const char* newname);
     // allocate new inode of a specific type
     inum_t allocate_inode(int type);
+    // free an inode living in directory dirino, assumes locked
+    int free_inode(inode* dirino, inode* ino);
+    // free an inode
+    int free_inode(inode* ino);
     bool block_is_free(void* fbb, blocknum_t bn);
     void mark_block_free(void* fbb, blocknum_t bn);
     void mark_block_taken(void* fbb, blocknum_t bn);
     void free_extent(unsigned first, unsigned count);
-    bool examine_block(blocknum_t bn);
     blocknum_t find_free_range(void* fbb, unsigned count, size_t start);
-    
+
     blocknum_t allocate_extent(unsigned count = 1);
 
 

@@ -1859,7 +1859,29 @@ int proc::syscall_close(regstate* regs) {
 // proc::syscall_unlink(regs)
 //    Unlink (delete from chkfs) a file.
 int proc::syscall_unlink(regstate* regs) {
-    return E_INVAL;
+    log_printf("unlink called\n");
+    if (!sata_disk) {
+        return E_IO;
+    }
+
+    const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
+    if (int r = pathname_invalid(this, pathname)) { // Check filename
+        log_printf("[syscall_open] Invalid pathname\n");
+        return r;
+    }
+
+    // Grab the inode, set unlinked to true, and put it back. If the inode was not
+    // open by anyone else, the ref on the bcentry drops to 0 as soon as we call 
+    // put in this function, freeing all data. Otherwise, data is freed when the last 
+    // process with the file open calls put on the inode.
+    auto ino = chkfsstate::get().lookup_inode(pathname);
+    bcentry* ie = ino->entry();
+    auto irqs = ie->lock_.lock();
+    ie->linked = false;
+    log_printf("marked is_linked as false\n");
+    ie->lock_.unlock(irqs);
+    ino->put();
+    return 0;
 }
 
 

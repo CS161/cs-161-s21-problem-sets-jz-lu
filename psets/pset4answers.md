@@ -11,5 +11,9 @@ Eviction strategy: LRU. Use a queue of cache entry indices with zero refcount. W
 ## Part B
 Synchronization plan: TODO FIX talk about the basic inode locks, and then about serializing vnode offset changes to prevent parent/child/sibling processes from making offset ludicrous (i.e. serialize reads within a vnode) using the same per-vnode lock `vnode::open_close_lock_`.
 
+Invariant changes: `bcentry` lock will also protect the `is_linked` boolean for unlinking. The `bcentry::buf_` is no longer constant after writing, but may not be modified without holding the `bcentry` write reference via `bcentry::get_write()`. When a kernel task holds a reference to a bufcache entry, the state must satisfy `buf_ != nullptr` and `estate_ == es_clean || es_dirty`. In addition to protecting `ref_` and `estate_`, the `bcentry::lock_` will also protect a metadatum `linked`, which flags if at least one file has the `inode` open in memory.
+
+Lock ordering: directory `inode`s are to be locked first, followed by file `inode` locking. Each layer of locks is called in order of `lock_write()` and then `inode->entry()->get_write()` for writing (for reading, the entry has no read reference and thus there is no ambiguity).
+
 Grading notes
 -------------
