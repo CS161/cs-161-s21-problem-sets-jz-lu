@@ -610,6 +610,7 @@ off_t disk_vnode::lseek(off_t off, int origin) {
 // disk_vnode::create_file(filename)
 //    Creates a new file by allocation of a new inode and direntry
 //    Returns inode ptr to new file; inode initialized to size 0, type file, nlink 1.
+//    Assumes that the filename is valid.
 chkfs::inode* disk_vnode::create_file(const char* filename) {
     chkfsstate &fs = chkfsstate::get();
     chkfs::inode* ino = nullptr;
@@ -696,6 +697,7 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
 special_vnode::special_vnode(sfile_t type, int mode) 
     : vnode(mode), type_(type) {
     assert(type == null || type == random);
+    srand(ticks);
 }
 
 

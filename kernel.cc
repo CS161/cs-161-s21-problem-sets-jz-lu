@@ -383,6 +383,10 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_UNLINK:
         syscall_retval = syscall_unlink(regs);
         break;
+    
+    case SYSCALL_RENAME:
+        syscall_retval = syscall_rename(regs);
+        break;
 
     case SYSCALL_EXECV:
         syscall_retval = syscall_execv(regs);
@@ -1609,7 +1613,6 @@ int proc::syscall_open(regstate* regs) {
         }
     }
 
-    
     //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
 
     if (VFS_MF_PARANOIA >= 2) {
@@ -1765,7 +1768,6 @@ uintptr_t proc::syscall_read(regstate* regs) {
     // This is a slow system call, so allow interrupts by default
     sti();
     int fd = regs->reg_rdi;
-    log_printf("read called\n");
     // TODO [MULTITH] lock ftable access
     if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
@@ -1858,6 +1860,28 @@ int proc::syscall_close(regstate* regs) {
 //    Unlink (delete from chkfs) a file.
 int proc::syscall_unlink(regstate* regs) {
     return E_INVAL;
+}
+
+
+// proc::syscall_rename(regs)
+// Rename a file.
+int proc::syscall_rename(regstate* regs) {
+    if (!sata_disk) {
+        return E_IO;
+    }
+    const char* oldpath = reinterpret_cast<const char*>(regs->reg_rdi);
+    const char* newpath = reinterpret_cast<const char*>(regs->reg_rsi);
+    if (int r1 = pathname_invalid(this, oldpath)) { // Check filename
+        log_printf("[syscall_rename] Invalid old pathname\n");
+        return r1;
+    } else if (int r2 = pathname_invalid(this, newpath)) {
+        log_printf("[syscall_rename] Invalid new pathname\n");
+        return r1;
+    }
+
+    // Walk the directory until the inode old file is found; rename it.
+    // If it is not found, then return E_NOENT.
+    return chkfsstate::get().rename_direntry(oldpath, newpath);
 }
 
 

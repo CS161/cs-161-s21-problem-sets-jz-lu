@@ -479,6 +479,76 @@ chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
 }
 
 
+// chkfsstate::rename_direntry(dirino, filename)
+//    Same function as chkfsstate:lookup_inode, but renames the direntry in the walk
+//    instead of fetching and returning the inode.
+int chkfsstate::rename_direntry(inode* dirino,
+                                       const char* oldname, const char* newname) {
+    chkfs_fileiter it(dirino);
+
+    // Walk entire directory to check for duplicate names, then adjust 
+    // if no duplicates at the end.
+    chkfs::dirent* de = nullptr;
+    bcentry* de_be = nullptr; // bufcache entry for directory
+    bool name_already_exists = false; // another file has the same name
+    for (size_t diroff = 0; !de && !name_already_exists; diroff += blocksize) {
+        bool put = true;
+        if (bcentry* e = it.find(diroff).get_disk_entry()) {
+            size_t bsz = min(dirino->size - diroff, blocksize);
+            auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
+            for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
+                if (strcmp(dirent->name, newname) == 0) {
+                    name_already_exists = true;
+                    put = true;
+                    break;
+                } else if (dirent->inum && strcmp(dirent->name, oldname) == 0) {
+                    de = dirent;
+                    de_be = e;
+                    put = false; // Don't put back the entry yet since we need it
+                }
+            }
+            if (put) {
+                e->put();
+            }
+        } else {
+            break;
+        }
+    }
+
+    if (name_already_exists) { // Duplicate name found
+        if (de_be) {
+            de_be->put();
+        }
+        return E_SAMENAME;
+    } else if (!de) { // Could not find the current file
+        assert(!de_be);
+        return E_NOENT;
+    }
+
+    de_be->get_write();
+    strcpy(de->name, newname);
+    de_be->put_write();
+    de_be->put();
+    return 0;
+}
+
+
+// chkfsstate::rename_direntry(filename)
+//    Rename direntry of `oldname` to `newname` in the root directory.
+int chkfsstate::rename_direntry(const char* oldname, const char* newname) {
+    auto dirino = get_inode(1);
+    if (dirino) {
+        dirino->lock_read();
+        int r = fs.rename_direntry(dirino, oldname, newname);
+        dirino->unlock_read();
+        dirino->put();
+        return r;
+    } else {
+        return E_NOENT;
+    }
+}
+
+
 // chkfsstate::allocate_inode(type)
 //    Returns inode number `inum` for newly allocate inode,
 //    or returns 0 if none available. (0 is a reserved "always free" inum.)

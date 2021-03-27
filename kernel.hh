@@ -140,6 +140,7 @@ struct __attribute__((aligned(4096))) proc {
     uintptr_t syscall_write(regstate* reg);
     int syscall_close(regstate* regs);
     int syscall_unlink(regstate* regs);
+    int syscall_rename(regstate* regs);
     int syscall_execv(regstate* regs);
     int syscall_socket(regstate* regs);
     int syscall_listen(regstate* regs);

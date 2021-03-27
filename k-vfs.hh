@@ -75,8 +75,8 @@ struct disk_vnode:public vnode {
     static chkfs::inode* create_file(const char* filename);
     uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
-    off_t lseek(off_t off, int origin);
     bool seek_invalid(off_t off, int origin);
+    off_t lseek(off_t off, int origin);
 };
 
 struct special_vnode:public vnode {

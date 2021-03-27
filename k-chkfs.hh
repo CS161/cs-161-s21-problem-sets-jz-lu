@@ -106,10 +106,14 @@ struct chkfsstate {
     // obtain an inode by number
     inode* get_inode(inum_t inum);
 
-    // directory lookup in `dirino`
+    // inode lookup in directory `dirino`
     inode* lookup_inode(inode* dirino, const char* name);
-    // directory lookup starting at root directory
+    // inode lookup starting at root directory
     inode* lookup_inode(const char* name);
+    // direntry rename in directory `dirino`
+    int rename_direntry(inode* dirino, const char* oldname, const char* newname);
+    // directory rename starting at root directory
+    int rename_direntry(const char* oldname, const char* newname);
     // allocate new inode of a specific type
     inum_t allocate_inode(int type);
     bool block_is_free(void* fbb, blocknum_t bn);
@@ -118,7 +122,7 @@ struct chkfsstate {
     void free_extent(unsigned first, unsigned count);
     bool examine_block(blocknum_t bn);
     blocknum_t find_free_range(void* fbb, unsigned count, size_t start);
-
+    
     blocknum_t allocate_extent(unsigned count = 1);
 
 

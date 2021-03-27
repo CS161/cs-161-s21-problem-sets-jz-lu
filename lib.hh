@@ -316,7 +316,7 @@ struct bitset_view {
 #define E_2BIG          -7         // Argument list too long
 #define E_BADCONN       -31        // Socket is not properly set up
 #define E_MSOCK         -35        // Too many sockets in use
-#define E_SAMENAME      -34        // Another socket already has the same name
+#define E_SAMENAME      -34        // Another file/socket already has the same name
 #define E_SOCKTIMEOUT   -33        // Socket waited too long on accept or connect
 #define E_SOCKTAKEN     -37        // Socket already taken
 
