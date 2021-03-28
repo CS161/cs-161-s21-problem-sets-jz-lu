@@ -430,10 +430,9 @@ bcentry* inode::entry() {
 void inode::put() {
     bcentry* ie = entry();
     auto irqs = ie->lock_.lock();
-    log_printf("ref = %d linked = %d\n", ie->ref_, ie->linkstatus_);
     if (ie->ref_ == 1 && ie->linkstatus_ == bcentry::unlinked) {
+        ie->linkstatus_ = bcentry::flushing;
         ie->lock_.unlock(irqs);
-        log_printf("free inode about to be called\n");
         int r = chkfsstate::get().free_inode(this);
         assert(!r);
     } else {
@@ -587,7 +586,6 @@ chkfs::inum_t chkfsstate::allocate_inode(int type) {
                 ino->nlink = 1; // One file referring to this upon allocation
                 ino->entry()->put_write();
                 ino->unlock_write();
-                // Don't put the inode back (we're using it in the vnode!)
                 free_in = in;
             }
             ino->put();
@@ -631,9 +629,11 @@ int chkfsstate::free_inode(inode* dirino, inode* ino) {
 
     // Mark the inode as free.
     ino->type = ino->size = ino->nlink = 0;
-    if (ie->linkstatus_ == bcentry::unlinked) {
+    auto irqs = ie->lock_.lock();
+    if (ie->linkstatus_ == bcentry::flushing) {
         ie->linkstatus_ = bcentry::flushed;
     }
+    ie->lock_.unlock(irqs);
     ie->put_write();
     ino->unlock_write();
     return 0;

@@ -17,10 +17,11 @@ struct bcentry {
     };
 
     // flushed: no open processes have inode open, all data deleted
+    // flushing: in the process of deleting data, no other thread should be deleting
     // unlinked: inode has been unlinked, but some processes still have it open
     // full_linked: inode has not been unlinked
     enum link_t {
-        flushed, unlinked, full_linked
+        flushed, flushing, unlinked, full_linked
     };
 
     std::atomic<int> estate_ = es_empty;
@@ -114,15 +115,17 @@ struct chkfsstate {
     // obtain an inode by number
     inode* get_inode(inum_t inum);
 
-    // inode lookup in directory `dirino`, assumes locked
+    // inode lookup in directory `dirino`, assumes dirino locked
     inode* lookup_inode(inode* dirino, const char* name);
     // inode lookup starting at root directory
     inode* lookup_inode(const char* name);
-    // direntry rename in directory `dirino`, assumes locked
+    // direntry rename in directory `dirino`, assumes dirino locked
     int rename_direntry(inode* dirino, const char* oldname, const char* newname);
-    // directory rename starting at root directory
+    // direntry rename starting at root directory
     int rename_direntry(const char* oldname, const char* newname);
+    // direntry free in directory `dirino`, assumes dirino locked
     int free_direntry(inode* dirino, inode* ino);
+    // direntry free in directory `dirino`
     int free_direntry(inode* ino);
     // allocate new inode of a specific type
     inum_t allocate_inode(int type);
