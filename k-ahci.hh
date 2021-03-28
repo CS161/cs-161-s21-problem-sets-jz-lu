@@ -137,8 +137,11 @@ struct ahcistate {
 
     // high-level functions (they block)
     inline int read(void* buf, size_t sz, size_t off);
+    int read(void* buf, size_t sz, size_t off, std::atomic<int> &r);
     inline int write(const void* buf, size_t sz, size_t off);
     int read_or_write(idecommand cmd, void* buf, size_t sz, size_t off);
+    int read_or_write_nonblocking(idecommand cmd, void* buf, 
+        size_t sz, size_t off, std::atomic<int> &r);
 
     // interrupt handlers
     void handle_interrupt();
@@ -161,5 +164,9 @@ inline int ahcistate::write(const void* buf, size_t sz, size_t off) {
     return read_or_write(cmd_write_fpdma_queued, const_cast<void*>(buf),
                          sz, off);
 }
+inline int ahcistate::read(void* buf, size_t sz, size_t off, std::atomic<int> &r) {
+    return read_or_write_nonblocking(cmd_read_fpdma_queued, buf, sz, off, r);
+}
+
 
 #endif

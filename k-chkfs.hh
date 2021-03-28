@@ -32,7 +32,7 @@ struct bcentry {
     std::atomic<unsigned int> wref_ = 0;        // Write reference "lock"
     unsigned char* buf_ = nullptr;              // memory buffer used for entry
     wait_queue wq_;                             // Write reference wait queue
-    list_links qlink_, dlink_;                  // Bufcache eviction, dirty list link
+    list_links qlink_, dlink_, pflink_;         // Eviction, dirty, prefetch list links
     std::atomic<int> pfstatus_ = E_AGAIN;       // Prefetching status, used only when prefetching
     int linkstatus_ = full_linked;              // Changes to false when unlink is called.
 
@@ -57,6 +57,7 @@ struct bcentry {
     // internal functions
     void clear();
     bool load(irqstate& irqs, bcentry_clean_function cleaner);
+    bool prefetch_block();
 };
 
 struct bufcache {
@@ -69,12 +70,14 @@ struct bufcache {
     bcentry e_[ne];                                 // Entries
     list<bcentry, &bcentry::qlink_> evictq_;        // Eviction queue (refcount 0 blocks only!)
     list<bcentry, &bcentry::dlink_> dirty_list_;    // List of dirty blocks
+    list<bcentry, &bcentry::pflink_> pfq_;          // Prefetching blocks queue
 
     static inline bufcache& get();
     bool full();
 
     bcentry* get_disk_entry(blocknum_t bn,
                             bcentry_clean_function cleaner = nullptr);
+    int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false);
 
     int sync(int drop);
 
@@ -177,6 +180,7 @@ inline bool bcentry::contains(const void* ptr) const {
 inline void bcentry::clear() {
     assert(ref_ == 0);
     estate_ = es_empty;
+    log_printf("Clearing %d\n", bn_);
     if (buf_) {
         kfree(buf_);
         buf_ = nullptr;

@@ -483,6 +483,7 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
 
     while (nwritten < sz) {
         // copy data to current block
+        bufcache::get().prefetch(ino_, offset_);
         if (bcentry* e = it.find(offset_).get_disk_entry()) {
             unsigned b = it.block_relative_offset();
             size_t ncopy = min(
@@ -524,6 +525,7 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
 
     while (nread < sz) {
         // copy data from current block
+        bufcache::get().prefetch(ino_, offset_);
         if (bcentry* e = it.find(offset_).get_disk_entry()) {
             unsigned b = it.block_relative_offset();
             size_t ncopy = min(

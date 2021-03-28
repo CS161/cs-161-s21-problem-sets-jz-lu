@@ -136,6 +136,41 @@ int ahcistate::read_or_write(idecommand command, void* buf, size_t sz,
 }
 
 
+// ahcistate::read_or_write_nonblocking(command, buf, sz, off, r)
+//    Same as above, but does not block. Pass in `r` the slot status so it can be read later
+//    by the bufcache to determine if the I/O has completed.
+int ahcistate::read_or_write_nonblocking(idecommand command, void* buf, 
+    size_t sz, size_t off, std::atomic<int> &r) {
+    // `sz` and `off` must be sector-aligned
+    assert(sz % sectorsize == 0 && off % sectorsize == 0);
+
+    // obtain lock
+    auto irqs = lock_.lock();
+
+    // Block until ready for command. Use all the slots!
+    int slot = -1;
+    for (unsigned i = 0; i < nslots_; ++i) {
+        if (!((slots_outstanding_mask_ >> i) & 1)) {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot == -1) return E_AGAIN;
+
+    // send command, record buffer and status storage
+    clear(slot);
+    push_buffer(slot, buf, sz);
+    issue_ncq(slot, command, off / sectorsize);
+    slot_status_[slot] = &r;
+
+    lock_.unlock(irqs);
+
+    // Do not block until disk completes I/O.
+    return 0;
+}
+
+
 // FUNCTIONS FOR HANDLING INTERRUPTS
 
 void ahcistate::handle_interrupt() {

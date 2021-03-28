@@ -178,6 +178,7 @@ void proc::exception(regstate* regs) {
             log_printf("[irq_timer] Timer fired at tick %ld, transferring to heap\n", 
                 (uint64_t) ticks);
         }
+        bufcache::get().read_wq_.wake_all();
         // Wake up all the relevant processes in case any need to stop sleeping.
         {
         spinlock_guard guard(socktable_lock);
