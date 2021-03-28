@@ -70,6 +70,7 @@ struct pipe_vnode:public vnode {
 struct disk_vnode:public vnode {
     chkfs::inode* ino_;
     disk_vnode(chkfs::inode* ino, int mode);
+    ~disk_vnode();
 
     int close();
     static chkfs::inode* create_file(const char* filename);

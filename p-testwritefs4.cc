@@ -31,7 +31,6 @@ void process_main() {
     assert_eq(n, 64);
 
     sys_close(f);
-    while (true) {}
 
 
     // read back

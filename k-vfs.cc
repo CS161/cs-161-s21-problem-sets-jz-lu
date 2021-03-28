@@ -438,10 +438,13 @@ disk_vnode::disk_vnode(chkfs::inode* ino, int mode): vnode(mode) {
 }
 
 int disk_vnode::close() {
-    ino_->put();
     spinlock_guard guard(open_close_lock_);
     assert(refcount_ > 0);
     return --refcount_;
+}
+
+disk_vnode::~disk_vnode() {
+    ino_->put();
 }
 
 uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
@@ -677,7 +680,7 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     de->put();
 
     dirino->unlock_write();
-    dirino->entry()->put();
+    dirino->put();
     return ino;
 
     alloc_fail:
@@ -687,7 +690,7 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
             de->put();
         }
         dirino->unlock_write();
-        dirino->entry()->put();
+        dirino->put();
         return nullptr;
 }
 

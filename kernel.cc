@@ -1582,6 +1582,9 @@ int proc::syscall_open(regstate* regs) {
         }
     } else { // Normal disk file
         // Read the inode of the directory.
+        if (strcmp("geisel.txt", pathname) == 0) {
+            log_printf("Opening geisel.txt...\n");
+        }
         auto ino = chkfsstate::get().lookup_inode(pathname);
         if (!ino) {
             if (create && (mode & OF_WRITE)) {
@@ -1875,12 +1878,21 @@ int proc::syscall_unlink(regstate* regs) {
     // put in this function, freeing all data. Otherwise, data is freed when the last 
     // process with the file open calls put on the inode.
     auto ino = chkfsstate::get().lookup_inode(pathname);
+    if (!ino) {
+        return E_NOENT;
+    }
     bcentry* ie = ino->entry();
     auto irqs = ie->lock_.lock();
-    ie->linked = false;
+    if (ie->linkstatus_ != bcentry::full_linked) {
+        ie->lock_.unlock(irqs);
+        ino->put();
+        return E_NOENT;
+    }
+    ie->linkstatus_ = bcentry::unlinked;
     log_printf("marked is_linked as false\n");
     ie->lock_.unlock(irqs);
     ino->put();
+    chkfsstate::get().free_direntry(ino);
     return 0;
 }
 

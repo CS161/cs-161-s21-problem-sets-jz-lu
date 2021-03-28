@@ -16,17 +16,24 @@ struct bcentry {
         es_empty, es_allocated, es_loading, es_clean, es_dirty, es_prefetching
     };
 
+    // flushed: no open processes have inode open, all data deleted
+    // unlinked: inode has been unlinked, but some processes still have it open
+    // full_linked: inode has not been unlinked
+    enum link_t {
+        flushed, unlinked, full_linked
+    };
+
     std::atomic<int> estate_ = es_empty;
 
-    spinlock lock_;                      // protects most `estate_` changes
-    blocknum_t bn_;                      // disk block number (unless empty)
-    unsigned ref_ = 0;                   // reference count
-    std::atomic<unsigned int> wref_ = 0; // Write reference "lock"
-    unsigned char* buf_ = nullptr;       // memory buffer used for entry
-    wait_queue wq_;                      // Write reference wait queue
-    list_links qlink_, dlink_;           // Bufcache eviction, dirty list link
-    std::atomic<int> pfstatus = E_AGAIN; // Prefetching status, used only when prefetching
-    bool linked = true;                  // Changes to false when unlink is called.
+    spinlock lock_;                             // protects most `estate_` changes
+    blocknum_t bn_;                             // disk block number (unless empty)
+    unsigned ref_ = 0;                          // reference count
+    std::atomic<unsigned int> wref_ = 0;        // Write reference "lock"
+    unsigned char* buf_ = nullptr;              // memory buffer used for entry
+    wait_queue wq_;                             // Write reference wait queue
+    list_links qlink_, dlink_;                  // Bufcache eviction, dirty list link
+    std::atomic<int> pfstatus_ = E_AGAIN;       // Prefetching status, used only when prefetching
+    int linkstatus_ = full_linked;              // Changes to false when unlink is called.
 
 
     // return the index of this entry in the buffer cache
@@ -115,6 +122,8 @@ struct chkfsstate {
     int rename_direntry(inode* dirino, const char* oldname, const char* newname);
     // directory rename starting at root directory
     int rename_direntry(const char* oldname, const char* newname);
+    int free_direntry(inode* dirino, inode* ino);
+    int free_direntry(inode* ino);
     // allocate new inode of a specific type
     inum_t allocate_inode(int type);
     // free an inode living in directory dirino, assumes locked

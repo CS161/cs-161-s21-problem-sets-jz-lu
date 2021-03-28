@@ -138,12 +138,11 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
         --e_[i].ref_;
         e_[i].clear();
         log_printf("Load failed in get_disk_entry\n");
-        assert(false);
     }
 
-    e_[i].linked = true;
-    log_printf("marked is_linked as true\n");
-    log_backtrace();
+    if (e_[i].linkstatus_ == bcentry::flushed) {
+        e_[i].linkstatus_ = bcentry::full_linked;
+    }
     e_[i].lock_.unlock(irqs);
     return ok ? &e_[i] : nullptr;
 }
@@ -429,17 +428,16 @@ bcentry* inode::entry() {
 //    Releases the caller’s reference to this inode, which must be located
 //    in the buffer cache.
 void inode::put() {
-    log_printf("inode put called\n");
-    log_backtrace();
     bcentry* ie = entry();
-    { // Free all data of an unlinked inode if no process has it open.
-    spinlock_guard guard(ie->lock_);
-    log_printf("ref = %d linked = %s\n", ie->ref_, ie->linked ? "Yes" : "No");
-    if (ie->ref_ == 1 && !ie->linked) {
+    auto irqs = ie->lock_.lock();
+    log_printf("ref = %d linked = %d\n", ie->ref_, ie->linkstatus_);
+    if (ie->ref_ == 1 && ie->linkstatus_ == bcentry::unlinked) {
+        ie->lock_.unlock(irqs);
         log_printf("free inode about to be called\n");
         int r = chkfsstate::get().free_inode(this);
         assert(!r);
-    }
+    } else {
+        ie->lock_.unlock(irqs);
     }
     ie->put();
 }
@@ -575,7 +573,8 @@ chkfs::inum_t chkfsstate::allocate_inode(int type) {
     superblock_entry->put();
 
     chkfs::inode* ino = nullptr;
-    for (inum_t in = 2; in < sb.ninodes; ++in) { // Start at inum 2, 0 is free, 1 is root dir
+    inum_t free_in = 0;
+    for (inum_t in = 2; in < sb.ninodes && !free_in; ++in) { // Start at inum 2, 0 is free, 1 is root dir
         auto bn = sb.inode_bn + in / chkfs::inodesperblock;
         if (auto inode_entry = bc.get_disk_entry(bn, clean_inode_block)) {
             ino = reinterpret_cast<inode*>(inode_entry->buf_);
@@ -589,12 +588,12 @@ chkfs::inum_t chkfsstate::allocate_inode(int type) {
                 ino->entry()->put_write();
                 ino->unlock_write();
                 // Don't put the inode back (we're using it in the vnode!)
-                return in;
+                free_in = in;
             }
             ino->put();
         }
     }
-    return 0;
+    return free_in;
 }
 
 
@@ -604,47 +603,10 @@ chkfs::inum_t chkfsstate::allocate_inode(int type) {
 int chkfsstate::free_inode(inode* dirino, inode* ino) {
     assert(ino);
 
-    // Compute the inum from the inode ptr, using an inverse function of the 
-    // inum -> inode* function used in get_inode().
-    dirino->lock_write();
-    dirino->entry()->get_write();
-    auto& bc = bufcache::get();
-    auto superblock_entry = bc.get_disk_entry(0);
-    assert(superblock_entry);
-    auto& sb = *reinterpret_cast<chkfs::superblock*>
-        (&superblock_entry->buf_[chkfs::superblock_offset]);
-    superblock_entry->put();
+    bufcache& bc = bufcache::get();
     bcentry* ie = ino->entry();
-    inum_t mod_inum = ino - reinterpret_cast<inode*>(ie->buf_); // inum % inodesperblock
-    inum_t inum = (ie->bn_ - sb.inode_bn)*chkfs::inodesperblock + mod_inum;
-
-    // Walk the directory until the direntry with the right inum is found; free that direntry.
-    chkfs_fileiter it(dirino);
-    bool found = false;
-    for (size_t diroff = 0; !found; diroff += blocksize) {
-        if (bcentry* e = it.find(diroff).get_disk_entry()) {
-            size_t bsz = min(dirino->size - diroff, blocksize);
-            auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
-            for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
-                if (dirent->inum == inum) { // Found inode
-                    dirent->inum = 0;
-                    dirent->name[0] = '\0';
-                    found = true;
-                    break;
-                }
-            }
-            e->put();
-        } else {
-            dirino->entry()->put_write();
-            dirino->unlock_write();
-            return E_IO;
-        }
-    }
-    dirino->entry()->put_write();
-    dirino->unlock_write();
-
     ino->lock_write();
-    ino->entry()->get_write();
+    ie->get_write();
     // Free direct extents first.
     size_t eidx = 0;
     for (chkfs::extent* ex = ino->direct; ex->count && eidx < chkfs::ndirect; ++ex, ++eidx) {
@@ -668,8 +630,11 @@ int chkfsstate::free_inode(inode* dirino, inode* ino) {
     }
 
     // Mark the inode as free.
-    ino->type = ino->size = ino->nlink = 0;    
-    ino->entry()->put_write();
+    ino->type = ino->size = ino->nlink = 0;
+    if (ie->linkstatus_ == bcentry::unlinked) {
+        ie->linkstatus_ = bcentry::flushed;
+    }
+    ie->put_write();
     ino->unlock_write();
     return 0;
 }
@@ -688,6 +653,63 @@ int chkfsstate::free_inode(inode* ino) {
         return E_NOENT;
     }
 }
+
+
+int chkfsstate::free_direntry(inode* dirino, inode* ino) {
+    // Compute the inum from the inode ptr, using an inverse function of the 
+    // inum -> inode* function used in get_inode().
+    auto& bc = bufcache::get();
+    auto superblock_entry = bc.get_disk_entry(0);
+    assert(superblock_entry);
+    auto& sb = *reinterpret_cast<chkfs::superblock*>
+        (&superblock_entry->buf_[chkfs::superblock_offset]);
+    superblock_entry->put();
+
+    bcentry* ie = ino->entry();
+    inum_t mod_inum = ino - reinterpret_cast<inode*>(ie->buf_); // inum % inodesperblock
+    inum_t inum = (ie->bn_ - sb.inode_bn)*chkfs::inodesperblock + mod_inum;
+
+    // Walk the directory until the direntry with the right inum is found; free that direntry.
+    chkfs_fileiter it(dirino);
+    bool found = false;
+    dirino->lock_write();
+    dirino->entry()->get_write();
+    for (size_t diroff = 0; !found; diroff += blocksize) {
+        if (bcentry* e = it.find(diroff).get_disk_entry()) {
+            size_t bsz = min(dirino->size - diroff, blocksize);
+            auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
+            for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
+                if (dirent->inum == inum) { // Found inode
+                    dirent->inum = 0;
+                    dirent->name[0] = '\0';
+                    found = true;
+                    break;
+                }
+            }
+            e->put();
+        } else {
+            dirino->entry()->put_write();
+            dirino->unlock_write();
+            return E_IO;
+        }
+    }
+    dirino->entry()->put_write();
+    dirino->unlock_write();
+    return 0;
+}
+
+
+int chkfsstate::free_direntry(inode* ino) {
+    auto dirino = get_inode(1);
+    if (dirino) {
+        int r = fs.free_direntry(dirino, ino);
+        dirino->put();
+        return r;
+    } else {
+        return E_NOENT;
+    }
+}
+
 
 // ===== Bitset helper functions ====== //
 // NOTE: all bitset helper functions below assume that the fbb cache entry
