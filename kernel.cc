@@ -1606,7 +1606,6 @@ int proc::syscall_open(regstate* regs) {
             if (VFS_MF_PARANOIA >= 1) {
                 log_printf("[syscall_open] Failed to k-alloc diskfile vnode\n");
             }
-            // TODO free inode
             return E_NOMEM;
         }
         fdtable[fd] = reinterpret_cast<vnode*>(dvn);

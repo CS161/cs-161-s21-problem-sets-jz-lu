@@ -448,7 +448,6 @@ void inode::put() {
 //    corresponding inode (or nullptr if not found). The caller must have
 //    a read lock on `dirino`. The returned inode has a reference that
 //    the caller should eventually release with `ino->put()`.
-
 chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
                                        const char* filename) {
     chkfs_fileiter it(dirino);
@@ -476,7 +475,6 @@ chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
 
 // chkfsstate::lookup_inode(filename)
 //    Looks up `filename` in the root directory.
-
 chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
     auto dirino = get_inode(1);
     if (dirino) {
@@ -634,6 +632,7 @@ int chkfsstate::free_inode(inode* dirino, inode* ino) {
         ie->linkstatus_ = bcentry::flushed;
     }
     ie->lock_.unlock(irqs);
+    log_printf("freed inode\n");
     ie->put_write();
     ino->unlock_write();
     return 0;

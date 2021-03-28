@@ -668,9 +668,8 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     if (!in) goto alloc_fail;
 
     // Grab the inode from the disk.
-    // TODO free inode upon failure.
     ino = fs.get_inode(in);
-    if (!ino) goto alloc_fail;
+    if (!ino) goto get_ino_fail;
 
     // Set the direntry inum and name.
     de->get_write();
@@ -683,9 +682,10 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     dirino->put();
     return ino;
 
+    get_ino_fail:
+        chkfsstate::get().free_inode(ino);
     alloc_fail:
         // Put back the directory entry if gotten, and unlock.
-        // TODO free inode
         if (de) {     
             de->put();
         }
