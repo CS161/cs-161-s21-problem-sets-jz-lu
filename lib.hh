@@ -311,6 +311,7 @@ struct bitset_view {
 #define E_PERM          -1         // Operation not permitted
 #define E_PIPE          -32        // Broken pipe
 #define E_SPIPE         -29        // Illegal seek
+#define E_TPIPE         -15        // Illegal truncate/extend
 #define E_SRCH          -3         // No such process
 #define E_TXTBSY        -26        // Text file busy
 #define E_2BIG          -7         // Argument list too long

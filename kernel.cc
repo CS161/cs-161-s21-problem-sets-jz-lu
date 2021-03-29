@@ -396,6 +396,10 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_READDISKFILE:
         syscall_retval = syscall_readdiskfile(regs);
         break;
+    
+    case SYSCALL_FTRUNCATE:
+        syscall_retval = syscall_ftruncate(regs);
+        break;
 
     case SYSCALL_SYNC: {
         int drop = regs->reg_rdi;
@@ -1583,9 +1587,6 @@ int proc::syscall_open(regstate* regs) {
         }
     } else { // Normal disk file
         // Read the inode of the directory.
-        if (strcmp("geisel.txt", pathname) == 0) {
-            log_printf("Opening geisel.txt...\n");
-        }
         auto ino = chkfsstate::get().lookup_inode(pathname);
         if (!ino) {
             if (create && (mode & OF_WRITE)) {
@@ -1614,6 +1615,7 @@ int proc::syscall_open(regstate* regs) {
         spinlock_guard refguard(dvn->open_close_lock_);
         ++dvn->refcount_;
         }
+        bufcache::get().prefetch(ino, 0, true);
     }
 
     //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
@@ -1917,6 +1919,24 @@ int proc::syscall_rename(regstate* regs) {
     return chkfsstate::get().rename_direntry(oldpath, newpath);
 }
 
+
+// proc::syscall_ftruncate(regstate* regs)
+//    Set the size of file `fd` to `len`. If the file was previously
+//    larger, the extra data is lost; if it was shorter, it is extended
+//    with zero bytes.
+int proc::syscall_ftruncate(regstate* regs) {
+    int fd = regs->reg_rdi;
+    // TODO [MULTITH] lock ftable access
+    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+        return E_BADF;
+    }
+    off_t len = regs->reg_rsi;
+    if (len < 0) {
+        return E_INVAL;
+    }
+
+    return fdtable[fd]->ftruncate(len);
+}
 
 // proc::show_argv()
 //    Prints argv. Don't call unless you know it's valid or for debugging.

@@ -235,7 +235,6 @@ inline int sys_open(const char* path, int flags) {
 // sys_pipe(pfd)
 //    Create a pipe. The array is set to [readfd | writefd].
 inline int sys_pipe(int pfd[2]) {
-    // TODO Add a checker for null pfd
     uintptr_t r = make_syscall(SYSCALL_PIPE);
     if (!is_error(r)) {
         pfd[0] = r;

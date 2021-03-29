@@ -60,9 +60,11 @@ struct vnode {
     // as possible and return what is read. 
     virtual uintptr_t read(uintptr_t addr, size_t sz);
 
-
     // Seek to a position in a file, if vnode points to a mem/disk file
     virtual off_t lseek(off_t off, int origin);
+
+    // Truncate a file (or extend!)
+    virtual int ftruncate(off_t off);
 
     virtual ~vnode();
 };
@@ -141,6 +143,7 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_close(regstate* regs);
     int syscall_unlink(regstate* regs);
     int syscall_rename(regstate* regs);
+    int syscall_ftruncate(regstate* regs);
     int syscall_execv(regstate* regs);
     int syscall_socket(regstate* regs);
     int syscall_listen(regstate* regs);

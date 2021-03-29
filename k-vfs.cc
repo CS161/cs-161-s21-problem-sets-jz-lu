@@ -27,7 +27,7 @@ vnode::vnode(int mode) : mode_(mode) {
 }
 
 // * By C++ decree, a struct that is delete'd with the parent class pointer type
-// * must have virtual destructor. A virtual structor must be defined. If a 
+// * must have virtual destructor. A virtual destructor must be defined. If a 
 // * single virtual function in a struct is defined, the struct is no longer pure virtual 
 // * and as such every virtual function must be defined. Hence the absurd 3 lines below.
 vnode::~vnode() {}
@@ -51,6 +51,18 @@ int vnode::close() {
     assert(refcount_ > 0);
     return --refcount_;
 }
+
+// Default behavior of seek.
+off_t vnode::lseek(off_t off, int origin) {
+    return E_SPIPE;
+}
+
+// Default behavior of ftruncate.
+int vnode::ftruncate(off_t len) {
+    return E_TPIPE;
+}
+
+// ===== Keyboard-console I/O ===== //
 
 kb_c_vnode::kb_c_vnode() : vnode(OF_RDWR) {
     assert(offset_ == 0);
@@ -130,11 +142,7 @@ uintptr_t kb_c_vnode::read(uintptr_t addr, size_t sz) {
 }
 
 
-// Default behavior of seek.
-off_t vnode::lseek(off_t off, int origin) {
-    return E_SPIPE;
-}
-
+// ===== In-memory files ===== //
 
 // mf can be a nullptr, but then set_mf(mf) must be called before any I/O.
 // syscall_open() uses this feature to prevent memory leaks.
@@ -222,6 +230,9 @@ uintptr_t memfile_vnode::read(uintptr_t addr, size_t sz) {
     offset_ += rd_sz;
     return rd_sz;
 }
+
+
+// ===== Pipes and bounded buffers ===== //
 
 
 // Assumes lock held.
@@ -430,12 +441,15 @@ uintptr_t pipe_vnode::read(uintptr_t addr, size_t sz) {
     return bbuf_->read(addr, sz);
 }
 
+
 // ===== File system (disk) ===== //
+
 
 disk_vnode::disk_vnode(chkfs::inode* ino, int mode): vnode(mode) {
     assert(ino);
     ino_ = ino;
 }
+
 
 int disk_vnode::close() {
     spinlock_guard guard(open_close_lock_);
@@ -443,9 +457,11 @@ int disk_vnode::close() {
     return --refcount_;
 }
 
+
 disk_vnode::~disk_vnode() {
     ino_->put();
 }
+
 
 uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
     if (!writeable()) {
@@ -549,6 +565,26 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
     }
     ino_->unlock_read();
     return nread;
+}
+
+
+int disk_vnode::ftruncate(off_t len) {
+    // TODO extend
+    ino_->lock_write();
+    ino_->entry()->get_write();
+    if (len <= ino_->size) {
+        ino_->size = len;
+        ino_->entry()->put_write();
+        ino_->unlock_write();
+        return len;
+    } else {
+        // TODO add default "locking" variable to lseek and write above and call those
+        // TODO manually with locking done explicitly in here. save current offset_, 
+        // TODO lseek to end, write len-ino_->size bytes, and lseek to saved current offset_
+    }
+    ino_->entry()->put_write();
+    ino_->unlock_write();
+    return E_INVAL; // TODO
 }
 
 

@@ -1,7 +1,5 @@
 #include "u-lib.hh"
 
-// Test special files /dev/null and /dev/read
-
 void process_main() {
     printf("Starting testwritefs5 (assuming clean file system)...\n");
 
@@ -14,8 +12,8 @@ void process_main() {
     char buf[200];
     memset(buf, 0, sizeof(buf));
     
-    ssize_t n = sys_write(f, "You ******* donut! GET OUT OF MY KITCHEN\n", 42);
-    assert_eq(n, 42);
+    ssize_t n = sys_write(f, "DONT BE A DONUT", 15);
+    assert_eq(n, 15);  
 
     sys_close(f);
 
@@ -71,12 +69,24 @@ void process_main() {
     buf[n] = '\n';
     ++n;
 
-    console_printf("%s\n You should see a square of random characters above\n", buf);
+    int i = 0;
+    while (buf[i]) {
+        // Color me random
+        if (buf[i] == '\n') {
+            console_printf(10*((int)buf[i]), "%c", buf[i]);
+        } else {
+            console_printf(100*((int)buf[i]), "%c", buf[i]);
+        }
+
+        i++;
+    }
+    
+    console_printf("\n You should see a square of random characters above (now in color TV!)\n", buf);
 
     sys_close(f);
 
     console_printf(0xA00, "/dev/random test have succeeded\n");
 
-    console_printf(0xB00, "testwritefs5 succeeded.\n");
+    printf("testwritefs5 succeeded.\n");
     sys_exit(0);
 }

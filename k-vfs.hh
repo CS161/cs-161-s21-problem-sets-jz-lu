@@ -78,6 +78,7 @@ struct disk_vnode:public vnode {
     uintptr_t read(uintptr_t addr, size_t sz);
     bool seek_invalid(off_t off, int origin);
     off_t lseek(off_t off, int origin);
+    int ftruncate(off_t len);
 };
 
 struct special_vnode:public vnode {

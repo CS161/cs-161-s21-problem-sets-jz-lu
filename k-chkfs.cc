@@ -408,6 +408,9 @@ int bufcache::sync(int drop) {
             if (e_[i].ref_ == 0) {
                 if (e_[i].qlink_.is_linked()) {
                     bufcache::get().evictq_.erase(&e_[i]);
+                } else if (e_[i].pflink_.is_linked()) {
+                    assert(!e_[i].qlink_.is_linked());
+                    bufcache::get().pfq_.erase(&e_[i]);
                 }
                 e_[i].clear();
             }
