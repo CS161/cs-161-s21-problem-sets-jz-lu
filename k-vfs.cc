@@ -586,7 +586,6 @@ off_t disk_vnode::lseek(off_t off, int origin) {
         ino_->unlock_write();
         return E_INVAL;
     }
-    log_printf("LSEEK CALLED\n");
 
     switch (origin) {
         case LSEEK_SET: {
@@ -608,6 +607,7 @@ off_t disk_vnode::lseek(off_t off, int origin) {
             assert(false, "VFS disk vnode lseek assumptions violated\n");
     }
     ino_->unlock_write();
+    bufcache::get().prefetch(ino_, offset_, true); // Prefetch the next few blocks
     return offset_;
 }
 
@@ -719,11 +719,9 @@ uintptr_t special_vnode::write(uintptr_t addr, size_t sz) {
     }
 
     if (type_ == null) {
-        log_printf("/dev/null write\n");
         return sz; // Do nothing
     } 
     else {
-        log_printf("/dev/random write\n");
         return 0;
     }
 }
@@ -735,7 +733,6 @@ uintptr_t special_vnode::read(uintptr_t addr, size_t sz) {
     }
 
     if (type_ == null) {
-        log_printf("/dev/null read\n");
         if (sz == 0) {
             return 0;
         }
@@ -744,7 +741,6 @@ uintptr_t special_vnode::read(uintptr_t addr, size_t sz) {
         return 1;
     }
     else {
-        log_printf("/dev/random read\n");
         char* ptr = reinterpret_cast<char*>(addr);
         off_t off = 0;
         while (sz > (size_t) off) {

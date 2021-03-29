@@ -63,7 +63,7 @@ struct bcentry {
 struct bufcache {
     using blocknum_t = bcentry::blocknum_t;
 
-    static constexpr size_t ne = 10;                // Number of entries in the cache
+    static constexpr size_t ne = 36;                // Number of entries in the cache
 
     spinlock lock_;                                 // protects all entries' bn_ and ref_
     wait_queue read_wq_;
@@ -77,7 +77,7 @@ struct bufcache {
 
     bcentry* get_disk_entry(blocknum_t bn,
                             bcentry_clean_function cleaner = nullptr);
-    int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false);
+    int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false, int nfetch=2);
 
     int sync(int drop);
 
@@ -180,7 +180,6 @@ inline bool bcentry::contains(const void* ptr) const {
 inline void bcentry::clear() {
     assert(ref_ == 0);
     estate_ = es_empty;
-    log_printf("Clearing %d\n", bn_);
     if (buf_) {
         kfree(buf_);
         buf_ = nullptr;

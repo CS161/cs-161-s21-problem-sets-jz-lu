@@ -34,7 +34,6 @@ bufcache::bufcache() {
 //    return the index into the bufcache entry array of the free block.
 //    Assumes the bufcache is locked, but the entry is not (no changes made to it).
 size_t bufcache::evict() {
-    print_evict_queue();
     bcentry* blk = evictq_.pop_front();
     if (!blk) { // Nothing to pop
         return -1;
@@ -42,8 +41,6 @@ size_t bufcache::evict() {
         size_t blk_index = blk->index();
         assert(blk_index < ne);
         blk->lock_.lock_noirq();
-        int k = blk->estate_;
-        log_printf("Popping %d@%d off evict queue\n", k, blk->bn_);
         blk->clear();
         assert(blk->estate_ == bcentry::es_empty);
         blk->lock_.unlock_noirq();
@@ -112,11 +109,9 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
             // If the block is prefetching here, set it to clean
             // and proceed as usual. (And pop off prefetching queue).
             if (e_[i].estate_ == bcentry::es_prefetching) {
-                log_printf("waiting until prefetch completes\n");
                  waiter().block_until(read_wq_, [&] () {
                     return e_[i].pfstatus_ != E_AGAIN;
                 }, lock_, irqs);
-                log_printf("prefetch complete\n");
             }
 
             e_[i].lock_.lock_noirq();
@@ -132,6 +127,7 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
                 cleaner(&e_[i]);
             }
             pfq_.erase(&e_[i]);
+            log_printf("Prefetch hit\n");
 
             lock_.unlock_noirq();
             e_[i].lock_.unlock(irqs);
@@ -243,13 +239,13 @@ bool bcentry::load(irqstate& irqs, bcentry_clean_function cleaner) {
 // bcentry::prefetch()
 //    Prefetches (nonblocking) the next 2 blocks of a I/O, or first 2 blocks
 //    if a file is just being opened.
-int bufcache::prefetch(chkfs::inode* ino, off_t off, bool inclusive) {
+int bufcache::prefetch(chkfs::inode* ino, off_t off, bool inclusive, int nfetch) {
     if (!inclusive) {
         off += chkfs::blocksize; // Switch to next block if not grabbing first block
     }
 
     chkfs_fileiter it(ino);
-    for (int nremaining = 2; it.find(off).active() && nremaining > 0;
+    for (int nremaining = nfetch; it.find(off).active() && nremaining > 0;
          --nremaining, off+=chkfs::blocksize) {
         auto irqs = lock_.lock();
 
@@ -257,7 +253,6 @@ int bufcache::prefetch(chkfs::inode* ino, off_t off, bool inclusive) {
         bool already_fetched = false;
         size_t i, empty_slot = -1;
 
-        print_evict_queue();
         for (i = 0; i != ne; ++i) {
             if (e_[i].empty()) {
                 assert(!e_[empty_slot].qlink_.is_linked());
@@ -326,8 +321,6 @@ void bcentry::put() {
     assert(ref_ != 0);
     if (--ref_ == 0 && bn_ != 0 && estate_ != es_dirty && estate_ != es_prefetching) {
         bc.evictq_.push_back(this);
-        int k = estate_;
-        log_printf("Pushing %d@%d onto evict queue\n", k, bn_);
     }
 }
 
@@ -391,8 +384,6 @@ int bufcache::sync(int drop) {
         e->estate_ = bcentry::es_clean;
         if (e->ref_ == 0 && e->bn_ != 0 && drop <= 0) {
             assert(e->estate_ != bcentry::es_empty);
-            int k = e->estate_;
-            log_printf("[sync] Pushing %d@%d onto evict queue\n", k, e->bn_);
             bc.evictq_.push_back(e);
         }
         }
@@ -415,7 +406,6 @@ int bufcache::sync(int drop) {
 
             // actually drop buffer
             if (e_[i].ref_ == 0) {
-                log_printf("Dropping %d\n", e_[i].bn_);
                 if (e_[i].qlink_.is_linked()) {
                     bufcache::get().evictq_.erase(&e_[i]);
                 }
@@ -756,7 +746,6 @@ int chkfsstate::free_inode(inode* dirino, inode* ino) {
         ie->linkstatus_ = bcentry::flushed;
     }
     ie->lock_.unlock(irqs);
-    log_printf("freed inode\n");
     ie->put_write();
     ino->unlock_write();
     return 0;
