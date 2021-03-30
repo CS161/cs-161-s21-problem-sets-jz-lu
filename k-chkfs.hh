@@ -118,11 +118,15 @@ struct chkfsstate {
     // obtain an inode by number
     inode* get_inode(inum_t inum);
 
+    // directory inode lookup, starting from user path specification
     inode* lookup_directory(const char* pathname, bool access_last=false);
     // inode lookup in directory `dirino`, assumes dirino locked
     inode* lookup_inode(inode* dirino, const char* name);
     // inode lookup starting at root directory
     inode* lookup_inode(const char* name);
+    // allocate a new direntry in a specified directory, return direntry and set de
+    // assumes dirino is locked for writing
+    chkfs::dirent* allocate_direntry(inode* dirino, bcentry*& de);
     // direntry rename in directory `dirino`, assumes dirino locked
     int rename_direntry(inode* dirino, const char* oldname, const char* newname);
     // direntry rename starting at root directory
@@ -154,6 +158,8 @@ struct chkfsstate {
     static chkfsstate fs;
 
     chkfsstate();
+    // Find the end of a path string, e.g. for '/users/bigka$h/hi.txt' returns ptr to 'hi.txt'
+    char* path_find_last(char* s);
     NO_COPY_OR_ASSIGN(chkfsstate);
 };
 

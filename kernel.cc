@@ -2467,12 +2467,18 @@ off_t proc::syscall_lseek(regstate* regs) {
     return fdtable[fd]->lseek(off, origin);
 }
 
+
 // proc::syscall_mkdir(regs)
 //    Make a new subdirectory.
 int proc::syscall_mkdir(regstate* regs) {
     // TODO [MULTITH] should acquire the fdtable lock to avoid create races
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
-    return E_INVAL;
+    if (int r = pathname_invalid(this, path)) { // Check filename
+        log_printf("[syscall_mkdir] Invalid pathname\n");
+        return r;
+    }
+
+    return chkfsstate::get().mkdir(path);
 }
 
 

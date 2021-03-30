@@ -15,5 +15,9 @@ Invariant changes: `bcentry` lock will also protect the `is_linked` boolean for 
 
 Lock ordering: directory `inode`s are to be locked first, followed by file `inode` locking. Each layer of locks is called in order of `lock_write()` and then `inode->entry()->get_write()` for writing (for reading, the entry has no read reference and thus there is no ambiguity).
 
+Subdirectory locking strategy: `lock_write()` on the parent of the new subdirectory when making a new subdirectory. Lock the subdirectory of a new file when creating. Lock the parent when deleting a subdirectory.
+
+Note: Reading and writing of directories and inodes are not currently synchronized for multiple threads working simultaneously. The invariants to be enforced are that no two processes should be simultaneously working on the directory or allocating/deleting an inode. We will eventually enforce this via the per-process `fdtable` lock for pset 5, but for not we leave synchronization for after multithreading is implemented.
+
 Grading notes
 -------------

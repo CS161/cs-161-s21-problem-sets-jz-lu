@@ -617,7 +617,7 @@ chkfs::inode* chkfsstate::lookup_directory(const char* pathname, bool access_las
         }
     }
     if (!ndelims) {
-        if (access_last) {
+        if (!access_last) {
             return curdir;
         } else {
             return nullptr; // TODO not the case if we have a pwd
@@ -707,7 +707,7 @@ chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
 // chkfsstate::lookup_inode(filename)
 //    Looks up `filename` in the root directory.
 chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
-    auto dirino = lookup_directory(filename, true);
+    auto dirino = lookup_directory(filename);
     if (dirino) {
         dirino->lock_read();
         auto ino = fs.lookup_inode(dirino, filename);
@@ -717,6 +717,73 @@ chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
     } else {
         return nullptr;
     }
+}
+
+char* chkfsstate::path_find_last(char* s) {
+    int ndelims = 0;
+    int i = 0;
+    bool dirend = false;
+    if (s[0] == '/') {
+        ++s;
+    }
+    if (s[strlen(s)-1] == '/') {
+        s[strlen(s)-1] = '\0';
+        dirend = true;
+    }
+    for (int i = 0; s[i]; ++i) {
+        if (s[i] == '/') {
+            s[i] = '\0';
+            ++ndelims;
+        }
+    }
+    for (; ndelims > 0; --ndelims) {
+        s += strlen(s) + 1;
+    }
+    return s;
+}
+
+
+chkfs::dirent* chkfsstate::allocate_direntry(chkfs::inode* dirino, bcentry*& de) {
+    chkfs_fileiter it(dirino);
+    de = nullptr;
+    chkfs::dirent* open_entry = nullptr;
+    // Traverse the directory until a free entry is found.
+    for (size_t diroff = 0; !open_entry; diroff += chkfs::blocksize) { // Block walk
+        if (bcentry* e = it.find(diroff).get_disk_entry()) {
+            auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
+            size_t bsz = min(dirino->size - diroff, chkfs::blocksize);
+            for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) { // direntry walk in block
+                if (dirent->inum == 0) {
+                    open_entry = dirent;
+                    assert(open_entry);
+                    de = e;
+                    break;
+                }
+            }
+            if (!de) {
+                e->put();
+            }
+        } else {
+            // Allocate a new directory block and add to extent. No need to walk the individual
+            // direntries this time--since it is a new allocation the first direntry is free.
+            chkfs::blocknum_t first = fs.allocate_extent(1);
+            if (first >= chkfs::blocknum_t(E_MINERROR)) {
+                log_printf("Error in allocate_extent: unable to allocate new directory block\n");
+            } else {
+                int r = it.insert(first, 1);
+                if (r < 0) {
+                    log_printf("Error in insert: unable to insert new directory block\n");
+                    fs.free_extent(first, 1);
+                }
+            }
+            de = it.find(diroff).get_disk_entry();
+            if (!de) {
+                return nullptr;
+            }
+            open_entry = reinterpret_cast<chkfs::dirent*>(de->buf_);
+        }
+    }
+    return open_entry;
 }
 
 
@@ -792,6 +859,7 @@ int chkfsstate::rename_direntry(const char* oldname, const char* newname) {
 // chkfsstate::allocate_inode(type)
 //    Returns inode number `inum` for newly allocate inode,
 //    or returns 0 if none available. (0 is a reserved "always free" inum.)
+//    Does NOT add refcount to the inode. This is done by calling get_inode() on the inum returned.
 chkfs::inum_t chkfsstate::allocate_inode(int type) {
     auto& bc = bufcache::get();
     auto superblock_entry = bc.get_disk_entry(0);
@@ -941,15 +1009,63 @@ int chkfsstate::free_direntry(inode* ino) {
 
 
 int chkfsstate::mkdir(char* path) {
-    // 1. Walk the path to find the new subdirectory's parent.
+    // First make sure that the directory doesn't already exist.
+    if (lookup_directory(path, true)) {
+        return E_SAMENAME;
+    }
 
+    // 1. Find the parent directory of the new child.
+    chkfs::inode* dirino = lookup_directory(path);
+    if (!dirino) {
+        return E_NOENT;
+    }
+    dirino->lock_write();
 
-    // 2. Allocate
+    // 2. Allocate an inode for the new subdirectory.
+    bcentry* de = nullptr;
+    chkfs::dirent* open_entry = nullptr; // Declare above gotos
+    chkfs::inum_t in = allocate_inode(chkfs::type_directory);
+    if (in == 0) {
+        goto failed_alloc;
+    }
 
+    // 3. Allocate a new direntry and set the name and inum.
+    open_entry = allocate_direntry(dirino, de);
+    if (!open_entry || !de) {
+        goto failed_alloc;
+    }
+
+    // 4. Store the new data into the direntry.
+    de->get_write();
+    open_entry->inum = in;
+    strcpy(open_entry->name, path_find_last(path));
+    de->put_write();
+    de->put();
+    dirino->unlock_write();
+    dirino->put();
     return 0;
+
+    failed_alloc:
+        dirino->entry()->put_write();
+        dirino->unlock_write();
+        dirino->put();
+        return E_NOSPC;
 }
 
 int chkfsstate::rm(char* path) {
+    // First make sure that the directory exists.
+    if (!lookup_directory(path, true)) {
+        return E_NOENT;
+    }
+
+    // Lookup the parent of the directory-to-remove.
+    chkfs::inode* parent_dirino = lookup_directory(path);
+    if (!parent_dirino) {
+        return E_IO;
+    }
+
+    // Free the direntry and the inode.
+
     return 0;
 }
 

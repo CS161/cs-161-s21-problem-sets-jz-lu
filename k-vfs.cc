@@ -656,49 +656,17 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     chkfsstate &fs = chkfsstate::get();
     chkfs::inode* ino = nullptr;
     chkfs::inum_t in = 0;
-    auto dirino = fs.get_inode(1);
+    auto dirino = fs.lookup_directory(filename);
     if (!dirino) {
+        assert(false);
         return nullptr;
-    } 
+    }
 
     dirino->lock_write();
-
-    chkfs_fileiter it(dirino);
-    chkfs::dirent* open_entry = nullptr;
     bcentry* de = nullptr;
-    // Traverse the directory until a free entry is found.
-    for (size_t diroff = 0; !open_entry; diroff += chkfs::blocksize) { // Block walk
-        if (bcentry* e = it.find(diroff).get_disk_entry()) {
-            auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
-            size_t bsz = min(dirino->size - diroff, chkfs::blocksize);
-            for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) { // direntry walk in block
-                if (dirent->inum == 0) {
-                    open_entry = dirent;
-                    assert(open_entry);
-                    de = e;
-                    break;
-                }
-            }
-            if (!de) {
-                e->put();
-            }
-        } else {
-            // Allocate a new directory block and add to extent. No need to walk the individual
-            // direntries this time--since it is a new allocation the first direntry is free.
-            chkfs::blocknum_t first = fs.allocate_extent(1);
-            if (first >= chkfs::blocknum_t(E_MINERROR)) {
-                log_printf("Error in allocate_extent: unable to allocate new directory block\n");
-            } else {
-                int r = it.insert(first, 1);
-                if (r < 0) {
-                    log_printf("Error in insert: unable to insert new directory block\n");
-                    fs.free_extent(first, 1);
-                }
-            }
-            de = it.find(diroff).get_disk_entry();
-            if (!de) goto alloc_fail;
-            open_entry = reinterpret_cast<chkfs::dirent*>(de->buf_);
-        }
+    chkfs::dirent* open_entry = fs.allocate_direntry(dirino, de);
+    if (!de || !open_entry) {
+        goto alloc_fail;
     }
 
     // Allocate and initialize new inode for file.

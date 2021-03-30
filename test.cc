@@ -2,7 +2,7 @@
 #include <string.h>  
 
 int main(void) {
-    char c[21] = "aakash/is/a/donut/";
+    char c[21] = "/aakash/is/a/donut";
     char* s = c;
     int ndelims = 0;
     int i = 0;
@@ -20,13 +20,10 @@ int main(void) {
             ++ndelims;
         }
     }
-    for (; ndelims >= 0; --ndelims) {
-        printf("%s\n", s);
+    for (; ndelims > 0; --ndelims) {
         s += strlen(s) + 1;
-        if (!ndelims) {
-            // Do work on the file part!
-        }
     }
+    printf("%s\n", s);
 
     return 0;
 }
