@@ -369,6 +369,34 @@ inline int sys_rename(const char* oldpath, const char* newpath) {
                         reinterpret_cast<uintptr_t>(newpath));
 }
 
+// sys_mkdir(path)
+//    Make a new subdirectory along `path`
+inline int sys_mkdir(const char* path) {
+    access_memory(path);
+    return make_syscall(SYSCALL_MKDIR, reinterpret_cast<uintptr_t>(path));
+}
+
+// sys_rm(path)
+//    Remove a blank subdirectory along `path`
+inline int sys_rm(const char* path) {
+    access_memory(path);
+    return make_syscall(SYSCALL_RM, reinterpret_cast<uintptr_t>(path));
+}
+
+// sys_pwd(path)
+//    Reads current working directory into `buf`.
+inline int sys_pwd(const char* buf) {
+    access_memory(buf);
+    return make_syscall(SYSCALL_PWD, reinterpret_cast<uintptr_t>(buf));
+}
+
+// sys_cd(path)
+//    Changes current working directory to `path`.
+inline int sys_cd(const char* path) {
+    access_memory(path);
+    return make_syscall(SYSCALL_CD, reinterpret_cast<uintptr_t>(path));
+}
+
 // sys_gettid()
 //    Return the current thread ID.
 inline pid_t sys_gettid() {

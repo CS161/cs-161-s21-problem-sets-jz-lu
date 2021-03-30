@@ -12,8 +12,8 @@ void process_main() {
     char buf[200];
     memset(buf, 0, sizeof(buf));
     
-    ssize_t n = sys_write(f, "DONT BE A DONUT", 15);
-    assert_eq(n, 15);  
+    ssize_t n = sys_write(f, "If I could, I would eat only flavorless brown smoothies containing all the untrients needed by the human animal", 112);
+    assert_eq(n, 112);  
 
     sys_close(f);
 

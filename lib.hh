@@ -289,6 +289,10 @@ struct bitset_view {
 #define SYSCALL_RECEIVEFD       142            // Read a file descriptor via UDS
 #define SYSCALL_LISTEN          143            // Server indicates they are listening
 #define SYSCALL_ACCEPT          144            // Server indicates they are accepting
+#define SYSCALL_MKDIR           145            // Make a new subdirectory
+#define SYSCALL_RM              146            // Remove an empty directory
+#define SYSCALL_PWD             147            // Get current working directory
+#define SYSCALL_CD              148            // Change working directory
 
 // System call error return values
 #define E_AGAIN         -11        // Try again

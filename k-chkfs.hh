@@ -77,7 +77,7 @@ struct bufcache {
 
     bcentry* get_disk_entry(blocknum_t bn,
                             bcentry_clean_function cleaner = nullptr);
-    int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false, int nfetch=2);
+    int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false, int nfetch=8);
 
     int sync(int drop);
 
@@ -118,6 +118,7 @@ struct chkfsstate {
     // obtain an inode by number
     inode* get_inode(inum_t inum);
 
+    inode* lookup_directory(const char* pathname, bool access_last=false);
     // inode lookup in directory `dirino`, assumes dirino locked
     inode* lookup_inode(inode* dirino, const char* name);
     // inode lookup starting at root directory
@@ -136,6 +137,10 @@ struct chkfsstate {
     int free_inode(inode* dirino, inode* ino);
     // free an inode
     int free_inode(inode* ino);
+    // make a new subdirectory
+    int mkdir(char* path);
+    // remove a blank subdirectory
+    int rm(char* path);
     bool block_is_free(void* fbb, blocknum_t bn);
     void mark_block_free(void* fbb, blocknum_t bn);
     void mark_block_taken(void* fbb, blocknum_t bn);

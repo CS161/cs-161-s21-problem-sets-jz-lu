@@ -36,6 +36,24 @@ bufcache::bufcache() {
 size_t bufcache::evict() {
     bcentry* blk = evictq_.pop_front();
     if (!blk) { // Nothing to pop
+        // Attempt to pop a prefetch if it's done.
+        // (pfq_ is protected by bufcache lock, which is held by caller.)
+        // NOTE: there is an inherent race where a prefetch completes after the loop
+        // has already walked past it. The method below guarantees that an eviction is
+        // possible but not guaranteed from the prefetch queue. We leave it up to the caller
+        // if sufficiently desparate for eviction to keep calling it, while the pfq_ is
+        // nonempty and evict() does not return -1.
+        for (auto it = pfq_.front(); it; it = pfq_.next(it)) {
+            if (it->pfstatus_ != E_AGAIN) {
+                size_t idx = it->index();
+                pfq_.erase(it);
+                it->lock_.lock_noirq();
+                it->clear();
+                assert(it->estate_ == bcentry::es_empty);
+                it->lock_.unlock_noirq();
+                return idx;
+            }
+        }
         return -1;
     } else { // Compute the index into the bufcache and return it
         size_t blk_index = blk->index();
@@ -127,7 +145,9 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
                 cleaner(&e_[i]);
             }
             pfq_.erase(&e_[i]);
-            log_printf("Prefetch hit\n");
+            if (SLOT_AND_PREFETCH_EXAMINE) {
+                log_printf("Desired block was already prefetched!\n");
+            }
 
             lock_.unlock_noirq();
             e_[i].lock_.unlock(irqs);
@@ -560,6 +580,100 @@ void inode::put() {
 }
 
 
+// chkfsstate::lookup_directory(pathname, access_last)
+//    Walks directory and returns the dirino of the last directory,
+//    which is either the end of the string, or the second last if the end is a filename.
+chkfs::inode* chkfsstate::lookup_directory(const char* pathname, bool access_last) {
+    char* s = (char*) pathname;
+    char dlm = '/';
+    int ndelims = 0;
+    bool slash_end = false;
+    bool from_root = false; // If true, start at root dir, else start at pwd
+    chkfs::inode* curdir = nullptr; // current directory
+
+    if (s[0] == dlm) {
+        ++s;
+        from_root = true;
+    }
+    if (from_root) {
+        curdir = get_inode(1);
+    } else {
+        // Start at pwd.
+        curdir = get_inode(1); // TODO change to cwd
+    }
+    if (!curdir) {
+        return nullptr;
+    }
+    if (s[strlen(s)-1] == dlm) {
+        s[strlen(s)-1] = '\0';
+        slash_end = true;
+    }
+
+    // Parse the string, and replace delimiters with nulls terminators.
+    for (int i = 0; s[i]; ++i) {
+        if (s[i] == dlm) {
+            s[i] = '\0';
+            ++ndelims;
+        }
+    }
+    if (!ndelims) {
+        if (access_last) {
+            return curdir;
+        } else {
+            return nullptr; // TODO not the case if we have a pwd
+        }
+    }
+
+    for (; ndelims >= 0; --ndelims) {
+        // Search for the next direntry at each step.
+        curdir->lock_read();
+        chkfs_fileiter it(curdir);
+        chkfs::inum_t in = 0;
+        for (size_t diroff = 0; !in; diroff += blocksize) {
+            if (bcentry* e = it.find(diroff).get_disk_entry()) {
+                size_t bsz = min(curdir->size - diroff, blocksize);
+                auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
+                for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
+                    if (dirent->inum && strcmp(dirent->name, s) == 0) {
+                        in = dirent->inum;
+                        break;
+                    }
+                }
+                e->put();
+            } else {
+                goto lookup_unsuccessful;
+            }
+        }
+        curdir->unlock_read();
+        curdir->put();
+        curdir = get_inode(in);
+        if (!curdir) {
+            goto get_unsuccessful;
+        }
+        curdir->lock_read();
+        if (curdir->type != chkfs::type_directory) { // Traversal must be directory
+            goto lookup_unsuccessful;
+        }
+        curdir->unlock_read();
+
+        s += strlen(s) + 1;
+        if (!ndelims && access_last) { // Don't grab a file--we want the directory
+            break;
+        }
+    }
+
+    return curdir;
+
+    lookup_unsuccessful:
+        log_printf("Lookup of '%s' unsuccessful\n", s);
+        curdir->unlock_read();
+        curdir->put();
+    get_unsuccessful:
+        log_printf("inode get of '%s' unsuccessful\n", s);
+        return nullptr;
+}
+
+
 // chkfsstate::lookup_inode(dirino, filename)
 //    Looks up `filename` in the directory inode `dirino`, returning the
 //    corresponding inode (or nullptr if not found). The caller must have
@@ -593,7 +707,7 @@ chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
 // chkfsstate::lookup_inode(filename)
 //    Looks up `filename` in the root directory.
 chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
-    auto dirino = get_inode(1);
+    auto dirino = lookup_directory(filename, true);
     if (dirino) {
         dirino->lock_read();
         auto ino = fs.lookup_inode(dirino, filename);
@@ -662,7 +776,7 @@ int chkfsstate::rename_direntry(inode* dirino,
 // chkfsstate::rename_direntry(filename)
 //    Rename direntry of `oldname` to `newname` in the root directory.
 int chkfsstate::rename_direntry(const char* oldname, const char* newname) {
-    auto dirino = get_inode(1);
+    auto dirino = lookup_directory(oldname, true);
     if (dirino) {
         dirino->lock_write();
         int r = fs.rename_direntry(dirino, oldname, newname);
@@ -825,6 +939,19 @@ int chkfsstate::free_direntry(inode* ino) {
     }
 }
 
+
+int chkfsstate::mkdir(char* path) {
+    // 1. Walk the path to find the new subdirectory's parent.
+
+
+    // 2. Allocate
+
+    return 0;
+}
+
+int chkfsstate::rm(char* path) {
+    return 0;
+}
 
 // ===== Bitset helper functions ====== //
 // NOTE: all bitset helper functions below assume that the fbb cache entry

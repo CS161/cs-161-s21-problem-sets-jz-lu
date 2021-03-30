@@ -468,6 +468,22 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_LSEEK:
         syscall_retval = syscall_lseek(regs);
         break;
+    
+    case SYSCALL_MKDIR:
+        syscall_retval = syscall_mkdir(regs);
+        break;
+
+    case SYSCALL_RM:
+        syscall_retval = syscall_rm(regs);
+        break;
+
+    case SYSCALL_PWD:
+        syscall_retval = syscall_pwd(regs);
+        break;
+    
+    case SYSCALL_CD:
+        syscall_retval = syscall_cd(regs);
+        break;
 
     default:
         // no such system call
@@ -2433,7 +2449,7 @@ uintptr_t proc::syscall_readdiskfile(regstate* regs) {
 }
 
 
-// proc::syscall_lseek(regstate* regs)
+// proc::syscall_lseek(regs)
 //    Reppopsitions file offset to the given offset based on flags.
 //    Does not support seeking to outside the file bounds via extensions.
 off_t proc::syscall_lseek(regstate* regs) {
@@ -2450,6 +2466,40 @@ off_t proc::syscall_lseek(regstate* regs) {
     }
     return fdtable[fd]->lseek(off, origin);
 }
+
+// proc::syscall_mkdir(regs)
+//    Make a new subdirectory.
+int proc::syscall_mkdir(regstate* regs) {
+    // TODO [MULTITH] should acquire the fdtable lock to avoid create races
+    char* path = reinterpret_cast<char*>(regs->reg_rdi);
+    return E_INVAL;
+}
+
+
+// proc::syscall_rm(regs)
+//    Delete an emppty subdirectory.
+int proc::syscall_rm(regstate* regs) {
+    // TODO [MULTITH] should acquire the fdtable lock to avoid create races
+    char* path = reinterpret_cast<char*>(regs->reg_rdi);
+    return E_INVAL;
+}
+
+
+// proc::syscall_pwd(regs)
+//    Read current working directory into user buffer.
+int proc::syscall_pwd(regstate* regs) {
+    char* buf = reinterpret_cast<char*>(regs->reg_rdi);
+    return E_INVAL;
+}
+
+
+// proc::syscall_cd(regs)
+//    Change working directory.
+int proc::syscall_cd(regstate* regs) {
+    char* path = reinterpret_cast<char*>(regs->reg_rdi);
+    return E_INVAL;
+}
+
 
 // memshow()
 //    Draw a picture of memory (physical and virtual) on the CGA console.

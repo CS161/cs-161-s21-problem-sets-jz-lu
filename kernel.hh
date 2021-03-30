@@ -154,6 +154,10 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_receivefd(regstate* regs);
     uintptr_t syscall_readdiskfile(regstate* regs);
     off_t syscall_lseek(regstate* regs);
+    int syscall_mkdir(regstate* regs);
+    int syscall_rm(regstate* regs);
+    int syscall_pwd(regstate* regs);
+    int syscall_cd(regstate* regs);
 
     inline irqstate lock_pagetable_read();
     inline void unlock_pagetable_read(irqstate& irqs);
@@ -269,6 +273,7 @@ const uint64_t UDS_PARANOIA = 0;            // Unix Domain Sockets
 const uint64_t BALLOC_METRICS = 0; // Print allocation metric
 const uint64_t FORK_TESTING = 0; 
 const uint64_t TRUEBLOCK_TESTING = 0;
+const uint64_t SLOT_AND_PREFETCH_EXAMINE = 1;
 
 // "Using" flags
 const uint64_t USING_SLAB_ALLOCATOR = 1; // 0 = turn off slab allocation, 1 = turn on

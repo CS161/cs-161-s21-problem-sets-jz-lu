@@ -118,6 +118,9 @@ int ahcistate::read_or_write(idecommand command, void* buf, size_t sz,
             }
             return (slot != -1);
         }, lock_, irqs);
+    if (SLOT_AND_PREFETCH_EXAMINE) {
+        log_printf("Using slot %d\n", slot);
+    }
 
     // send command, record buffer and status storage
     std::atomic<int> r = E_AGAIN;
@@ -147,7 +150,7 @@ int ahcistate::read_or_write_nonblocking(idecommand command, void* buf,
     // obtain lock
     auto irqs = lock_.lock();
 
-    // Block until ready for command. Use all the slots!
+    // Don't prefetch if there aren't any available slots.
     int slot = -1;
     for (unsigned i = 0; i < nslots_; ++i) {
         if (!((slots_outstanding_mask_ >> i) & 1)) {
@@ -157,6 +160,9 @@ int ahcistate::read_or_write_nonblocking(idecommand command, void* buf,
     }
 
     if (slot == -1) return E_AGAIN;
+    if (SLOT_AND_PREFETCH_EXAMINE) {
+        log_printf("Using slot %d\n", slot);
+    }
 
     // send command, record buffer and status storage
     clear(slot);
