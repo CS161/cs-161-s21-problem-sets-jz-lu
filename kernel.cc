@@ -1566,10 +1566,6 @@ int proc::syscall_open(regstate* regs) {
         log_printf("Cannot open '/'-ending string: semantic reserved for directories\n");
         return E_INVAL;
     }
-    if (chkfsstate::get().lookup_directory(pathname, true)) {
-        log_printf("Cannot open a directory as a file\n");
-        return E_INVAL;
-    }
     int flags = regs->reg_rsi;
     bool create = (flags & OF_CREAT);
     bool trunc = (flags & OF_TRUNC);
@@ -1609,6 +1605,9 @@ int proc::syscall_open(regstate* regs) {
         spinlock_guard refguard(svn->open_close_lock_);
         ++svn->refcount_;
         }
+    } else if (chkfsstate::get().lookup_directory(pathname, true)) {
+        log_printf("Cannot open a directory as a file\n");
+        return E_INVAL;
     } else { // Normal disk file
         // Read the inode of the directory.
         log_printf("[open] attempting to find inode for '%s'\n", pathname);
