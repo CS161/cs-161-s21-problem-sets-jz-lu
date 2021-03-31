@@ -451,8 +451,6 @@ disk_vnode::disk_vnode(chkfs::inode* ino, int mode): vnode(mode) {
     ino->lock_write();
     ino->entry()->get_write();
     ino->flags += (1 << 1); // increment the refcount
-    log_printf("[disk_vnode-constructor] inum=%d, ref=%d, link=%d\n", 
-        chkfsstate::get().ino_to_inum(ino), (ino->flags >> 1), (ino->flags & 1));
     ino->entry()->put_write();
     ino->unlock_write();
 }
@@ -466,10 +464,7 @@ int disk_vnode::close() {
 
 
 disk_vnode::~disk_vnode() {
-    log_printf("[disk_vnode-destructor] Destructing...\n");
     ino_->put(true);
-    log_printf("[disk_vnode-destructor] inum=%d, ref=%d, link=%d\n", 
-        chkfsstate::get().ino_to_inum(ino_), (ino_->flags >> 1), (ino_->flags & 1));
 }
 
 
