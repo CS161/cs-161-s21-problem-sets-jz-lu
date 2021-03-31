@@ -82,7 +82,7 @@ void process_main() {
     n = sys_read(f, buf, 34);
     assert_eq(n, 34);
     assert_memeq(buf, "The Birds begun at Four o'clock -\n", 34);
-
+    
     r = sys_unlink("dickinson.txt");
     assert_eq(r, 0);
 
@@ -111,7 +111,6 @@ void process_main() {
     size_t sz = sys_lseek(wf, 0, LSEEK_SET);
     assert_eq(sz, 0U);
 
-
     // reread
     printf("%s:%d: read both...\n", __FILE__, __LINE__);
 
@@ -123,13 +122,11 @@ void process_main() {
     assert_eq(n, 29);
     assert_memeq(buf, "A Bird, came down the Walk -\n", 29);
 
-
     // synchronize
     printf("%s:%d: sync...\n", __FILE__, __LINE__);
 
     r = sys_sync(1);
     assert_ge(r, 0);
-
 
     // keep reading
     printf("%s:%d: continue reading...\n", __FILE__, __LINE__);

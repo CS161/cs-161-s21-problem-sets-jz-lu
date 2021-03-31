@@ -1562,6 +1562,14 @@ int proc::syscall_open(regstate* regs) {
         log_printf("[syscall_open] Invalid pathname\n");
         return r;
     }
+    if (pathname[strlen(pathname)-1] == '/') {
+        log_printf("Cannot open '/'-ending string: semantic reserved for directories\n");
+        return E_INVAL;
+    }
+    if (chkfsstate::get().lookup_directory(pathname, true)) {
+        log_printf("Cannot open a directory as a file\n");
+        return E_INVAL;
+    }
     int flags = regs->reg_rsi;
     bool create = (flags & OF_CREAT);
     bool trunc = (flags & OF_TRUNC);
@@ -1603,15 +1611,27 @@ int proc::syscall_open(regstate* regs) {
         }
     } else { // Normal disk file
         // Read the inode of the directory.
+        log_printf("[open] attempting to find inode for '%s'\n", pathname);
         auto ino = chkfsstate::get().lookup_inode(pathname);
         if (!ino) {
             if (create && (mode & OF_WRITE)) {
                 // Create a new file and set ino to point to its new inode.
+                log_printf("[open] no inode exists, creating file inode\n");
                 ino = disk_vnode::create_file(pathname);
+                if (!ino) {
+                    return E_IO;
+                }
             } else {
+                log_printf("[open] inode lookup returned nullptr\n");
                 return E_NOENT;
             }
+        } else log_printf("inode found\n");
+        if (ino->type != chkfs::type_regular) { // File opened must be a file
+            log_printf("[open] Attempted file open on a non-file object: type %d\n", ino->type);
+            ino->put();
+            return E_NOENT;
         }
+        
         if (trunc) { // Truncate if requested.
             ino->lock_write();
             ino->entry()->get_write();
@@ -1624,6 +1644,7 @@ int proc::syscall_open(regstate* regs) {
             if (VFS_MF_PARANOIA >= 1) {
                 log_printf("[syscall_open] Failed to k-alloc diskfile vnode\n");
             }
+            ino->put();
             return E_NOMEM;
         }
         fdtable[fd] = reinterpret_cast<vnode*>(dvn);
@@ -1640,6 +1661,7 @@ int proc::syscall_open(regstate* regs) {
         log_printf("[syscall_open] Open successful\n");
         show_fdtable_();
     }
+    log_printf("[syscall_open] Open successful\n");
 
     return fd;
 }
@@ -1880,6 +1902,7 @@ int proc::syscall_close(regstate* regs) {
 // proc::syscall_unlink(regs)
 //    Unlink (delete from chkfs) a file.
 int proc::syscall_unlink(regstate* regs) {
+    log_printf("[unlink] unlink called\n");
     if (!sata_disk) {
         return E_IO;
     }
@@ -1890,24 +1913,41 @@ int proc::syscall_unlink(regstate* regs) {
         return r;
     }
 
+    if (pathname[strlen(pathname)-1] == '/') {
+        log_printf("Cannot unlink '/'-ending path: semantic reserved for directories\n");
+        return E_INVAL;
+    }
+    if (chkfsstate::get().lookup_directory(pathname, true)) {
+        log_printf("Cannot unlink a directory\n");
+        return E_INVAL;
+    }    
+
     // Grab the inode, set unlinked to true, and put it back. If the inode was not
     // open by anyone else, the ref on the bcentry drops to 0 as soon as we call 
     // put in this function, freeing all data. Otherwise, data is freed when the last 
     // process with the file open calls put on the inode. Free the direntry now,
     // so that no new opens to this file can be made.
     auto ino = chkfsstate::get().lookup_inode(pathname);
+    log_printf("looking up inode for '%s'\n", pathname);
     if (!ino) {
+        log_printf("[unlink] lookup inode failed\n");
         return E_NOENT;
     }
     bcentry* ie = ino->entry();
-    auto irqs = ie->lock_.lock();
-    if (ie->linkstatus_ != bcentry::full_linked) {
-        ie->lock_.unlock(irqs);
+    ino->lock_write();
+    if ((ino->flags & 1) != chkfs::linked) {
+        log_printf("[unlink] Attempted double-unlink on inum=%d: ref %d, status %d\n", 
+            chkfsstate::get().ino_to_inum(ino), ino->flags >> 1, (ino->flags & 1));
+        ino->unlock_write();
         ino->put();
         return E_NOENT;
     }
-    ie->linkstatus_ = bcentry::unlinked;
-    ie->lock_.unlock(irqs);
+    ie->get_write();
+    int ref = (ino->flags >> 1);
+    ino->flags = (ref << 1) + chkfs::unlinked; // set status to unlinked
+    log_printf("inum=%d linkstatus set to unlinked\n", chkfsstate::get().ino_to_inum(ino));
+    ie->put_write();
+    ino->unlock_write();
     ino->put();
     chkfsstate::get().free_direntry(ino);
     return 0;
@@ -1953,6 +1993,7 @@ int proc::syscall_ftruncate(regstate* regs) {
 
     return fdtable[fd]->ftruncate(len);
 }
+
 
 // proc::show_argv()
 //    Prints argv. Don't call unless you know it's valid or for debugging.

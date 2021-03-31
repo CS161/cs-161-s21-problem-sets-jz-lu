@@ -16,14 +16,6 @@ struct bcentry {
         es_empty, es_allocated, es_loading, es_clean, es_dirty, es_prefetching
     };
 
-    // flushed: no open processes have inode open, all data deleted
-    // flushing: in the process of deleting data, no other thread should be deleting
-    // unlinked: inode has been unlinked, but some processes still have it open
-    // full_linked: inode has not been unlinked
-    enum link_t {
-        flushed, flushing, unlinked, full_linked
-    };
-
     std::atomic<int> estate_ = es_empty;
 
     spinlock lock_;                             // protects most `estate_` changes
@@ -34,7 +26,6 @@ struct bcentry {
     wait_queue wq_;                             // Write reference wait queue
     list_links qlink_, dlink_, pflink_;         // Eviction, dirty, prefetch list links
     std::atomic<int> pfstatus_ = E_AGAIN;       // Prefetching status, used only when prefetching
-    int linkstatus_ = full_linked;              // Changes to false when unlink is called.
 
 
     // return the index of this entry in the buffer cache
@@ -120,6 +111,8 @@ struct chkfsstate {
 
     // directory inode lookup, starting from user path specification
     inode* lookup_directory(const char* pathname, bool access_last=false);
+    // directory inode lookup, starting from an inode ptr
+    inode* lookup_directory(inode* start_dirino, inode* ino);
     // inode lookup in directory `dirino`, assumes dirino locked
     inode* lookup_inode(inode* dirino, const char* name);
     // inode lookup starting at root directory
@@ -133,7 +126,7 @@ struct chkfsstate {
     int rename_direntry(const char* oldname, const char* newname);
     // direntry free in directory `dirino`, assumes dirino locked
     int free_direntry(inode* dirino, inode* ino);
-    // direntry free in directory `dirino`
+    // free direntry corresponding to the given inode
     int free_direntry(inode* ino);
     // allocate new inode of a specific type
     inum_t allocate_inode(int type);
@@ -150,7 +143,7 @@ struct chkfsstate {
     void mark_block_taken(void* fbb, blocknum_t bn);
     void free_extent(unsigned first, unsigned count);
     blocknum_t find_free_range(void* fbb, unsigned count, size_t start);
-
+    inum_t ino_to_inum(inode* ino);
     blocknum_t allocate_extent(unsigned count = 1);
 
 
@@ -160,6 +153,8 @@ struct chkfsstate {
     chkfsstate();
     // Find the end of a path string, e.g. for '/users/bigka$h/hi.txt' returns ptr to 'hi.txt'
     char* path_find_last(char* s);
+    // Does the dirino contain a direntry with give inum?
+    bool contains(inode* dirino, inum_t inum);
     NO_COPY_OR_ASSIGN(chkfsstate);
 };
 

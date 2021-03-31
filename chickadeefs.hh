@@ -39,6 +39,9 @@ static constexpr size_t direntsize = 128;  // `sizeof(struct dirent)`
 // `inode::type` constants
 static constexpr uint32_t type_regular = 1;
 static constexpr uint32_t type_directory = 2;
+static constexpr uint32_t linked = 0;
+static constexpr uint32_t unlinked = 1;
+static constexpr uint32_t flushed = 2;
 
 
 struct superblock {
@@ -60,20 +63,20 @@ struct extent {
 };
 
 struct inode {
-    uint32_t type;                // file type (regular, directory, or 0/none)
-    uint32_t size;                // file size
-    uint32_t nlink;               // # hard links to file
-    uint32_t flags;               // flags (currently unused)
-    std::atomic<mlock_t> mlock;   // used in memory, 0 when loaded from disk
-    uint32_t mbcindex;            // used in memory, 0 when loaded from disk
-    extent direct[ndirect];       // extents
+    uint32_t type;                  // file type (regular, directory, or 0/none)
+    uint32_t size;                  // file size
+    uint32_t nlink;                 // # hard links to file
+    uint32_t flags = linked;        // flags (currently unused)
+    std::atomic<mlock_t> mlock;     // used in memory, 0 when loaded from disk
+    uint32_t mbcindex;              // used in memory, 0 when loaded from disk
+    extent direct[ndirect];         // extents
     extent indirect;
 
 #ifdef CHICKADEE_KERNEL
     // return the buffer cache entry containing this buffer-cached inode
     bcentry* entry();
     // drop reference to this buffer-cached inode
-    void put();
+    void put(bool user_file=false);
     // obtain/release locks; the lock_ functions may yield, so cannot be
     // called with spinlocks
     void lock_read();

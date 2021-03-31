@@ -273,7 +273,7 @@ const uint64_t UDS_PARANOIA = 0;            // Unix Domain Sockets
 const uint64_t BALLOC_METRICS = 0; // Print allocation metric
 const uint64_t FORK_TESTING = 0; 
 const uint64_t TRUEBLOCK_TESTING = 0;
-const uint64_t SLOT_AND_PREFETCH_EXAMINE = 1;
+const uint64_t SLOT_AND_PREFETCH_EXAMINE = 0;
 
 // "Using" flags
 const uint64_t USING_SLAB_ALLOCATOR = 1; // 0 = turn off slab allocation, 1 = turn on

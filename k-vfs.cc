@@ -448,6 +448,13 @@ uintptr_t pipe_vnode::read(uintptr_t addr, size_t sz) {
 disk_vnode::disk_vnode(chkfs::inode* ino, int mode): vnode(mode) {
     assert(ino);
     ino_ = ino;
+    ino->lock_write();
+    ino->entry()->get_write();
+    ino->flags += (1 << 1); // increment the refcount
+    log_printf("[disk_vnode-constructor] inum=%d, ref=%d, link=%d\n", 
+        chkfsstate::get().ino_to_inum(ino), (ino->flags >> 1), (ino->flags & 1));
+    ino->entry()->put_write();
+    ino->unlock_write();
 }
 
 
@@ -459,7 +466,10 @@ int disk_vnode::close() {
 
 
 disk_vnode::~disk_vnode() {
-    ino_->put();
+    log_printf("[disk_vnode-destructor] Destructing...\n");
+    ino_->put(true);
+    log_printf("[disk_vnode-destructor] inum=%d, ref=%d, link=%d\n", 
+        chkfsstate::get().ino_to_inum(ino_), (ino_->flags >> 1), (ino_->flags & 1));
 }
 
 
@@ -656,6 +666,12 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     chkfsstate &fs = chkfsstate::get();
     chkfs::inode* ino = nullptr;
     chkfs::inum_t in = 0;
+    if (auto r = fs.lookup_directory(filename, true)) {
+        // File has the same name as a directory--this is not allowed!
+        r->put();
+        return nullptr;
+    }
+
     auto dirino = fs.lookup_directory(filename);
     if (!dirino) {
         assert(false);
@@ -670,6 +686,7 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     }
 
     // Allocate and initialize new inode for file.
+    log_printf("[create_file] allocating new inode...\n");
     in = fs.allocate_inode(chkfs::type_regular);
     if (!in) goto alloc_fail;
 
