@@ -10,6 +10,7 @@ void process_main() {
 
     int ret = sys_mkdir("/jonathan/");
     assert_eq(ret, 0);
+    const char name[] = "/jonathan/donut.txt";
 
     int f = sys_open("/jonathan/donut.txt", OF_CREATE | OF_WRITE);
     assert_gt(f, 2);
@@ -26,7 +27,7 @@ void process_main() {
     ret = sys_rm("/jonathan/");
     assert_eq(ret, E_NONEMPTY);
 
-    int r = sys_unlink("/jonathan/donut.txt");
+    int r = sys_unlink(name);
     assert_eq(r, 0);
 
     ret = sys_rm("/jonathan/");

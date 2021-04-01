@@ -1952,6 +1952,7 @@ int proc::syscall_unlink(regstate* regs) {
     ie->put_write();
     ino->unlock_write();
     ino->put();
+    log_printf("[unlink] freing direntry\n");
     chkfsstate::get().free_direntry(ino);
     log_printf("[unlink] unlink successful\n");
     return 0;

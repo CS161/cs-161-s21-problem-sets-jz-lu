@@ -1,29 +1,29 @@
 #include <stdio.h>
 #include <string.h>  
 
-int main(void) {
-    char c[21] = "/aakash/is/a/donut";
-    char* s = c;
-    int ndelims = 0;
-    int i = 0;
-    bool dirend = false;
-    if (s[0] == '/') {
-        ++s;
+char* path_find_last(char* s) {
+    if (!strchr(s, '/')) {
+        printf("NO DELIMS\n");
+        return s;
     }
     if (s[strlen(s)-1] == '/') {
         s[strlen(s)-1] = '\0';
-        dirend = true;
     }
+    int last_delim_index = 0;
     for (int i = 0; s[i]; ++i) {
         if (s[i] == '/') {
-            s[i] = '\0';
-            ++ndelims;
+            printf("last delim index updated to %d\n", i);
+            last_delim_index = i;
+            printf("UPDATED WORD: %s\n", s + last_delim_index + 1);
         }
     }
-    for (; ndelims > 0; --ndelims) {
-        s += strlen(s) + 1;
-    }
-    printf("%s\n", s);
+    return s + last_delim_index + 1;
+}
+
+int main(void) {
+    char c[24] = "donut.txt";
+    char* s = path_find_last(c);
+    printf("WORD: %s\n", s);
 
     return 0;
 }
