@@ -24,15 +24,18 @@ void process_main() {
     printf("%s:%d: directory removal tests...\n", __FILE__, __LINE__);
 
     ret = sys_rm("/jonathan/");
-    assert_lt(ret, 0);
+    assert_eq(ret, E_NONEMPTY);
 
-    int r = sys_unlink("donut.txt");
+    int r = sys_unlink("/jonathan/donut.txt");
     assert_eq(r, 0);
 
     ret = sys_rm("/jonathan/");
     assert_eq(ret, 0);
 
-    ret = sys_rm("/aakash_can_never_be_removed/");
+    ret = sys_rm("/aakash_can_never_be_removed/"); 
+    // this message sponsored by the 'aakash is cool' group
+    // the above comment sponsored by aakash mishra
+    // this money given to aakash by citadel
     assert_lt(ret, 0);
 
     console_printf(0xA00, "removal of directory tests passed\n");

@@ -464,6 +464,7 @@ int disk_vnode::close() {
 
 
 disk_vnode::~disk_vnode() {
+    log_printf("[disk_vnode-destructor] Putting back inode...\n");
     ino_->put(true);
 }
 
@@ -661,27 +662,33 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     chkfsstate &fs = chkfsstate::get();
     chkfs::inode* ino = nullptr;
     chkfs::inum_t in = 0;
-    if (auto r = fs.lookup_directory(filename, true)) {
+    if (auto r = fs.lookup_directory(filename, true, false)) {
         // File has the same name as a directory--this is not allowed!
+        log_printf("[create file] Error: File shares same name as another file\n");
         r->put();
         return nullptr;
     }
 
     auto dirino = fs.lookup_directory(filename);
     if (!dirino) {
-        assert(false);
+        log_printf("[create file] Error: Unable to find directory of '%s'\n", filename);
         return nullptr;
     }
+    log_printf("[create file] Successfully looked up directory for '%s'\n", filename);
 
     dirino->lock_write();
     bcentry* de = nullptr;
+    char* shortname = chkfsstate::get().path_find_last((char*) filename);
+    log_printf("[create file] Allocating a new direntry in directory inum=%d\n", 
+        chkfsstate::get().ino_to_inum(dirino));
     chkfs::dirent* open_entry = fs.allocate_direntry(dirino, de);
     if (!de || !open_entry) {
+        log_printf("[create file] Error: Failed to allocate a new direntry\n");
         goto alloc_fail;
     }
 
     // Allocate and initialize new inode for file.
-    log_printf("[create_file] allocating new inode...\n");
+    log_printf("[create file] Allocating new inode...\n");
     in = fs.allocate_inode(chkfs::type_regular);
     if (!in) goto alloc_fail;
 
@@ -692,7 +699,8 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     // Set the direntry inum and name.
     de->get_write();
     open_entry->inum = in;
-    strcpy(open_entry->name, filename);
+    strcpy(open_entry->name, shortname);
+    log_printf("[create file] Set new open entry inum to %d and name to '%s'\n", in, shortname);
     de->put_write();
     de->put();
 

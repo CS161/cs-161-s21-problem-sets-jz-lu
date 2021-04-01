@@ -159,7 +159,10 @@ int ahcistate::read_or_write_nonblocking(idecommand command, void* buf,
         }
     }
 
-    if (slot == -1) return E_AGAIN;
+    if (slot == -1) {
+        lock_.unlock(irqs);
+        return E_AGAIN;
+    }
     if (SLOT_AND_PREFETCH_EXAMINE) {
         log_printf("Using slot %d\n", slot);
     }

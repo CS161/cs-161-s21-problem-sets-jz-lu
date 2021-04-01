@@ -317,6 +317,7 @@ inline int sys_receivefd(const char* sockname) {
 // sys_unlink(pathname)
 //    Remove the file named `pathname`.
 inline int sys_unlink(const char* pathname) {
+    console_printf("About to unlink '%s'\n", pathname);
     access_memory(pathname);
     return make_syscall(SYSCALL_UNLINK, reinterpret_cast<uintptr_t>(pathname));
 }

@@ -54,7 +54,7 @@ struct bcentry {
 struct bufcache {
     using blocknum_t = bcentry::blocknum_t;
 
-    static constexpr size_t ne = 36;                // Number of entries in the cache
+    static constexpr size_t ne = 64;                // Number of entries in the cache
 
     spinlock lock_;                                 // protects all entries' bn_ and ref_
     wait_queue read_wq_;
@@ -68,7 +68,7 @@ struct bufcache {
 
     bcentry* get_disk_entry(blocknum_t bn,
                             bcentry_clean_function cleaner = nullptr);
-    int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false, int nfetch=8);
+    int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false, int nfetch=16);
 
     int sync(int drop);
 
@@ -105,12 +105,14 @@ struct chkfsstate {
     static constexpr size_t blocksize = chkfs::blocksize;
 
     static inline chkfsstate& get();
+    // Find the end of a path string, e.g. for '/users/bigka$h/hi.txt' returns ptr to 'hi.txt'
+    char* path_find_last(char* s);
 
     // obtain an inode by number
     inode* get_inode(inum_t inum);
 
     // directory inode lookup, starting from user path specification
-    inode* lookup_directory(const char* pathname, bool access_last=false);
+    inode* lookup_directory(const char* pathname, bool access_last=false, bool is_file=true);
     // directory inode lookup, starting from an inode ptr
     inode* lookup_directory(inode* start_dirino, inode* ino);
     // inode lookup in directory `dirino`, assumes dirino locked
@@ -128,6 +130,8 @@ struct chkfsstate {
     int free_direntry(inode* dirino, inode* ino);
     // free direntry corresponding to the given inode
     int free_direntry(inode* ino);
+    // checks if a directory_is empty (locks the directory)
+    bool directory_empty(inode* dirino);
     // allocate new inode of a specific type
     inum_t allocate_inode(int type);
     // free an inode living in directory dirino, assumes locked
@@ -146,13 +150,10 @@ struct chkfsstate {
     inum_t ino_to_inum(inode* ino);
     blocknum_t allocate_extent(unsigned count = 1);
 
-
   private:
     static chkfsstate fs;
 
     chkfsstate();
-    // Find the end of a path string, e.g. for '/users/bigka$h/hi.txt' returns ptr to 'hi.txt'
-    char* path_find_last(char* s);
     // Does the dirino contain a direntry with give inum?
     bool contains(inode* dirino, inum_t inum);
     NO_COPY_OR_ASSIGN(chkfsstate);

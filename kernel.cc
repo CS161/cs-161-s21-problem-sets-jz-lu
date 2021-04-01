@@ -1593,6 +1593,9 @@ int proc::syscall_open(regstate* regs) {
 
     bool is_dev_null = !strcmp(pathname, "/dev/null");
     bool is_dev_rand = !strcmp(pathname, "/dev/random");
+    if (!is_dev_null && !is_dev_rand) {
+        log_printf("[open] Checking that '%s' is not a directory...\n", pathname);
+    }
 
     if (is_dev_null || is_dev_rand) { // /dev/null
         special_vnode::sfile_t stype = is_dev_null ? special_vnode::null : special_vnode::random;
@@ -1605,12 +1608,13 @@ int proc::syscall_open(regstate* regs) {
         spinlock_guard refguard(svn->open_close_lock_);
         ++svn->refcount_;
         }
-    } else if (chkfsstate::get().lookup_directory(pathname, true)) {
-        log_printf("Cannot open a directory as a file\n");
+    } else if (chkfsstate::get().lookup_directory(pathname, true, false)) { // search "as if" it were a directory
+        log_printf("[open] Cannot open a directory as a file\n");
         return E_INVAL;
     } else { // Normal disk file
         // Read the inode of the directory.
-        log_printf("[open] attempting to find inode for '%s'\n", pathname);
+        log_printf("[open] Confirmed: not a directory\n");
+        log_printf("[open] Attempting to find inode for file '%s'\n", pathname);
         auto ino = chkfsstate::get().lookup_inode(pathname);
         if (!ino) {
             if (create && (mode & OF_WRITE)) {
@@ -1901,7 +1905,6 @@ int proc::syscall_close(regstate* regs) {
 // proc::syscall_unlink(regs)
 //    Unlink (delete from chkfs) a file.
 int proc::syscall_unlink(regstate* regs) {
-    log_printf("[unlink] unlink called\n");
     if (!sata_disk) {
         return E_IO;
     }
@@ -1911,13 +1914,14 @@ int proc::syscall_unlink(regstate* regs) {
         log_printf("[syscall_unlink] Invalid pathname\n");
         return r;
     }
+    log_printf("[unlink] Unlinking file '%s'\n", pathname);
 
     if (pathname[strlen(pathname)-1] == '/') {
-        log_printf("Cannot unlink '/'-ending path: semantic reserved for directories\n");
+        log_printf("[unlink] Error: Cannot unlink '/'-ending path: semantic reserved for directories\n");
         return E_INVAL;
     }
-    if (chkfsstate::get().lookup_directory(pathname, true)) {
-        log_printf("Cannot unlink a directory\n");
+    if (chkfsstate::get().lookup_directory(pathname, true, false)) {
+        log_printf("[unlink] Error: Cannot unlink a directory\n");
         return E_INVAL;
     }    
 
@@ -1926,8 +1930,8 @@ int proc::syscall_unlink(regstate* regs) {
     // put in this function, freeing all data. Otherwise, data is freed when the last 
     // process with the file open calls put on the inode. Free the direntry now,
     // so that no new opens to this file can be made.
+    log_printf("[unlink] looking up inode for '%s'\n", pathname);
     auto ino = chkfsstate::get().lookup_inode(pathname);
-    log_printf("looking up inode for '%s'\n", pathname);
     if (!ino) {
         log_printf("[unlink] lookup inode failed\n");
         return E_NOENT;
@@ -1944,11 +1948,12 @@ int proc::syscall_unlink(regstate* regs) {
     ie->get_write();
     int ref = (ino->flags >> 1);
     ino->flags = (ref << 1) + chkfs::unlinked; // set status to unlinked
-    log_printf("inum=%d linkstatus set to unlinked\n", chkfsstate::get().ino_to_inum(ino));
+    log_printf("[unlink] inum=%d linkstatus set to unlinked\n", chkfsstate::get().ino_to_inum(ino));
     ie->put_write();
     ino->unlock_write();
     ino->put();
     chkfsstate::get().free_direntry(ino);
+    log_printf("[unlink] unlink successful\n");
     return 0;
 }
 
@@ -2527,7 +2532,12 @@ int proc::syscall_mkdir(regstate* regs) {
 int proc::syscall_rm(regstate* regs) {
     // TODO [MULTITH] should acquire the fdtable lock to avoid create races
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
-    return E_INVAL;
+    if (int r = pathname_invalid(this, path)) { // Check filename
+        log_printf("[syscall_rm] Invalid pathname\n");
+        return r;
+    }
+
+    return chkfsstate::get().rm(path);
 }
 
 

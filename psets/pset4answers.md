@@ -19,7 +19,7 @@ Invariant changes:
 
 **Lock ordering**: every subset of locks must obey the following order invariant. Directory `inode`s are to be locked first, followed by file `inode` locking. Each layer of locks is called in order of `lock_write()/lock_read()`, bufcache spinlocks, entry spinlocks, and then `inode->entry()->get_write()` for writing (for reading, the entry has no read reference and thus there is no ambiguity).
 
-Subdirectory locking strategy: every subdirectory and file but the root directory has a "parent", which is the directory that holds the file/subdirectory as a `direntry`. The parent r/w lock shall be used to protect files. *Exception*: an unlinked but still open file does not have a corresponding directory entry, so it will be protected via lock by the root directory's lock. Under this paradigm, one can check that there are no modification races, and although two processes can race to create/delete something, only one will succeed and there is no undefined behavior. However, it is difficult to prevent races on searching the entire directory tree, and thus calls to `lookup_directory()` must be protected by *either* the `fdtable` lock (to be implemented in pset 5--thus any calls to directory lookups in syscall functions at the moment are not yet locked), or the global root dir3ectory r/w lock.
+Subdirectory locking strategy: every subdirectory will be protected by the root directory lock, and every file will be protected by its parent directory lock, with the exception that unlinked files are protected by the root directory. New allocations of inodes are protected by the root lock. Under this paradigm, one can check that there are no modification races, and although two processes can race to create/delete something, only one will succeed and there is no undefined behavior. However, it is difficult to prevent races on searching the entire directory tree, and thus calls to `lookup_directory()` must be protected by *either* the `fdtable` lock (to be implemented in pset 5--thus any calls to directory lookups in syscall functions at the moment are not yet locked), or the global root directory r/w lock.
 
 Note: The only function which may be called without lock is `lookup_directory(inode)`. 
 
@@ -38,4 +38,7 @@ Grading notes
 9. Support for `/dev/random`: TODO
 10. Support for `/dev/zero`: TODO
 11. Support for `/dev/full`: TODO
+12. `sys_pwd`: TODO
+13. `sys_cd`: TODO
+14. New shell functions: `p-mkdir.cc`, `p-rm.cc`, `p-pwd.cc`, `p-cd.cc`, `p-delete.cc`: the first 4 are self-explanatory, the last deletes a file. We now have a pretty full-functioning shell!
 
