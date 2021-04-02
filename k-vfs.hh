@@ -83,7 +83,7 @@ struct disk_vnode:public vnode {
 
 struct special_vnode:public vnode {
     enum sfile_t {
-        null, random
+        null, random, full, zero
     };
     const int type_;
     special_vnode(sfile_t type, int mode);

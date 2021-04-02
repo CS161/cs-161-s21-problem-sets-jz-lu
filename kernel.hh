@@ -6,6 +6,7 @@
 #include "k-lock.hh"
 #include "k-memrange.hh"
 #include "k-waitstruct.hh"
+#include "chickadeefs.hh"
 #if CHICKADEE_PROCESS
 #error "kernel.hh should not be used by process code."
 #endif
@@ -69,6 +70,24 @@ struct vnode {
     virtual ~vnode();
 };
 
+struct cwd {
+    char name[chkfs::maxnamelen + 1] = "/"; // Initialized to root
+    std::atomic<chkfs::mlock_t> mlock;   // used in memory, 0 when loaded from disk
+    char* write(char* buf);
+    char* read(char* buf);
+    void reset();
+    int len();
+    char* cat(char* s, char* buf, bool dir=true);
+
+    private:
+        // obtain/release a write reference to this entry
+        void lock_write();
+        void unlock_write();
+        void lock_read();
+        void unlock_read();
+        bool has_write_lock() const;
+};
+
 // Process descriptor type
 struct __attribute__((aligned(4096))) proc {
     // TODO [MULTITH] Add per-process lock to lock accesses to fdtable, see other flagged TODOs
@@ -87,6 +106,7 @@ struct __attribute__((aligned(4096))) proc {
     std::atomic<int> e_intr = 0;               // Interrupt code
     pid_t childpids_[NPROC] = {0};             // PID Array of children
     vnode* fdtable[MAX_FD] = {0};              // Per-process (threads share) file descriptor table
+    cwd pwd;                                   // Per-process working directory
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
     uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
@@ -95,6 +115,7 @@ struct __attribute__((aligned(4096))) proc {
 #endif
 
     list_links runq_links_;
+
 
 
     proc();
@@ -265,7 +286,7 @@ const uint64_t VFS_KBC_PARANOIA = 0;        // Console and Keyboard VFS
 const uint64_t VFS_MF_PARANOIA = 0;         // Memfile VFS
 const uint64_t PROC_PARANOIA = 0;           // Struct proc constructor/destructor
 const uint64_t PIPE_PARANOIA = 0;
-const uint64_t VFS_PARANOIA = 0;            // General VFS, set to max of others usually
+const uint64_t VFS_PARANOIA = 3;            // General VFS, set to max of others usually
 const uint64_t UDS_PARANOIA = 0;            // Unix Domain Sockets
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 

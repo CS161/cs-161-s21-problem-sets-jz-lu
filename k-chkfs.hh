@@ -54,7 +54,7 @@ struct bcentry {
 struct bufcache {
     using blocknum_t = bcentry::blocknum_t;
 
-    static constexpr size_t ne = 64;                // Number of entries in the cache
+    static constexpr size_t ne = 32;                // Number of entries in the cache
 
     spinlock lock_;                                 // protects all entries' bn_ and ref_
     wait_queue read_wq_;
@@ -68,7 +68,7 @@ struct bufcache {
 
     bcentry* get_disk_entry(blocknum_t bn,
                             bcentry_clean_function cleaner = nullptr);
-    int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false, int nfetch=16);
+    int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false, int nfetch=8);
 
     int sync(int drop);
 

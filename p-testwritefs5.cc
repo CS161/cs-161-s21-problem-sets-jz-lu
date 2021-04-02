@@ -12,8 +12,8 @@ void process_main() {
     char buf[200];
     memset(buf, 0, sizeof(buf));
     
-    ssize_t n = sys_write(f, "If I could, I would eat only flavorless brown smoothies containing all the untrients needed by the human animal", 112);
-    assert_eq(n, 112);  
+    ssize_t n = sys_write(f, "DONT BE A DONUT", 15);
+    assert_eq(n, 15);  
 
     sys_close(f);
 
@@ -71,7 +71,6 @@ void process_main() {
 
     int i = 0;
     while (buf[i]) {
-        // Color me random
         if (buf[i] == '\n') {
             console_printf(10*((int)buf[i]), "%c", buf[i]);
         } else {
@@ -81,11 +80,67 @@ void process_main() {
         i++;
     }
     
-    console_printf("\n You should see a square of random characters above (now in color TV!)\n", buf);
+    console_printf("\n You should see a square of random characters above (now in ");
+    console_printf(0xa00, "c");
+    console_printf(0xb00, "o");
+    console_printf(0xc00, "l");
+    console_printf(0xd00, "o");
+    console_printf(0xe00, "r");
+    console_printf(" TV!)\n");
 
     sys_close(f);
 
-    console_printf(0xA00, "/dev/random test have succeeded\n");
+    console_printf(0xA00, "/dev/random tests have succeeded\n");
+
+    printf("%s:%d: read and write /dev/zero...\n", __FILE__, __LINE__);
+
+    f = sys_open("/dev/zero", OF_WRITE);
+    assert_gt(f, 2);
+
+    memset(buf, 0, sizeof(buf));
+    n = sys_write(f, buf, 10);
+    assert_eq(n, 10);
+
+    sys_close(f);
+
+    f = sys_open("/dev/zero", OF_READ);
+    assert_gt(f, 2);
+
+    memset(buf, 0, sizeof(buf));
+    n = sys_read(f, buf, 10);
+    assert_eq(n, 10);
+
+    assert_memeq(buf, "\0\0\0\0\0\0\0\0\0\0", 10);
+
+    sys_close(f);
+
+    console_printf(0xA00, "/dev/zero tests have succeeded\n");
+
+    printf("%s:%d: read and write /dev/full...\n", __FILE__, __LINE__);
+
+    f = sys_open("/dev/full", OF_WRITE);
+    assert_gt(f, 2);
+
+    memset(buf, 0, sizeof(buf));
+    n = sys_write(f, buf, 10);
+    assert_eq(n, E_NOSPC);
+
+    sys_close(f);
+
+    f = sys_open("/dev/full", OF_READ);
+    assert_gt(f, 2);
+
+    memset(buf, 0, sizeof(buf));
+    n = sys_read(f, buf, 10);
+    assert_eq(n, 10);
+
+    assert_memeq(buf, "\0\0\0\0\0\0\0\0\0\0", 10);
+
+    sys_close(f);
+
+
+    console_printf(0xA00, "/dev/full tests have succeeded\n");
+
 
     printf("testwritefs5 succeeded.\n");
     sys_exit(0);

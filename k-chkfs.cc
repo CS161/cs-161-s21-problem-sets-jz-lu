@@ -613,32 +613,24 @@ void inode::put(bool user_file) {
 //    which is either the end of the string, or the second last if the end is a filename.
 //    Assumes that the root directory is locked.
 chkfs::inode* chkfsstate::lookup_directory(const char* pathname, bool access_last, bool is_file) {
+    log_printf("[lookup directory] called on '%s'\n", pathname);
     char str[strlen(pathname)+1];
     strcpy(str, pathname);
     char* s = str;
     char dlm = '/';
     int ndelims = 0;
-    bool slash_end = false;
-    bool from_root = false; // If true, start at root dir, else start at pwd
     chkfs::inode* curdir = nullptr; // current directory
 
     if (s[0] == dlm) {
         ++s;
-        from_root = true;
     }
-    if (from_root) {
-        curdir = get_inode(1);
-    } else {
-        // Start at pwd.
-        curdir = get_inode(1); // TODO change to cwd
-    }
+    curdir = get_inode(1);
     if (!curdir) {
         log_printf("[lookup directory] Unable to fetch root directory, check bufcache is not overloaded\n");
         return nullptr;
     }
     if (s[strlen(s)-1] == dlm) {
         s[strlen(s)-1] = '\0';
-        slash_end = true;
     }
 
     // Parse the string, and replace delimiters with nulls terminators.
@@ -920,6 +912,7 @@ chkfs::dirent* chkfsstate::allocate_direntry(chkfs::inode* dirino, bcentry*& de)
 //    instead of fetching and returning the inode. Assumes `dirino` is write-locked.
 int chkfsstate::rename_direntry(inode* dirino,
                                        const char* oldname, const char* newname) {
+    log_printf("[post] [rename direntry] Renaming '%s' --> '%s'\n", oldname, newname);
     chkfs_fileiter it(dirino);
 
     // Walk entire directory to check for duplicate names, then adjust 
@@ -971,6 +964,7 @@ int chkfsstate::rename_direntry(inode* dirino,
 // chkfsstate::rename_direntry(filename)
 //    Rename direntry of `oldname` to `newname` in the root directory.
 int chkfsstate::rename_direntry(const char* oldname, const char* newname) {
+    log_printf("[renamed direntry] called '%s' --> '%s'\n", oldname, newname);
     auto root = get_inode(1);
     if (!root) {
         return E_NOENT;
@@ -1465,5 +1459,114 @@ ssize_t diskfile_loader::get_page(uint8_t** pg, size_t off) {
 //    Decrement refcount of page retrieved by diskfile_loader::get_page().
 void diskfile_loader::put_page() {
     curr_pg_->put();
+}
+
+// ===== CWD Functions ===== //
+
+void cwd::lock_read() {
+    chkfs::mlock_t v = mlock.load(std::memory_order_relaxed);
+    while (true) {
+        if (v >= chkfs::mlock_t(-2)) {
+            current()->yield();
+            v = mlock.load(std::memory_order_relaxed);
+        } else if (mlock.compare_exchange_weak(v, v + 1,
+                                               std::memory_order_acquire)) {
+            return;
+        } else {
+            // `compare_exchange_weak` already reloaded `v`
+            pause();
+        }
+    }
+}
+
+void cwd::unlock_read() {
+    chkfs::mlock_t v = mlock.load(std::memory_order_relaxed);
+    assert(v != 0 && v != chkfs::mlock_t(-1));
+    while (!mlock.compare_exchange_weak(v, v - 1,
+                                        std::memory_order_release)) {
+        pause();
+    }
+}
+
+void cwd::lock_write() {
+    assert(!has_write_lock());
+    chkfs::mlock_t v = 0;
+    while (!mlock.compare_exchange_weak(v, chkfs::mlock_t(-1),
+                                        std::memory_order_acquire)) {
+        current()->yield();
+        v = 0;
+    }
+}
+
+void cwd::unlock_write() {
+    assert(has_write_lock());
+    mlock.store(0, std::memory_order_release);
+}
+
+bool cwd::has_write_lock() const {
+    return mlock.load(std::memory_order_relaxed) == chkfs::mlock_t(-1);
+}
+
+
+char* cwd::write(char* s) {
+    char buf[strlen(s)];
+    strcpy(buf, s);
+    int blen = strlen(buf);
+    if (buf[blen-1] != '/') {
+        buf[blen+1] = '\0';
+        buf[blen] = '/';
+    }
+
+    // First make sure that the directory exists.
+    log_printf("[cwd::write] cd called, confirming directory '%s' exists...\n", buf);
+    chkfs::inode* dir = chkfsstate::get().lookup_directory(buf, true, false);
+    if (!dir) {
+        log_printf("[cwd::write] Directory does not exist\n");
+        return nullptr;
+    }
+
+    lock_write();
+    char* ret = strcpy(this->name, buf);
+    unlock_write();
+    return ret;
+}
+
+int cwd::len() {
+    return strlen(name);
+}
+
+char* cwd::cat(char* s, char* buf, bool dir) {
+    if (strlen(s) + strlen(name) > chkfs::maxnamelen-2) {
+        return nullptr;
+    }
+    strcpy(buf, name);
+    if (s[0] == '/') {
+        ++s;
+    }
+    memcpy((void*) (buf+strlen(name)), (void*) s, strlen(s)+1);
+    int blen = strlen(buf);
+    if (dir && buf[blen-1] != '/') {
+        buf[blen+1] = '\0';
+        buf[blen] = '/';
+    }
+    return buf;
+}
+
+void cwd::reset() {
+    // Reset the CWD to root directory.
+    lock_write();
+    char rt[2] = "/";
+    strcpy(name, rt);
+    unlock_write();
+}
+
+char* cwd::read(char* buf) {
+    buf[0] = '~';
+
+    lock_read();
+    char* ret = strcpy(buf + 1, this->name);
+    unlock_read();
+    
+    return ret;
 }
 

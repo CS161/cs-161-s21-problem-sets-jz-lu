@@ -707,7 +707,7 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     de->put();
     dirino->unlock_write();
     dirino->put();
-    
+
     assert(!fs.directory_empty(dirino));
     return ino;
 
@@ -728,7 +728,7 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
 
 special_vnode::special_vnode(sfile_t type, int mode) 
     : vnode(mode), type_(type) {
-    assert(type == null || type == random);
+    assert(type == null || type == random || type == zero || type == full );
     srand(ticks);
 }
 
@@ -745,11 +745,12 @@ uintptr_t special_vnode::write(uintptr_t addr, size_t sz) {
         return E_BADF;
     }
 
-    if (type_ == null) {
+    if (type_ == null || type_ == zero) {
         return sz; // Do nothing
-    } 
-    else {
+    } else if (type_ == random) {
         return 0;
+    } else {
+        return E_NOSPC; // /dev/full
     }
 }
 
@@ -766,12 +767,18 @@ uintptr_t special_vnode::read(uintptr_t addr, size_t sz) {
         char* c = reinterpret_cast<char*>(addr);
         c[0] = '\0';
         return 1;
-    }
-    else {
+    } else if (type_ == random) {
         char* ptr = reinterpret_cast<char*>(addr);
         off_t off = 0;
         while (sz > (size_t) off) {
             ptr[off++] = rand(0, 255);
+        }
+        return sz;
+    } else {
+       char* ptr = reinterpret_cast<char*>(addr);
+        off_t off = 0;
+        while (sz > (size_t) off) {
+            ptr[off++] = '\0';
         }
         return sz;
     }

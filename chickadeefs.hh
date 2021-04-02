@@ -41,7 +41,6 @@ static constexpr uint32_t type_regular = 1;
 static constexpr uint32_t type_directory = 2;
 static constexpr uint32_t linked = 0;
 static constexpr uint32_t unlinked = 1;
-static constexpr uint32_t flushed = 2;
 
 
 struct superblock {
@@ -66,7 +65,7 @@ struct inode {
     uint32_t type;                  // file type (regular, directory, or 0/none)
     uint32_t size;                  // file size
     uint32_t nlink;                 // # hard links to file
-    uint32_t flags = linked;        // flags (currently unused)
+    uint32_t flags = linked;        // flags (first bit=link status, rest holds per-inode refcount)
     std::atomic<mlock_t> mlock;     // used in memory, 0 when loaded from disk
     uint32_t mbcindex;              // used in memory, 0 when loaded from disk
     extent direct[ndirect];         // extents
