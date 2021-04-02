@@ -80,7 +80,6 @@ int chkfs_fileiter::insert(blocknum_t first, unsigned count) {
             --eidx_;
             eoff_ -= eptr_->count * blocksize;
             eptr_->count += count;
-            log_printf("[insert] Growing previous extent idx=%d to have count %d\n", eidx_, eptr_->count);
             ino_entry->put_write();
             return 0;
         }
@@ -113,7 +112,6 @@ int chkfs_fileiter::insert(blocknum_t first, unsigned count) {
 
     // fail if required to grow indirect extent
     if (eidx_ >= chkfs::ndirect && !indirect_entry_) {
-        log_printf("Out of indirect extent block entries!\n");
         return E_FBIG;
     }
 
@@ -122,7 +120,6 @@ int chkfs_fileiter::insert(blocknum_t first, unsigned count) {
     if (eidx_ < chkfs::ndirect) {
         entry = ino_entry;
         eptr_ = &ino_->direct[eidx_];
-        log_printf("[insert] Inserting new extent to direct index %d\n", eidx_);
     } else {
         entry = indirect_entry_;
         eptr_ = reinterpret_cast<chkfs::extent*>(indirect_entry_->buf_)
@@ -141,7 +138,6 @@ int chkfs_fileiter::insert(blocknum_t first, unsigned count) {
         // add new extent
         eptr_->first = first;
         eptr_->count = count;
-        log_printf("[insert] Inserting first=%d, count=%d\n", first, count);
     }
     entry->put_write();
     return 0;

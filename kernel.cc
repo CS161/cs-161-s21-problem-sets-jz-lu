@@ -1576,7 +1576,7 @@ int proc::syscall_open(regstate* regs) {
     const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (pathname[0] != '/') {
-        pfxlen = pwd.len();
+        pfxlen = pwd->len();
     }
     if (int r = pathname_invalid(this, pathname, pfxlen)) { // Check filename
         log_printf("[syscall_open] Invalid pathname\n");
@@ -1616,9 +1616,6 @@ int proc::syscall_open(regstate* regs) {
     bool is_dev_full = !strcmp(pathname, "/dev/full");
     bool is_dev_zero = !strcmp(pathname, "/dev/zero");
     bool is_special = is_dev_null || is_dev_rand || is_dev_full || is_dev_zero;
-    if (!is_special) {
-        log_printf("[open] Checking that '%s' is not a directory...\n", pathname);
-    }
 
     if (is_special) {
         special_vnode::sfile_t stype = special_vnode::null;
@@ -1643,31 +1640,25 @@ int proc::syscall_open(regstate* regs) {
         // Read the inode of the directory.
         char buf[chkfs::maxnamelen+1];
         if (pathname[0] != '/') {
-            pwd.cat((char*) pathname, buf, false);
+            pwd->cat((char*) pathname, buf, false);
             pathname = buf;
         }
         if (chkfsstate::get().lookup_directory(pathname, true, false)) {
-            log_printf("[open] Cannot open a directory as a file\n");
             return E_INVAL;
         }
-        log_printf("[open] Confirmed: not a directory\n");
-        log_printf("[open] Attempting to find inode for file '%s'\n", pathname);
         auto ino = chkfsstate::get().lookup_inode(pathname);
         if (!ino) {
             if (create && (mode & OF_WRITE)) {
                 // Create a new file and set ino to point to its new inode.
-                log_printf("[open] no inode exists, creating file inode\n");
                 ino = disk_vnode::create_file(pathname);
                 if (!ino) {
                     return E_IO;
                 }
             } else {
-                log_printf("[open] inode lookup returned nullptr\n");
                 return E_NOENT;
             }
-        } else log_printf("inode found\n");
+        }
         if (ino->type != chkfs::type_regular) { // File opened must be a file
-            log_printf("[open] Attempted file open on a non-file object: type %d\n", ino->type);
             ino->put();
             return E_NOENT;
         }
@@ -1701,7 +1692,6 @@ int proc::syscall_open(regstate* regs) {
         log_printf("[syscall_open] Open successful\n");
         show_fdtable_();
     }
-    log_printf("[syscall_open] Open successful\n");
 
     return fd;
 }
@@ -1949,13 +1939,12 @@ int proc::syscall_unlink(regstate* regs) {
     const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (pathname[0] != '/') {
-        pfxlen = pwd.len();
+        pfxlen = pwd->len();
     }
     if (int r = pathname_invalid(this, pathname, pfxlen)) { // Check filename
         log_printf("[syscall_mkdir] Invalid pathname\n");
         return r;
     }
-    log_printf("[unlink] Unlinking file '%s'\n", pathname);
 
     if (pathname[strlen(pathname)-1] == '/') {
         log_printf("[unlink] Error: Cannot unlink '/'-ending path: semantic reserved for directories\n");
@@ -1964,7 +1953,7 @@ int proc::syscall_unlink(regstate* regs) {
 
     char buf[chkfs::maxnamelen+1];
     if (pathname[0] != '/') {
-        pwd.cat((char*) pathname, buf, false);
+        pwd->cat((char*) pathname, buf, false);
         pathname = buf;
     }
 
@@ -1978,17 +1967,13 @@ int proc::syscall_unlink(regstate* regs) {
     // put in this function, freeing all data. Otherwise, data is freed when the last 
     // process with the file open calls put on the inode. Free the direntry now,
     // so that no new opens to this file can be made.
-    log_printf("[unlink] looking up inode for '%s'\n", pathname);
     auto ino = chkfsstate::get().lookup_inode(pathname);
     if (!ino) {
-        log_printf("[unlink] lookup inode failed\n");
         return E_NOENT;
     }
     bcentry* ie = ino->entry();
     ino->lock_write();
     if ((ino->flags & 1) != chkfs::linked) {
-        log_printf("[unlink] Attempted double-unlink on inum=%d: ref %d, status %d\n", 
-            chkfsstate::get().ino_to_inum(ino), ino->flags >> 1, (ino->flags & 1));
         ino->unlock_write();
         ino->put();
         return E_NOENT;
@@ -1996,13 +1981,10 @@ int proc::syscall_unlink(regstate* regs) {
     ie->get_write();
     int ref = (ino->flags >> 1);
     ino->flags = (ref << 1) + chkfs::unlinked; // set status to unlinked
-    log_printf("[unlink] inum=%d linkstatus set to unlinked\n", chkfsstate::get().ino_to_inum(ino));
     ie->put_write();
     ino->unlock_write();
     ino->put();
-    log_printf("[unlink] freing direntry\n");
     chkfsstate::get().free_direntry(ino);
-    log_printf("[unlink] unlink successful\n");
     return 0;
 }
 
@@ -2017,10 +1999,10 @@ int proc::syscall_rename(regstate* regs) {
     const char* newpath = reinterpret_cast<const char*>(regs->reg_rsi);
     int pfxlen1 = 0, pfxlen2 = 0;
     if (oldpath[0] != '/') {
-        pfxlen1 = pwd.len();
+        pfxlen1 = pwd->len();
     }
     if (newpath[0] != '/') {
-        pfxlen2 = pwd.len();
+        pfxlen2 = pwd->len();
     }
     if (int r = pathname_invalid(this, oldpath, pfxlen1)) { // Check filename
         log_printf("[syscall_rename] Invalid pathname\n");
@@ -2033,12 +2015,12 @@ int proc::syscall_rename(regstate* regs) {
 
     char oldbuf[chkfs::maxnamelen+1];
     if (oldpath[0] != '/') {
-        pwd.cat((char*) oldpath, oldbuf, false);
+        pwd->cat((char*) oldpath, oldbuf, false);
         oldpath = oldbuf;
     }
     char newbuf[chkfs::maxnamelen+1];
     if (newpath[0] != '/') {
-        pwd.cat((char*) newpath, newbuf, false);
+        pwd->cat((char*) newpath, newbuf, false);
         newpath = newbuf;
     }
     oldpath++;
@@ -2216,7 +2198,7 @@ int proc::syscall_execv(regstate* regs) {
     log_printf("Execing '%s'\n", prgm_name);
     int pfxlen = 0;
     if (prgm_name[0] != '/') {
-        pfxlen = pwd.len();
+        pfxlen = pwd->len();
     }
     
     // Validate pathname.
@@ -2229,7 +2211,7 @@ int proc::syscall_execv(regstate* regs) {
 
     char buf[chkfs::maxnamelen+1];
     if (prgm_name[0] != '/') {
-        pwd.cat((char*) prgm_name, buf, false);
+        pwd->cat((char*) prgm_name, buf, false);
         prgm_name = buf;
     }
     if (chkfsstate::get().lookup_directory(prgm_name, true, false)) {
@@ -2342,9 +2324,6 @@ int proc::syscall_execv(regstate* regs) {
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] \%rsp set to 0x%lx, \%rip set to 0x%lx\n", 
             regs_->reg_rsp, ld.entry_rip_);
-        char** start = pa2kptr<char**>(vmiter(pt, regs_->reg_rsp).pa());
-        log_printf("[syscall_execv] \%rsi=%p points to array with first string='%s'\n",
-            start, pa2kptr<char**>(vmiter(pt, (uintptr_t) start[0]).pa()));
     }
 
     // Set functional argument regs to argc and the NEW argv pointer in the stack page.
@@ -2365,7 +2344,7 @@ int proc::syscall_execv(regstate* regs) {
         log_printf("[syscall_execv] Execv setup complete, yielding\n");
     }
     // Reset the current working directory of the proc.
-    pwd.reset();
+    pwd->reset();
     
     log_printf("[execv] Setup done, yielding\n");
     // yield_noreturn() so the scheduler treats resume() like a regstate
@@ -2547,7 +2526,7 @@ uintptr_t proc::syscall_readdiskfile(regstate* regs) {
     // read root directory to find file inode number
     char temp[chkfs::maxnamelen+1];
     if (filename[0] != '/') {
-        pwd.cat((char*) filename, temp, false);
+        pwd->cat((char*) filename, temp, false);
         filename = temp;
     }
     
@@ -2615,7 +2594,7 @@ int proc::syscall_mkdir(regstate* regs) {
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (path[0] != '/') {
-        pfxlen = pwd.len();
+        pfxlen = pwd->len();
     }
     if (int r = pathname_invalid(this, path, pfxlen)) { // Check filename
         log_printf("[syscall_mkdir] Invalid pathname\n");
@@ -2626,7 +2605,7 @@ int proc::syscall_mkdir(regstate* regs) {
     } else {
         // Create a buffer to concatenate the string.
         char buf[chkfs::maxnamelen+1];
-        if (!pwd.cat(path, buf)) {
+        if (!pwd->cat(path, buf)) {
             return E_NAMETOOLONG;
         } else {
             return chkfsstate::get().mkdir(buf);
@@ -2642,7 +2621,7 @@ int proc::syscall_rm(regstate* regs) {
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (path[0] != '/') {
-        pfxlen = pwd.len();
+        pfxlen = pwd->len();
     }
     if (int r = pathname_invalid(this, path, pfxlen)) { // Check filename
         log_printf("[syscall_mkdir] Invalid pathname\n");
@@ -2653,7 +2632,7 @@ int proc::syscall_rm(regstate* regs) {
     } else {
         // Create a buffer to concatenate the string.
         char buf[chkfs::maxnamelen+1];
-        if (!pwd.cat(path, buf)) {
+        if (!pwd->cat(path, buf)) {
             return E_NAMETOOLONG;
         } else {
             return chkfsstate::get().rm(buf);
@@ -2670,7 +2649,7 @@ int proc::syscall_pwd(regstate* regs) {
         log_printf("[syscall_pwd] Invalid pathname\n");
         return r;
     }
-    if (pwd.read(buf)) {
+    if (pwd->read(buf)) {
         return 0;
     } else {
         return E_PERM;
@@ -2684,23 +2663,23 @@ int proc::syscall_cd(regstate* regs) {
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (path[0] != '/') {
-        pfxlen = pwd.len();
+        pfxlen = pwd->len();
     }
     if (int r = pathname_invalid(this, path, pfxlen)) { // Check filename
         log_printf("[syscall_cd] Invalid pathname\n");
         return r;
     }
     if (path[0] == '/') {
-        if (pwd.write(path)) {
+        if (pwd->write(path)) {
             return 0;
         }
     } else {
         // Create a buffer to concatenate the string.
         char buf[chkfs::maxnamelen+1];
-        if (!pwd.cat(path, buf)) {
+        if (!pwd->cat(path, buf)) {
             return E_NAMETOOLONG;
         } else {
-            if (pwd.write(buf)) {
+            if (pwd->write(buf)) {
                 return 0;
             }
         }

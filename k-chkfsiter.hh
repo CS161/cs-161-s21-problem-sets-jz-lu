@@ -116,7 +116,6 @@ inline auto chkfs_fileiter::blocknum() const -> blocknum_t {
 }
 inline bcentry* chkfs_fileiter::get_disk_entry() const {
     blocknum_t bn = blocknum();
-    log_printf("[it::get disk entry] bn=%d\n", bn);
     return bn ? bufcache::get().get_disk_entry(bn) : nullptr;
 }
 

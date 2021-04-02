@@ -464,7 +464,6 @@ int disk_vnode::close() {
 
 
 disk_vnode::~disk_vnode() {
-    log_printf("[disk_vnode-destructor] Putting back inode...\n");
     ino_->put(true);
 }
 
@@ -493,7 +492,7 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
 
         chkfs::blocknum_t first = fs.allocate_extent(count);
         if (first >= chkfs::blocknum_t(E_MINERROR)) {
-            log_printf("Error in allocate_extent: unable to allocate new extent\n");
+            log_printf("[file write] Error in allocate_extent: unable to allocate new extent\n");
         } else {
             int r = it.insert(first, count);
             if (r < 0) {
@@ -564,7 +563,6 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
                 break;
             }
         } else {
-            log_printf("Reached inactive file offset %d\n", it.offset());
             assert(it.empty());
             break;
         }
@@ -659,7 +657,6 @@ off_t disk_vnode::lseek(off_t off, int origin) {
 //    Returns inode ptr to new file; inode initialized to size 0, type file, nlink 1.
 //    Assumes that the filename is valid.
 chkfs::inode* disk_vnode::create_file(const char* filename) {
-    log_printf("[create file] Creating '%s'\n", filename);
     chkfsstate &fs = chkfsstate::get();
     chkfs::inode* ino = nullptr;
     chkfs::inum_t in = 0;
@@ -675,13 +672,10 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
         log_printf("[create file] Error: Unable to find directory of '%s'\n", filename);
         return nullptr;
     }
-    log_printf("[create file] Successfully looked up directory for '%s'\n", filename);
 
     dirino->lock_write();
     bcentry* de = nullptr;
     char* shortname = chkfsstate::get().path_find_last((char*) filename);
-    log_printf("[create file] Allocating a new direntry in directory inum=%d\n", 
-        fs.ino_to_inum(dirino));
     chkfs::dirent* open_entry = fs.allocate_direntry(dirino, de);
     if (!de || !open_entry) {
         log_printf("[create file] Error: Failed to allocate a new direntry\n");
@@ -689,7 +683,6 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     }
 
     // Allocate and initialize new inode for file.
-    log_printf("[create file] Allocating new inode...\n");
     in = fs.allocate_inode(chkfs::type_regular);
     if (!in) goto alloc_fail;
 
@@ -701,8 +694,6 @@ chkfs::inode* disk_vnode::create_file(const char* filename) {
     de->get_write();
     open_entry->inum = in;
     strcpy(open_entry->name, shortname);
-    log_printf("[create file] Set new dirent (bn=%d) inum to %d and name to '%s'\n", 
-        de->bn_, in, shortname);
     de->put_write();
     de->put();
     dirino->unlock_write();

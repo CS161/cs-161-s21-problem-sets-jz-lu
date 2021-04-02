@@ -32,6 +32,10 @@ proc::proc() {
             ++global_cnode->refcount_;
         }
     }
+    pwd = knew<cwd>();
+    if (!pwd) {
+        panic("No memory remaining to run processes!\n");
+    }
 }
 
 // proc::~proc()
@@ -46,6 +50,7 @@ proc::~proc() {
             fdtable[fd] = nullptr;
         }
     }
+    delete pwd;
 }
 
 // proc::init_user(pid, pt)
