@@ -74,10 +74,12 @@ struct disk_vnode:public vnode {
 
     int close();
     static chkfs::inode* create_file(const char* filename);
-    uintptr_t write(uintptr_t addr, size_t sz, bool lock=true);
+    off_t lseek_nolock(off_t off, int origin);
+    uintptr_t write_nolock(uintptr_t addr, size_t sz);
+    uintptr_t write(uintptr_t addr, size_t sz);
     uintptr_t read(uintptr_t addr, size_t sz);
     bool seek_invalid(off_t off, int origin);
-    off_t lseek(off_t off, int origin, bool lock=true);
+    off_t lseek(off_t off, int origin);
     int ftruncate(off_t len);
 };
 

@@ -518,14 +518,12 @@ int proc::copy_memory_(proc* child) {
                     vmiter itc(child, itp.va());
                     int try_map_code = itc.try_map(itp.pa(), itp.perm());
                     if (try_map_code == -1) {
-                        log_printf("Try_map failed from parent: %d\n", parent->id_);
                         goto free_mem_maps;
                     }
                     itp.next();
                 } else if (itp.user()) {
                     void* npg = kalloc(PAGESIZE);
                     if (!npg) {
-                        log_printf("[fork::copy_memory] kalloc allocation error from parent: pid = %d\n", parent->id_);
                         goto free_mem_maps;
                     } else if (FORK_PARANOIA >= 2) {
                         log_printf("[fork::copy_memory] NEW page copy at va %p, pa 0x%x from parent: pid = %d\n",
@@ -540,7 +538,6 @@ int proc::copy_memory_(proc* child) {
                         try_map_code = -1;
                     }
                     if (try_map_code == -1) {
-                        log_printf("[fork::copy_memory] Try_map failed from parent: pid= %d\n", parent->id_);
                         if (!FORK_TESTING) {
                             kfree(npg); // Simulation would make this a double free!
                         }
@@ -580,7 +577,7 @@ int proc::syscall_fork(regstate* regs) {
     {
     spinlock_guard guard(ptable_lock);
 
-    for (pid_t i = 1; i < NPROC; i++) {
+    for (pid_t i = 2; i < NPROC; i++) {
         if (!ptable[i]) {
             pid = i;
             break;
@@ -609,7 +606,7 @@ int proc::syscall_fork(regstate* regs) {
     child = knew<proc>(pwd); // allocate new process
     if (FORK_TESTING == 1 && rand(0, 5) < 1) { // Testing: simulate struct proc alloc failure
         log_printf("[forktest] Simulating child struct proc failed alloc for parent process %d\n", this->id_);
-        kfree(child);
+        delete child;
         child = nullptr;
     }
 
@@ -617,7 +614,8 @@ int proc::syscall_fork(regstate* regs) {
         if (FORK_PARANOIA >= 1) {
             log_printf("[fork] ERROR: no available memory remaining for child process struct.\n");
         }
-        goto free_cwd;
+        delete pwd;
+        goto eret;
     } else {
         if (FORK_PARANOIA >= 2) {
             log_printf("[fork] Child proc struct va: %p, pa: 0x%x\n", child, kptr2pa(child));
@@ -726,12 +724,10 @@ int proc::syscall_fork(regstate* regs) {
         if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Fork failed, freeing struct proc\n");
         }
-        kfree(child);
+        delete child;
         if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Struct proc freed\n");
         }
-    free_cwd:
-        kfree(pwd);
     eret:
         if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Exiting with exit status %d (no memory)\n", E_NOMEM);
@@ -1530,7 +1526,7 @@ static int pathname_invalid(proc* p, const char* pathname, int pfxlen=0) {
         return E_FAULT;
     }
     for (char* c = (char*) pathname; 
-        *c && pos <= MAX_FILENAME_LEN; 
+        *c && pos <= MAX_FILENAME_LEN;
         ++c, ++pos) {
         it += 1;
         if (!(it.present() && it.user())) {
@@ -1891,6 +1887,7 @@ uintptr_t proc::syscall_write(regstate* regs) {
     }
     uintptr_t addr = regs->reg_rsi;
     size_t sz = regs->reg_rdx;
+    log_printf("[syscall_write] Writing %lu bytes to fd=%d\n", sz, fd); // !
 
     // Validate the write buffer.
     if (IO_invalid(this, addr, addr+sz)) {

@@ -114,6 +114,9 @@ void memusage::refresh() {
         proc* p = ptable[pid];
         if (p) {
             mark(ka2pa(p), f_kernel | f_process(pid));
+            if (p->pwd_) { // mark pwd allocation
+                mark(kptr2pa(p->pwd_), f_kernel | f_process(pid));
+            }
 
             auto irqs = p->lock_pagetable_read();
             if (p->pagetable_ && p->pagetable_ != early_pagetable) {
