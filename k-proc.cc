@@ -9,7 +9,7 @@ spinlock ptable_lock;           // protects `ptable`
 
 // proc::proc()
 //    The constructor initializes the `proc` to empty.
-proc::proc() {
+proc::proc(cwd* pwd) {
     if (PROC_PARANOIA >= 2) {
         log_printf("[proc] [constructor] struct proc constructor called\n");
     }
@@ -32,10 +32,7 @@ proc::proc() {
             ++global_cnode->refcount_;
         }
     }
-    pwd = knew<cwd>();
-    if (!pwd) {
-        panic("No memory remaining to run processes!\n");
-    }
+    pwd_ = pwd;
 }
 
 // proc::~proc()
@@ -50,7 +47,9 @@ proc::~proc() {
             fdtable[fd] = nullptr;
         }
     }
-    delete pwd;
+    if (pwd_) {
+        delete pwd_;
+    }
 }
 
 // proc::init_user(pid, pt)

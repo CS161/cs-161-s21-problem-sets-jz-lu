@@ -71,7 +71,7 @@ struct bufcache {
     int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false, int nfetch=8);
 
     int sync(int drop);
-
+    
  private:
     static bufcache bc;
 

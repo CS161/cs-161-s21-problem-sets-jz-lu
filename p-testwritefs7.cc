@@ -26,8 +26,7 @@ void process_main() {
     ret = sys_rm("/jonathan/");
     assert_eq(ret, E_NONEMPTY);
 
-    const char name[] = "/jonathan/donut.txt";
-    int r = sys_unlink(name);
+    int r = sys_unlink("/jonathan/donut.txt");
     assert_eq(r, 0);
 
     ret = sys_rm("/jonathan/");

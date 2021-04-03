@@ -150,6 +150,6 @@ void idle() {
 
 void cpustate::init_idle_task() {
     assert(!idle_task_);
-    idle_task_ = knew<proc>();
+    idle_task_ = knew<proc>(nullptr);
     idle_task_->init_kernel(-1, idle);
 }

@@ -78,7 +78,7 @@ void kernel_start(const char* command) {
     init_hardware();
     console_clear();
 
-    proc *init_task = knew<proc>();
+    proc *init_task = knew<proc>(nullptr); // no struct cwd for init
     {
         spinlock_guard guard(ptable_lock);
         // set up process descriptors
@@ -116,7 +116,9 @@ void boot_process_start(pid_t pid, const char* name) {
     assert(r >= 0);
 
     // allocate process, initialize memory
-    proc* p = knew<proc>();
+    cwd* pwd = knew<cwd>();
+    assert(pwd); // The first process cannot run out of memory
+    proc* p = knew<proc>(pwd);
     p->init_user(pid, ld.pagetable_);
     p->regs_->reg_rip = ld.entry_rip_;
 
@@ -596,21 +598,26 @@ int proc::syscall_fork(regstate* regs) {
             log_printf("Successfully found a free PID = %d to fork from parent PID = %d\n", pid, this->id_);
         }
     }
+    int memcpy_failed = 1; // Initialize variables before goto statements.
+    x86_64_pagetable* child_pt = nullptr;
+    cwd* pwd = knew<cwd>();
+    proc* child = nullptr;
+    if (!pwd) {
+        goto eret;
+    }
 
-    proc* child = knew<proc>(); // allocate new process
+    child = knew<proc>(pwd); // allocate new process
     if (FORK_TESTING == 1 && rand(0, 5) < 1) { // Testing: simulate struct proc alloc failure
         log_printf("[forktest] Simulating child struct proc failed alloc for parent process %d\n", this->id_);
         kfree(child);
         child = nullptr;
     }
-    int memcpy_failed = 1; // Initialize variables before goto statements.
-    x86_64_pagetable* child_pt = nullptr;
 
     if (!child) {
         if (FORK_PARANOIA >= 1) {
             log_printf("[fork] ERROR: no available memory remaining for child process struct.\n");
         }
-        goto eret;
+        goto free_cwd;
     } else {
         if (FORK_PARANOIA >= 2) {
             log_printf("[fork] Child proc struct va: %p, pa: 0x%x\n", child, kptr2pa(child));
@@ -723,6 +730,8 @@ int proc::syscall_fork(regstate* regs) {
         if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Struct proc freed\n");
         }
+    free_cwd:
+        kfree(pwd);
     eret:
         if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Exiting with exit status %d (no memory)\n", E_NOMEM);
@@ -1576,7 +1585,7 @@ int proc::syscall_open(regstate* regs) {
     const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (pathname[0] != '/') {
-        pfxlen = pwd->len();
+        pfxlen = pwd_->len();
     }
     if (int r = pathname_invalid(this, pathname, pfxlen)) { // Check filename
         log_printf("[syscall_open] Invalid pathname\n");
@@ -1640,7 +1649,7 @@ int proc::syscall_open(regstate* regs) {
         // Read the inode of the directory.
         char buf[chkfs::maxnamelen+1];
         if (pathname[0] != '/') {
-            pwd->cat((char*) pathname, buf, false);
+            pwd_->cat((char*) pathname, buf, false);
             pathname = buf;
         }
         if (chkfsstate::get().lookup_directory(pathname, true, false)) {
@@ -1939,7 +1948,7 @@ int proc::syscall_unlink(regstate* regs) {
     const char* pathname = reinterpret_cast<const char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (pathname[0] != '/') {
-        pfxlen = pwd->len();
+        pfxlen = pwd_->len();
     }
     if (int r = pathname_invalid(this, pathname, pfxlen)) { // Check filename
         log_printf("[syscall_mkdir] Invalid pathname\n");
@@ -1953,7 +1962,7 @@ int proc::syscall_unlink(regstate* regs) {
 
     char buf[chkfs::maxnamelen+1];
     if (pathname[0] != '/') {
-        pwd->cat((char*) pathname, buf, false);
+        pwd_->cat((char*) pathname, buf, false);
         pathname = buf;
     }
 
@@ -1999,10 +2008,10 @@ int proc::syscall_rename(regstate* regs) {
     const char* newpath = reinterpret_cast<const char*>(regs->reg_rsi);
     int pfxlen1 = 0, pfxlen2 = 0;
     if (oldpath[0] != '/') {
-        pfxlen1 = pwd->len();
+        pfxlen1 = pwd_->len();
     }
     if (newpath[0] != '/') {
-        pfxlen2 = pwd->len();
+        pfxlen2 = pwd_->len();
     }
     if (int r = pathname_invalid(this, oldpath, pfxlen1)) { // Check filename
         log_printf("[syscall_rename] Invalid pathname\n");
@@ -2015,12 +2024,12 @@ int proc::syscall_rename(regstate* regs) {
 
     char oldbuf[chkfs::maxnamelen+1];
     if (oldpath[0] != '/') {
-        pwd->cat((char*) oldpath, oldbuf, false);
+        pwd_->cat((char*) oldpath, oldbuf, false);
         oldpath = oldbuf;
     }
     char newbuf[chkfs::maxnamelen+1];
     if (newpath[0] != '/') {
-        pwd->cat((char*) newpath, newbuf, false);
+        pwd_->cat((char*) newpath, newbuf, false);
         newpath = newbuf;
     }
     oldpath++;
@@ -2198,7 +2207,7 @@ int proc::syscall_execv(regstate* regs) {
     log_printf("Execing '%s'\n", prgm_name);
     int pfxlen = 0;
     if (prgm_name[0] != '/') {
-        pfxlen = pwd->len();
+        pfxlen = pwd_->len();
     }
     
     // Validate pathname.
@@ -2211,7 +2220,7 @@ int proc::syscall_execv(regstate* regs) {
 
     char buf[chkfs::maxnamelen+1];
     if (prgm_name[0] != '/') {
-        pwd->cat((char*) prgm_name, buf, false);
+        pwd_->cat((char*) prgm_name, buf, false);
         prgm_name = buf;
     }
     if (chkfsstate::get().lookup_directory(prgm_name, true, false)) {
@@ -2344,7 +2353,7 @@ int proc::syscall_execv(regstate* regs) {
         log_printf("[syscall_execv] Execv setup complete, yielding\n");
     }
     // Reset the current working directory of the proc.
-    pwd->reset();
+    pwd_->reset();
     
     log_printf("[execv] Setup done, yielding\n");
     // yield_noreturn() so the scheduler treats resume() like a regstate
@@ -2526,7 +2535,7 @@ uintptr_t proc::syscall_readdiskfile(regstate* regs) {
     // read root directory to find file inode number
     char temp[chkfs::maxnamelen+1];
     if (filename[0] != '/') {
-        pwd->cat((char*) filename, temp, false);
+        pwd_->cat((char*) filename, temp, false);
         filename = temp;
     }
     
@@ -2594,7 +2603,7 @@ int proc::syscall_mkdir(regstate* regs) {
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (path[0] != '/') {
-        pfxlen = pwd->len();
+        pfxlen = pwd_->len();
     }
     if (int r = pathname_invalid(this, path, pfxlen)) { // Check filename
         log_printf("[syscall_mkdir] Invalid pathname\n");
@@ -2605,7 +2614,7 @@ int proc::syscall_mkdir(regstate* regs) {
     } else {
         // Create a buffer to concatenate the string.
         char buf[chkfs::maxnamelen+1];
-        if (!pwd->cat(path, buf)) {
+        if (!pwd_->cat(path, buf)) {
             return E_NAMETOOLONG;
         } else {
             return chkfsstate::get().mkdir(buf);
@@ -2621,7 +2630,7 @@ int proc::syscall_rm(regstate* regs) {
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (path[0] != '/') {
-        pfxlen = pwd->len();
+        pfxlen = pwd_->len();
     }
     if (int r = pathname_invalid(this, path, pfxlen)) { // Check filename
         log_printf("[syscall_mkdir] Invalid pathname\n");
@@ -2632,7 +2641,7 @@ int proc::syscall_rm(regstate* regs) {
     } else {
         // Create a buffer to concatenate the string.
         char buf[chkfs::maxnamelen+1];
-        if (!pwd->cat(path, buf)) {
+        if (!pwd_->cat(path, buf)) {
             return E_NAMETOOLONG;
         } else {
             return chkfsstate::get().rm(buf);
@@ -2649,7 +2658,7 @@ int proc::syscall_pwd(regstate* regs) {
         log_printf("[syscall_pwd] Invalid pathname\n");
         return r;
     }
-    if (pwd->read(buf)) {
+    if (pwd_->read(buf)) {
         return 0;
     } else {
         return E_PERM;
@@ -2663,23 +2672,23 @@ int proc::syscall_cd(regstate* regs) {
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (path[0] != '/') {
-        pfxlen = pwd->len();
+        pfxlen = pwd_->len();
     }
     if (int r = pathname_invalid(this, path, pfxlen)) { // Check filename
         log_printf("[syscall_cd] Invalid pathname\n");
         return r;
     }
     if (path[0] == '/') {
-        if (pwd->write(path)) {
+        if (pwd_->write(path)) {
             return 0;
         }
     } else {
         // Create a buffer to concatenate the string.
         char buf[chkfs::maxnamelen+1];
-        if (!pwd->cat(path, buf)) {
+        if (!pwd_->cat(path, buf)) {
             return E_NAMETOOLONG;
         } else {
-            if (pwd->write(buf)) {
+            if (pwd_->write(buf)) {
                 return 0;
             }
         }

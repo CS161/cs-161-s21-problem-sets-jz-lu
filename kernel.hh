@@ -72,20 +72,11 @@ struct vnode {
 
 struct cwd {
     char name[chkfs::maxnamelen + 1] = "/"; // Initialized to root
-    std::atomic<chkfs::mlock_t> mlock;   // used in memory, 0 when loaded from disk
     char* write(char* buf);
     char* read(char* buf);
     void reset();
     int len();
     char* cat(char* s, char* buf, bool dir=true);
-
-    private:
-        // obtain/release a write reference to this entry
-        void lock_write();
-        void unlock_write();
-        void lock_read();
-        void unlock_read();
-        bool has_write_lock() const;
 };
 
 // Process descriptor type
@@ -106,7 +97,7 @@ struct __attribute__((aligned(4096))) proc {
     std::atomic<int> e_intr = 0;               // Interrupt code
     pid_t childpids_[NPROC] = {0};             // PID Array of children
     vnode* fdtable[MAX_FD] = {0};              // Per-process (threads share) file descriptor table
-    cwd* pwd = nullptr;                        // Per-process working directory
+    cwd* pwd_ = nullptr;                       // Per-process working directory
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
     uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
@@ -118,7 +109,7 @@ struct __attribute__((aligned(4096))) proc {
 
 
 
-    proc();
+    proc(cwd* pwd);
     NO_COPY_OR_ASSIGN(proc);
     ~proc();
 

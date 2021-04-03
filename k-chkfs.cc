@@ -1398,50 +1398,6 @@ void diskfile_loader::put_page() {
 
 // ===== CWD Functions ===== //
 
-void cwd::lock_read() {
-    chkfs::mlock_t v = mlock.load(std::memory_order_relaxed);
-    while (true) {
-        if (v >= chkfs::mlock_t(-2)) {
-            current()->yield();
-            v = mlock.load(std::memory_order_relaxed);
-        } else if (mlock.compare_exchange_weak(v, v + 1,
-                                               std::memory_order_acquire)) {
-            return;
-        } else {
-            // `compare_exchange_weak` already reloaded `v`
-            pause();
-        }
-    }
-}
-
-void cwd::unlock_read() {
-    chkfs::mlock_t v = mlock.load(std::memory_order_relaxed);
-    assert(v != 0 && v != chkfs::mlock_t(-1));
-    while (!mlock.compare_exchange_weak(v, v - 1,
-                                        std::memory_order_release)) {
-        pause();
-    }
-}
-
-void cwd::lock_write() {
-    assert(!has_write_lock());
-    chkfs::mlock_t v = 0;
-    while (!mlock.compare_exchange_weak(v, chkfs::mlock_t(-1),
-                                        std::memory_order_acquire)) {
-        current()->yield();
-        v = 0;
-    }
-}
-
-void cwd::unlock_write() {
-    assert(has_write_lock());
-    mlock.store(0, std::memory_order_release);
-}
-
-bool cwd::has_write_lock() const {
-    return mlock.load(std::memory_order_relaxed) == chkfs::mlock_t(-1);
-}
-
 
 char* cwd::write(char* s) {
     char buf[strlen(s)];
@@ -1458,10 +1414,7 @@ char* cwd::write(char* s) {
         return nullptr;
     }
 
-    lock_write();
-    char* ret = strcpy(this->name, buf);
-    unlock_write();
-    return ret;
+    return strcpy(this->name, buf);
 }
 
 int cwd::len() {
@@ -1487,19 +1440,12 @@ char* cwd::cat(char* s, char* buf, bool dir) {
 
 void cwd::reset() {
     // Reset the CWD to root directory.
-    lock_write();
     char rt[2] = "/";
     strcpy(name, rt);
-    unlock_write();
 }
 
 char* cwd::read(char* buf) {
-    buf[0] = '~';
-
-    lock_read();
-    char* ret = strcpy(buf + 1, this->name);
-    unlock_read();
-    
+    char* ret = strcpy(buf, this->name);
     return ret;
 }
 
