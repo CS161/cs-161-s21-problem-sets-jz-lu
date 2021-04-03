@@ -468,13 +468,15 @@ disk_vnode::~disk_vnode() {
 }
 
 
-uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
+uintptr_t disk_vnode::write(uintptr_t addr, size_t sz, bool lock) {
     if (!writeable()) {
         return E_BADF;
     }
 
     size_t nwritten = 0;
-    ino_->lock_write();
+    if (lock) {
+        ino_->lock_write();
+    }
     chkfs_fileiter it(ino_);
 
     // Walk to the end of the current allocated size (space given to file, always weakly
@@ -528,7 +530,9 @@ uintptr_t disk_vnode::write(uintptr_t addr, size_t sz) {
     // Set size to new offset (due to extensions, old or new) if it exceeds current size.
     ino_->size = max(ino_->size, (uint32_t) offset_);
     ino_->entry()->put_write();    
-    ino_->unlock_write();
+    if (lock) {
+        ino_->unlock_write();
+    }
     return nwritten;
 }
 
@@ -573,22 +577,27 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
 
 
 int disk_vnode::ftruncate(off_t len) {
-    // TODO extend
     ino_->lock_write();
     ino_->entry()->get_write();
     if (len <= ino_->size) {
         ino_->size = len;
+        if (offset_ > len) {
+            lseek(0, LSEEK_END, false); // Back up to end of truncated file
+        }
         ino_->entry()->put_write();
         ino_->unlock_write();
         return len;
     } else {
-        // TODO add default "locking" variable to lseek and write above and call those
-        // TODO manually with locking done explicitly in here. save current offset_, 
-        // TODO lseek to end, write len-ino_->size bytes, and lseek to saved current offset_
+        off_t cur_off = offset_;
+        off_t end = lseek(0, LSEEK_END, false);
+        char buf[len-end];
+        memset((void*) buf, '\0', len-end);
+        uintptr_t sz = write(reinterpret_cast<uintptr_t>(buf), len-end, false);
+        lseek(cur_off, LSEEK_SET, false);
+        ino_->entry()->put_write();
+        ino_->unlock_write();
+        return end+sz;
     }
-    ino_->entry()->put_write();
-    ino_->unlock_write();
-    return E_INVAL; // TODO
 }
 
 
@@ -607,13 +616,13 @@ bool disk_vnode::seek_invalid(off_t off, int origin) {
 
 
 // Assumes origin is valid. The 
-off_t disk_vnode::lseek(off_t off, int origin) {
+off_t disk_vnode::lseek(off_t off, int origin, bool lock) {
     spinlock_guard guard(open_close_lock_);
     // Handle the size case separately, which doesn't require a write lock.
     if (origin == LSEEK_SIZE) {
-        ino_->lock_read();
+        if (lock) ino_->lock_read();
         uint64_t sz = ino_->size;
-        ino_->unlock_read();
+        if (lock) ino_->unlock_read();
         return sz;
     }
 
@@ -621,9 +630,9 @@ off_t disk_vnode::lseek(off_t off, int origin) {
     // even the validation (it only reads, but it must hold the write lock),
     // to prevent a race condition where the seek is validated, then another thread 
     // changes the size before the seek is made.
-    ino_->lock_write();
+    if (lock) ino_->lock_write();
     if (seek_invalid(off, origin)) {
-        ino_->unlock_write();
+        if (lock) ino_->unlock_write();
         return E_INVAL;
     }
 
@@ -644,9 +653,9 @@ off_t disk_vnode::lseek(off_t off, int origin) {
         }
 
         default:
-            assert(false, "VFS disk vnode lseek assumptions violated\n");
+            panic("VFS disk vnode lseek assumptions violated");
     }
-    ino_->unlock_write();
+    if (lock) ino_->unlock_write();
     bufcache::get().prefetch(ino_, offset_, true); // Prefetch the next few blocks
     return offset_;
 }

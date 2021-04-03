@@ -9,7 +9,7 @@ Answers to written questions
 Eviction strategy: LRU. Use a queue of cache entry indices with zero refcount. When refcount goes up in `bufcache::get_disk_entry()`, pop the entry index off of the queue, and when it goes to zero, push it onto the (back of the) queue. Thus the front of the queue will always hold the least recently used with zero refcount, and can be evicted in `O(1)` time. Popping an index can be done by `erase()` which it also `O(1)` time. TODO FIX
 
 ## Part B
-Synchronization plan: TODO FIX talk about the basic inode locks, and then about serializing vnode offset changes to prevent parent/child/sibling processes from making offset ludicrous (i.e. serialize reads within a vnode) using the same per-vnode lock `vnode::open_close_lock_`.
+Synchronization plan: TODO FIX talk about the basic inode locks, and then about serializing vnode offset changes to prevent parent/child/sibling processes from making offset ludicrous (i.e. serialize reads within a vnode) using the same per-vnode lock `vnode::open_close_lock_`. If multiple processes sharing a `vnode` (e.g. parent-child) with separate `fdtable`s read at the same time, it is up to the processes to synchronize, as while `offset_` is atomic, the entire function will not be locked, so if not synchronized the processes could be reading the same thing twice (this is not a problem with writing, since the inode is locked, but the r/w lock allows multiple readers at the same time).
 
 Invariant changes: 
 1. The `bcentry::buf_` is no longer constant after writing, but may not be modified without holding the `bcentry` write reference via `bcentry::get_write()`. 

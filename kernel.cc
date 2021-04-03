@@ -2044,7 +2044,8 @@ int proc::syscall_rename(regstate* regs) {
 // proc::syscall_ftruncate(regstate* regs)
 //    Set the size of file `fd` to `len`. If the file was previously
 //    larger, the extra data is lost; if it was shorter, it is extended
-//    with zero bytes.
+//    with zero bytes. Returns the new length, which may be smaller than the desired
+//    if extending and the disk does not have enough space.
 int proc::syscall_ftruncate(regstate* regs) {
     int fd = regs->reg_rdi;
     // TODO [MULTITH] lock ftable access

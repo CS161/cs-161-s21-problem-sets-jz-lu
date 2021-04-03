@@ -317,7 +317,6 @@ inline int sys_receivefd(const char* sockname) {
 // sys_unlink(pathname)
 //    Remove the file named `pathname`.
 inline int sys_unlink(const char* pathname) {
-    console_printf("About to unlink '%s'\n", pathname);
     access_memory(pathname);
     return make_syscall(SYSCALL_UNLINK, reinterpret_cast<uintptr_t>(pathname));
 }
@@ -356,7 +355,7 @@ inline ssize_t sys_lseek(int fd, off_t off, int origin) {
 // sys_ftruncate(fd, len)
 //    Set the size of file `fd` to `len`. If the file was previously
 //    larger, the extra data is lost; if it was shorter, it is extended
-//    with zero bytes.
+//    with zero bytes. Returns new size upon success, or error code.
 inline int sys_ftruncate(int fd, off_t len) {
     return make_syscall(SYSCALL_FTRUNCATE, fd, len);
 }
