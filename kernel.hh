@@ -25,6 +25,7 @@ struct elf_program;
 #define MAX_ARGV_LEN        (PAGESIZE >> 2)-8   // -8 since argv[argc] must be set to nullptr
 #define MAX_UDS_KEYLEN      32                  // Max length of UDS key (name string)
 #define NSOCK               8                   // Number of sockets kernel supports
+#define MAX_UBUF_LEN        256                 // Max size of user string buffer
 
 // kernel.hh
 //
@@ -171,6 +172,7 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_rm(regstate* regs);
     int syscall_pwd(regstate* regs);
     int syscall_cd(regstate* regs);
+    int syscall_ls(regstate* regs);
 
     inline irqstate lock_pagetable_read();
     inline void unlock_pagetable_read(irqstate& irqs);

@@ -1268,6 +1268,62 @@ int chkfsstate::rm(char* path) {
     return 0;
 }
 
+
+int chkfsstate::ls(const char* pathname, char* buf, size_t bufsz) {
+    // Walk the directory of the given path and copy
+    // the direntry names into buf.
+    chkfs::inode* dirino = lookup_directory(pathname, true, false);
+    char* buf_start = buf; // Stores start of buffer
+    off_t off = 0;
+    int ncpy = 0;
+    bool buf_full = false;
+    assert(dirino); // The CWD should be correct!
+    dirino->lock_read();
+    chkfs_fileiter it(dirino);
+    for (size_t diroff = 0; off < (int) bufsz; diroff += chkfs::blocksize) { // Block walk
+        if (bcentry* e = it.find(diroff).get_disk_entry()) {
+            auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
+            size_t bsz = min(dirino->size - diroff, chkfs::blocksize);
+            for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) { // direntry walk in block
+                if (dirent->inum) {
+                    size_t len = strlen(dirent->name);
+                    if (off + len + 2 > bufsz) {
+                        buf_full = true;
+                        break;
+                    }
+                    strcpy(buf, dirent->name);
+                    buf[len+1] = '\0';
+                    if (ncpy++ % 3 == 2) {
+                        buf[len] = '\n';
+                    } else {
+                        buf[len] = '\t';
+                    }
+                    buf += len + 2;
+                    off += len + 2;
+                }
+            }
+            e->put();
+        } else {
+            break;
+        }
+    }
+    dirino->unlock_read();
+
+    if (buf_start[off-3] == '\t') {
+        buf_start[off-3] = '\n'; // Make last character a newline
+    } else if (buf_start[off-3] != '\n') {
+        log_printf("Last char: '%c'\n", buf_start[off-3]);
+        log_printf("Buf dump: '%s'\n", buf_start);
+        panic("U done messed up your ls kiddo");
+    }
+
+    if (buf_full) {
+        return E_FBIG;
+    }
+    return 0;
+}
+
+
 // ===== Bitset helper functions ====== //
 // NOTE: all bitset helper functions below assume that the fbb cache entry
 // is locked by the caller.
@@ -1372,6 +1428,9 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     fbb->put();
     return first;
 }
+
+
+// ===== Diskfile loader functions ===== //
 
 
 // diskfile_loader::get_page

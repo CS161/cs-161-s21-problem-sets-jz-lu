@@ -486,6 +486,10 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_CD:
         syscall_retval = syscall_cd(regs);
         break;
+    
+    case SYSCALL_LS:
+        syscall_retval = syscall_ls(regs);
+        break;
 
     default:
         // no such system call
@@ -2692,6 +2696,24 @@ int proc::syscall_cd(regstate* regs) {
         }
     }
     return E_PERM;
+}
+
+
+// proc::syscall_ls(regs)
+//    List all elements of current working directory.
+int proc::syscall_ls(regstate* regs) {
+    size_t bufsz = regs->reg_rsi;
+    if (bufsz > MAX_UBUF_LEN) {
+        return E_2BIG;
+    }
+    char* buf = reinterpret_cast<char*>(regs->reg_rdi);
+    if (int r = buf_invalid(this, buf, bufsz)) {
+        return r;
+    }
+
+    char path[chkfs::maxnamelen+1];
+    pwd_->read(path);
+    return chkfsstate::get().ls(path, buf, bufsz);
 }
 
 

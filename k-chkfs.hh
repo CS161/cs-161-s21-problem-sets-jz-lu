@@ -149,6 +149,7 @@ struct chkfsstate {
     blocknum_t find_free_range(void* fbb, unsigned count, size_t start);
     inum_t ino_to_inum(inode* ino);
     blocknum_t allocate_extent(unsigned count = 1);
+    int ls(const char* pathname, char* buf, size_t bufsz);
 
   private:
     static chkfsstate fs;

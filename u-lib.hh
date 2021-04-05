@@ -360,6 +360,12 @@ inline int sys_ftruncate(int fd, off_t len) {
     return make_syscall(SYSCALL_FTRUNCATE, fd, len);
 }
 
+// sys_ls(buf)
+//    List everything inside the current directory.
+inline int sys_ftruncate(const char* buf, size_t sz) {
+    return make_syscall(SYSCALL_LS, reinterpret_cast<uintptr_t>(buf), sz);
+}
+
 // sys_rename(oldpath, newpath)
 //    Rename the file with name `oldpath` to `newpath`.
 inline int sys_rename(const char* oldpath, const char* newpath) {
