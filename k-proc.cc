@@ -48,7 +48,6 @@ proc::~proc() {
         }
     }
     if (pwd_) {
-        log_printf("process %d deleting pwd\n", id_);
         delete pwd_;
     }
 }

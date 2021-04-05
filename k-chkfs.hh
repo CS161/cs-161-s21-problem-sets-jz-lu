@@ -155,7 +155,8 @@ struct chkfsstate {
     static chkfsstate fs;
 
     chkfsstate();
-    // Does the dirino contain a direntry with give inum?
+    // Does the dirino contain a direntry with given name/inum?
+    bool contains(inode* dirino, const char* name);
     bool contains(inode* dirino, inum_t inum);
     NO_COPY_OR_ASSIGN(chkfsstate);
 };

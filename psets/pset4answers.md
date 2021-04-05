@@ -141,7 +141,7 @@ Please enjoy the following fun additions to the OS and shell. **Below we will on
 mkdir /mickens/
 cd /mickens/
 pwd
-cat thoreau.txt > javascript_sux.txt
+cat /thoreau.txt > javascript_sux.txt
 cat javascript_sux.txt
 rm javascript_sux.txt
 cd /

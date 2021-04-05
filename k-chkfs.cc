@@ -610,6 +610,7 @@ void inode::put(bool user_file) {
 //    which is either the end of the string, or the second last if the end is a filename.
 //    Assumes that the root directory is locked.
 chkfs::inode* chkfsstate::lookup_directory(const char* pathname, bool access_last, bool is_file) {
+    log_printf("lookup called on '%s'\n", pathname);
     char str[strlen(pathname)+1];
     strcpy(str, pathname);
     char* s = str;
@@ -660,33 +661,67 @@ chkfs::inode* chkfsstate::lookup_directory(const char* pathname, bool access_las
                 size_t bsz = min(curdir->size - diroff, blocksize);
                 auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
                 for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
+                    log_printf("Comparing '%s' to path '%s'\n", dirent->name, s);
                     if (dirent->inum && strcmp(dirent->name, s) == 0) {
+                        log_printf("Successfully found '%s'\n", s);
                         in = dirent->inum;
                         break;
                     }
                 }
                 e->put();
             } else {
+                log_printf("disk grab failed\n");
                 goto lookup_unsuccessful;
             }
         }
         curdir->put();
         curdir = get_inode(in);
         if (!curdir) {
+            log_printf("couldn't find inode\n");
             goto get_unsuccessful;
         }
-        if (curdir->type != chkfs::type_directory) { // Traversal must be directory
+        if (curdir->type != chkfs::type_directory && !is_file) { // Traversal must be directory
+            log_printf("dir violation\n");
             goto lookup_unsuccessful;
         }
 
         s += strlen(s) + 1;
     }
+    log_printf("returning non-null\n");
     return curdir;
 
     lookup_unsuccessful:
         curdir->put();
     get_unsuccessful:
         return nullptr;
+}
+
+
+bool chkfsstate::contains(chkfs::inode* dirino, const char* name) {
+    // Explore a given directory and return true 
+    // if directory contains inode with given name.
+    chkfs_fileiter it(dirino);
+    bool contains = false;
+    bcentry* de = nullptr;
+    for (size_t diroff = 0; ; diroff += blocksize) {
+        if ((de = it.find(diroff).get_disk_entry())) {
+            size_t bsz = min(dirino->size - diroff, blocksize);
+            auto dirent = reinterpret_cast<chkfs::dirent*>(de->buf_);
+            for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
+                if (strcmp(dirent->name, name) == 0) { // Found inode
+                    contains = true;
+                    break;
+                }
+            }
+            de->put();
+            if (contains) {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    return contains;
 }
 
 
@@ -1171,7 +1206,7 @@ int chkfsstate::mkdir(char* path) {
         return E_NOENT;
     }
     root->lock_read();
-    if (lookup_directory(path, true)) {
+    if (lookup_directory(path, true, false)) {
         root->unlock_read();
         root->put();
         return E_SAMENAME;
@@ -1184,6 +1219,11 @@ int chkfsstate::mkdir(char* path) {
         root->put();
         log_printf("[mkdir] Error: parent directory of new subdirectory not found\n");
         return E_NOENT;
+    } else if (contains(dirino, path_find_last(path))) {
+        root->unlock_read();
+        root->put();
+        dirino->put();
+        return E_SAMENAME;
     }
     root->unlock_read();
     root->put();
@@ -1471,7 +1511,6 @@ char* cwd::write(char* s) {
     // First make sure that the directory exists.
     chkfs::inode* dir = chkfsstate::get().lookup_directory(buf, true, false);
     if (!dir) {
-        log_printf("look up directory failed\n");
         return nullptr;
     }
     lock_write();
