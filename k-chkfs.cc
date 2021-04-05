@@ -69,7 +69,7 @@ size_t bufcache::evict() {
 
 // bufcache::full()
 //    Returns true if all entries taken.
-bool bufcache::full() {
+[[maybe_unused]] bool bufcache::full() {
     spinlock_guard guard(lock_);
     for (size_t i = 0; i != ne; ++i) {
         if (e_[i].empty()) {
@@ -87,7 +87,7 @@ bool bufcache::full() {
 bool bufcache::has_uref_dirty_blocks() {
     bool has = false;
     size_t count = 0;
-    for (auto it = dirty_list_.front(); it && count < 2*ne; // Emergency stopping condition
+    for (auto it = dirty_list_.front(); it && count < ne;
             it = dirty_list_.next(it), ++count) {
         auto irqs = it->lock_.lock();
         if (it->ref_ == 0) {
@@ -146,7 +146,7 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
             }
             pfq_.erase(&e_[i]);
             if (SLOT_AND_PREFETCH_EXAMINE) {
-                log_printf("Desired block was already prefetched!\n");
+                log_printf("PREFETCH HIT\n");
             }
 
             lock_.unlock_noirq();
@@ -255,7 +255,7 @@ bool bcentry::load(irqstate& irqs, bcentry_clean_function cleaner) {
 
 // bcentry::prefetch()
 //    Prefetches (nonblocking) the next 2 blocks of a I/O, or first 2 blocks
-//    if a file is just being opened.
+//    if a file is just being opened. No bufcache or entry locks should be held upon calling.
 int bufcache::prefetch(chkfs::inode* ino, off_t off, bool inclusive, int nfetch) {
     if (!inclusive) {
         off += chkfs::blocksize; // Switch to next block if not grabbing first block
@@ -347,6 +347,7 @@ void bcentry::put() {
 
 // bcentry::get_write()
 //    Obtains a write reference for this entry.
+//    Pushes block onto dirty list if push=true.
 
 void bcentry::get_write(bool push) {
     {
@@ -429,6 +430,9 @@ int bufcache::sync(int drop) {
                 if (e_[i].qlink_.is_linked()) {
                     bufcache::get().evictq_.erase(&e_[i]);
                 } else if (e_[i].pflink_.is_linked()) {
+                    waiter().block_until(read_wq_, [&] () {
+                        return e_[i].pfstatus_ != E_AGAIN;
+                    }, guard); // TODO Is this necessary?
                     assert(!e_[i].qlink_.is_linked());
                     bufcache::get().pfq_.erase(&e_[i]);
                 }
@@ -610,7 +614,6 @@ void inode::put(bool user_file) {
 //    which is either the end of the string, or the second last if the end is a filename.
 //    Assumes that the root directory is locked.
 chkfs::inode* chkfsstate::lookup_directory(const char* pathname, bool access_last, bool is_file) {
-    log_printf("lookup called on '%s'\n", pathname);
     char str[strlen(pathname)+1];
     strcpy(str, pathname);
     char* s = str;
@@ -661,33 +664,27 @@ chkfs::inode* chkfsstate::lookup_directory(const char* pathname, bool access_las
                 size_t bsz = min(curdir->size - diroff, blocksize);
                 auto dirent = reinterpret_cast<chkfs::dirent*>(e->buf_);
                 for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
-                    log_printf("Comparing '%s' to path '%s'\n", dirent->name, s);
                     if (dirent->inum && strcmp(dirent->name, s) == 0) {
-                        log_printf("Successfully found '%s'\n", s);
                         in = dirent->inum;
                         break;
                     }
                 }
                 e->put();
             } else {
-                log_printf("disk grab failed\n");
                 goto lookup_unsuccessful;
             }
         }
         curdir->put();
         curdir = get_inode(in);
         if (!curdir) {
-            log_printf("couldn't find inode\n");
             goto get_unsuccessful;
         }
         if (curdir->type != chkfs::type_directory && !is_file) { // Traversal must be directory
-            log_printf("dir violation\n");
             goto lookup_unsuccessful;
         }
 
         s += strlen(s) + 1;
     }
-    log_printf("returning non-null\n");
     return curdir;
 
     lookup_unsuccessful:
@@ -788,7 +785,6 @@ chkfs::inode* chkfsstate::lookup_directory(chkfs::inode* start_dirino, chkfs::in
             }
         }
     }
-    
 }
 
 
@@ -825,21 +821,12 @@ chkfs::inode* chkfsstate::lookup_inode(inode* dirino,
 // chkfsstate::lookup_inode(filename)
 //    Looks up `filename` in the root directory.
 chkfs::inode* chkfsstate::lookup_inode(const char* filename) {
-    auto root = get_inode(1);
-    if (!root) {
-        return nullptr;
-    }
-    root->lock_read();
     auto dirino = lookup_directory(filename);
     if (dirino) {
         auto ino = fs.lookup_inode(dirino, path_find_last((char*) filename));
-        root->unlock_read();
         dirino->put();
-        root->put();
         return ino;
     } else {
-        root->unlock_read();
-        root->put();
         return nullptr;
     }
 }
@@ -862,7 +849,6 @@ char* chkfsstate::path_find_last(char* s) {
 }
 
 
-// Assumes `dirino` is write-locked.
 chkfs::dirent* chkfsstate::allocate_direntry(chkfs::inode* dirino, bcentry*& de) {
     chkfs_fileiter it(dirino);
     de = nullptr;
@@ -898,12 +884,6 @@ chkfs::dirent* chkfsstate::allocate_direntry(chkfs::inode* dirino, bcentry*& de)
             }
             diroff -= chkfs::blocksize;
             dirino->size += chkfs::blocksize;
-            // de = it.find(diroff).get_disk_entry();
-            // log_printf("[allocate direntry] New extent: bn=%d\n", de->bn_);
-            // if (!de) {
-            //     return nullptr;
-            // }
-            // open_entry = reinterpret_cast<chkfs::dirent*>(de->buf_);
         }
     }
     return open_entry;
@@ -966,21 +946,12 @@ int chkfsstate::rename_direntry(inode* dirino,
 // chkfsstate::rename_direntry(filename)
 //    Rename direntry of `oldname` to `newname` in the root directory.
 int chkfsstate::rename_direntry(const char* oldname, const char* newname) {
-    auto root = get_inode(1);
-    if (!root) {
-        return E_NOENT;
-    }
-    root->lock_write();
     auto dirino = lookup_directory(oldname);
     if (dirino) {
         int r = fs.rename_direntry(dirino, oldname, newname);
-        root->unlock_write();
         dirino->put();
-        root->put();
         return r;
     } else {
-        root->unlock_write();
-        root->put();
         return E_NOENT;
     }
 }
@@ -1112,7 +1083,6 @@ int chkfsstate::free_inode(inode* ino) {
         return E_NOENT;
     }
     assert(ino != root_dirino); // No freeing the root!
-    root_dirino->lock_read(); // Just to protect directory lookup
     assert(ino->type != 0); // No double frees
     if (ino->type == chkfs::type_regular) { // Free a file
         ino->lock_write();
@@ -1127,16 +1097,15 @@ int chkfsstate::free_inode(inode* ino) {
         ino->entry()->put_write();
         ino->unlock_write();
     }
-    root_dirino->unlock_read();
     if (ino_to_inum(dirino) != 1) {
         root_dirino->put(); // Avoid double put
     }
 
-    // Free the inode.
+    // Free the inode. Note: no races here. While we lock and unlock the inode several times, 
+    // nothing bad can happen in between since no one owns this inode at the time 
+    // this function is called, and no one can use it until the below finishes executing.
     if (dirino) {
-        dirino->lock_write();
         int r = fs.free_inode(dirino, ino);
-        dirino->unlock_write();
         dirino->put();
         return r;
     } else {
@@ -1181,19 +1150,17 @@ int chkfsstate::free_direntry(inode* ino) {
     if (!root_dirino) {
         return E_NOENT;
     }
-    root_dirino->lock_write();
     auto dirino = lookup_directory(root_dirino, ino);
+    root_dirino->put();
     if (dirino) {
+        dirino->lock_write();
         int r = fs.free_direntry(dirino, ino);
-        root_dirino->unlock_write();
         if (ino_to_inum(dirino) != 1) {
             dirino->put();
         }
-        root_dirino->put();
+        dirino->unlock_write();
         return r;
     } else {
-        root_dirino->unlock_write();
-        root_dirino->put();
         return E_NOENT;
     }
 }
@@ -1201,33 +1168,20 @@ int chkfsstate::free_direntry(inode* ino) {
 
 int chkfsstate::mkdir(char* path) {
     // First make sure that the directory doesn't already exist.
-    auto root = get_inode(1);
-    if (!root) {
-        return E_NOENT;
-    }
-    root->lock_read();
-    if (lookup_directory(path, true, false)) {
-        root->unlock_read();
-        root->put();
+    if (auto r = lookup_directory(path, true, false)) {
+        r->put();
         return E_SAMENAME;
     }
 
     // 1. Find the parent directory of the new child.
     chkfs::inode* dirino = lookup_directory(path);
     if (!dirino) {
-        root->unlock_read();
-        root->put();
         log_printf("[mkdir] Error: parent directory of new subdirectory not found\n");
         return E_NOENT;
     } else if (contains(dirino, path_find_last(path))) {
-        root->unlock_read();
-        root->put();
         dirino->put();
         return E_SAMENAME;
     }
-    root->unlock_read();
-    root->put();
-    dirino->lock_write();
 
     // 2. Allocate an inode for the new subdirectory.
     bcentry* de = nullptr;
@@ -1249,13 +1203,13 @@ int chkfsstate::mkdir(char* path) {
     strcpy(open_entry->name, path_find_last(path));
     de->put_write();
     de->put();
-    dirino->unlock_write();
     dirino->put();
     return 0;
 
     failed_alloc:
-        dirino->entry()->put_write();
-        dirino->unlock_write();
+        if (de) {
+            de->put();
+        }
         dirino->put();
         return E_NOSPC;
 }
@@ -1286,7 +1240,6 @@ int chkfsstate::rm(char* path) {
     }
 
     // Free the direntry and the inode.
-    parent_dirino->lock_write();
     chkfs::inode* dirino = lookup_inode(parent_dirino, path_find_last(path));
     if (!dirino) {
         parent_dirino->put();
@@ -1294,14 +1247,12 @@ int chkfsstate::rm(char* path) {
     }
 
     if (int r = free_direntry(parent_dirino, dirino)) {
-        parent_dirino->unlock_write();
+        parent_dirino->put();
         return r;
     }
+    parent_dirino->put();
     
-    parent_dirino->unlock_write();
     if (int r = free_inode(dirino) < 0) { 
-        // No races here: another process trying to rm at the same time will fail to free
-        // the direntry and will not reach here.
         return r;
     }
 
@@ -1317,7 +1268,6 @@ int chkfsstate::ls(const char* pathname, char* buf, size_t bufsz) {
     off_t off = 0;
     bool buf_full = false;
     assert(dirino); // The CWD should be correct!
-    dirino->lock_read();
     chkfs_fileiter it(dirino);
     for (size_t diroff = 0; off < (int) bufsz; diroff += chkfs::blocksize) { // Block walk
         if (bcentry* e = it.find(diroff).get_disk_entry()) {
@@ -1342,7 +1292,6 @@ int chkfsstate::ls(const char* pathname, char* buf, size_t bufsz) {
             break;
         }
     }
-    dirino->unlock_read();
 
     if (off == 0) {
         buf_start[0] = '\0';

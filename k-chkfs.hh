@@ -57,7 +57,7 @@ struct bufcache {
     static constexpr size_t ne = 32;                // Number of entries in the cache
 
     spinlock lock_;                                 // protects all entries' bn_ and ref_
-    wait_queue read_wq_;
+    wait_queue read_wq_;                            // Processes waiting on a prefetch
     bcentry e_[ne];                                 // Entries
     list<bcentry, &bcentry::qlink_> evictq_;        // Eviction queue (refcount 0 blocks only!)
     list<bcentry, &bcentry::dlink_> dirty_list_;    // List of dirty blocks
@@ -111,37 +111,40 @@ struct chkfsstate {
     // obtain an inode by number
     inode* get_inode(inum_t inum);
 
-    // directory inode lookup, starting from user path specification
+    // directory inode lookup, starting from user path specification, requires fstlock
     inode* lookup_directory(const char* pathname, bool access_last=false, bool is_file=true);
-    // directory inode lookup, starting from an inode ptr
+    // directory inode lookup, starting from an inode ptr, requires fstlock
     inode* lookup_directory(inode* start_dirino, inode* ino);
-    // inode lookup in directory `dirino`, assumes dirino locked
+    // inode lookup in directory `dirino`, requires fstlock
     inode* lookup_inode(inode* dirino, const char* name);
-    // inode lookup starting at root directory
+    // inode lookup starting at root directory, requires fstlock
     inode* lookup_inode(const char* name);
     // allocate a new direntry in a specified directory, return direntry and set de
-    // assumes dirino is locked for writing
+    // requires fstlock
     chkfs::dirent* allocate_direntry(inode* dirino, bcentry*& de);
-    // direntry rename in directory `dirino`, assumes dirino locked
+    // direntry rename in directory `dirino`, requires fstlock
     int rename_direntry(inode* dirino, const char* oldname, const char* newname);
-    // direntry rename starting at root directory
+    // direntry rename starting at root directory, requires fstlock
     int rename_direntry(const char* oldname, const char* newname);
-    // direntry free in directory `dirino`, assumes dirino locked
+    // direntry free in directory `dirino`, requires fstlock
     int free_direntry(inode* dirino, inode* ino);
-    // free direntry corresponding to the given inode
+    // free direntry corresponding to the given inode, requires fstlock
     int free_direntry(inode* ino);
-    // checks if a directory_is empty (locks the directory)
+    // checks if a directory_is empty, requires fstlock
     bool directory_empty(inode* dirino);
-    // allocate new inode of a specific type
+    // allocate new inode of a specific type, requires fstlock
     inum_t allocate_inode(int type);
-    // free an inode living in directory dirino, assumes locked
+    // free an inode living in directory dirino, requires fstlock
     int free_inode(inode* dirino, inode* ino);
-    // free an inode
+    // free an inode, requires fstlock
     int free_inode(inode* ino);
-    // make a new subdirectory
+    // make a new subdirectory, requires fstlock
     int mkdir(char* path);
-    // remove a blank subdirectory
+    // remove a blank subdirectory, requires fstlock
     int rm(char* path);
+    // list contents of a directory, requires fstlock
+    int ls(const char* pathname, char* buf, size_t bufsz);
+
     bool block_is_free(void* fbb, blocknum_t bn);
     void mark_block_free(void* fbb, blocknum_t bn);
     void mark_block_taken(void* fbb, blocknum_t bn);
@@ -149,7 +152,6 @@ struct chkfsstate {
     blocknum_t find_free_range(void* fbb, unsigned count, size_t start);
     inum_t ino_to_inum(inode* ino);
     blocknum_t allocate_extent(unsigned count = 1);
-    int ls(const char* pathname, char* buf, size_t bufsz);
 
   private:
     static chkfsstate fs;

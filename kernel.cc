@@ -2221,10 +2221,6 @@ int proc::syscall_execv(regstate* regs) {
     char* prgm_name = reinterpret_cast<char*>(regs->reg_rdi);
     const char** argv = reinterpret_cast<const char**>(regs->reg_rsi);
     int argc = regs->reg_rdx;
-    // int pfxlen = 0;
-    // if (prgm_name[0] != '/') {
-    //     pfxlen = pwd_->len();
-    // }
     
     // Validate pathname.
     if (pathname_invalid(this, prgm_name)) { // Check filename
@@ -2234,12 +2230,9 @@ int proc::syscall_execv(regstate* regs) {
         return E_FAULT;
     }
 
-    // char buf[chkfs::maxnamelen+1];
-    // if (prgm_name[0] != '/') {
-    //     pwd_->cat((char*) prgm_name, buf, false);
-    //     prgm_name = buf;
-    // }
+    fstlock.lock_read();
     if (chkfsstate::get().lookup_directory(prgm_name, true, false)) {
+        fstlock.unlock_read();
         log_printf("[open] Cannot open a directory as a file\n");
         return E_INVAL;
     }
@@ -2256,6 +2249,7 @@ int proc::syscall_execv(regstate* regs) {
 
     // Look up the process name in inodes.
     auto ino = chkfsstate::get().lookup_inode(prgm_name);
+    fstlock.unlock_read();
     if (!ino) {
         return E_NOENT;
     }

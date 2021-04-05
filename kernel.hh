@@ -85,7 +85,7 @@ struct cwd:rwlock {
     char name[chkfs::maxnamelen + 1] = "/"; // Initialized to root directory
     std::atomic<chkfs::mlock_t> mlock;
 
-    char* write(char* buf);
+    char* write(char* buf); // requires fstlock (read-only)
     char* read(char* buf);
     int len();
     int pass(cwd* newcwd);

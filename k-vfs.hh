@@ -73,7 +73,7 @@ struct disk_vnode:public vnode {
     ~disk_vnode();
 
     int close();
-    static chkfs::inode* create_file(const char* filename);
+    static chkfs::inode* create_file(const char* filename); // requires fstlock
     off_t lseek_nolock(off_t off, int origin);
     uintptr_t write_nolock(uintptr_t addr, size_t sz);
     uintptr_t write(uintptr_t addr, size_t sz);
