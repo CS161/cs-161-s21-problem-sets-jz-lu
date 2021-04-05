@@ -627,16 +627,13 @@ off_t disk_vnode::lseek(off_t off, int origin) {
         return sz;
     }
 
-    // Validate the offset and perform the seek. It must be done entirely with the write lock,
-    // even the validation (it only reads, but it must hold the write lock),
-    // to prevent a race condition where the seek is validated, then another thread 
-    // changes the size before the seek is made.
-    ino_->lock_write();
+    // Validate the offset and perform the seek.
+    ino_->lock_read();
     if (lseek_nolock(off, origin) == E_INVAL) {
-        ino_->unlock_write();
+        ino_->unlock_read();
         return E_INVAL;
     }
-    ino_->unlock_write();
+    ino_->unlock_read();
     bufcache::get().prefetch(ino_, offset_, true); // Prefetch the next few blocks
     return offset_;
 }

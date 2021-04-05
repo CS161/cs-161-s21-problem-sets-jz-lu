@@ -1363,7 +1363,6 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     if (first == (blocknum_t) -1) {
         return E_NOSPC;
     }
-    // mark_blocks_taken(reinterpret_cast<void*>(fbb), first, count);
     unsigned i = 0;
     for (blocknum_t bn = first; i < count; ++bn, ++i) {
         mark_block_taken(reinterpret_cast<void*>(fbb->buf_), bn);
