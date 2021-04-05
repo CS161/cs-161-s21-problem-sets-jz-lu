@@ -17,6 +17,8 @@ void process_main(int argc, char** argv) {
                 console_printf(0xc00, "Error: no such directory, do not end with '/' if removing file\n");
             } else if (r == E_NONEMPTY) {
                 console_printf(0xc00, "Error: cannot remove nonempty directory\n");
+            } else if (r == E_GETOUT) {
+                console_printf(0xc00, "Error: cannot remove a directory containing wd, cd out and try again\n");
             } else {
                 console_printf(0xc00, "Error: an unknown I/O error occurred\n");
             }

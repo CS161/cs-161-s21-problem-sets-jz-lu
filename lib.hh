@@ -326,6 +326,7 @@ struct bitset_view {
 #define E_SOCKTIMEOUT   -33        // Socket waited too long on accept or connect
 #define E_SOCKTAKEN     -37        // Socket already taken
 #define E_NONEMPTY      -39        // Directory is nonempty
+#define E_GETOUT        -40        // Cannot remove directory containing CWD
 
 #define E_MINERROR      -100
 

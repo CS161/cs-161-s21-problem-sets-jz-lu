@@ -90,6 +90,7 @@ struct cwd:rwlock {
     int len();
     int pass(cwd* newcwd);
     char* cat(char* s, char* buf, bool dir=true);
+    bool subset(char* path);
 };
 
 // Process descriptor type

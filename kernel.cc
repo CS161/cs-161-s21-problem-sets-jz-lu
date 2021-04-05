@@ -2253,7 +2253,6 @@ int proc::syscall_execv(regstate* regs) {
     if (!ino) {
         return E_NOENT;
     }
-    log_printf("[execv] Successfully look up inode for '%s'\n", prgm_name);
 
     // Allocate a new pagetable and stack page.
     x86_64_pagetable* pt = kalloc_pagetable();
@@ -2652,6 +2651,10 @@ int proc::syscall_rm(regstate* regs) {
     int r = 0;
     fstlock.lock_write();
     if (path[0] == '/') {
+        if (pwd_->subset(path)) {
+            fstlock.unlock_write();
+            return E_GETOUT;
+        }
         r = chkfsstate::get().rm(path);
     } else {
         // Create a buffer to concatenate the string.

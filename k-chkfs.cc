@@ -1192,6 +1192,7 @@ int chkfsstate::mkdir(char* path) {
     }
 
     // 3. Allocate a new direntry and set the name and inum.
+    dirino->lock_write();
     open_entry = allocate_direntry(dirino, de);
     if (!open_entry || !de) {
         goto failed_alloc;
@@ -1203,6 +1204,7 @@ int chkfsstate::mkdir(char* path) {
     strcpy(open_entry->name, path_find_last(path));
     de->put_write();
     de->put();
+    dirino->unlock_write();
     dirino->put();
     return 0;
 
@@ -1210,6 +1212,7 @@ int chkfsstate::mkdir(char* path) {
         if (de) {
             de->put();
         }
+        dirino->unlock_write();
         dirino->put();
         return E_NOSPC;
 }
@@ -1509,6 +1512,24 @@ int cwd::pass(cwd* newcwd) {
     strcpy(newcwd->name, name);
     unlock_read();
     return 0;
+}
+
+bool cwd::subset(char* path) {
+    bool subset = false;
+    int pathlen = strlen(path);
+    if (path[pathlen-1] != '/') {
+        path[pathlen+1] = '\0';
+        path[pathlen] = '/';
+    }
+    size_t newpathlen = strlen(path);
+    lock_read();
+    if (newpathlen == strlen(name) &&
+        strncmp(path, name, newpathlen) == 0) {
+            subset = true;
+    }
+    unlock_read();
+    path[pathlen] = '\0'; // reset path before returning
+    return subset;
 }
 
 // ===== R/W Lock Functions ===== //
