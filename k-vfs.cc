@@ -24,6 +24,7 @@ vnode::vnode(int mode) : mode_(mode) {
         log_printf("[vnode] Generic vnode constructor called\n");
     }
     assert((mode >= OF_READ) && (mode <= (OF_RDWR)));
+    ++refcount_;
 }
 
 // * By C++ decree, a struct that is delete'd with the parent class pointer type
@@ -66,7 +67,7 @@ int vnode::ftruncate(off_t len) {
 
 kb_c_vnode::kb_c_vnode() : vnode(OF_RDWR) {
     assert(offset_ == 0);
-    assert(refcount_ == 0);
+    assert(refcount_ == 1);
     if (VFS_KBC_PARANOIA >= 1) {
         log_printf("[kb_c_vnode] Stdio vnode constructor called\n");
     }

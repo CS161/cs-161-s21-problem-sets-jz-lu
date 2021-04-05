@@ -33,7 +33,7 @@ struct elf_program;
 
 // Virtual File System (VFS) basic structure. 
 // All declarations of children in k-vfs.hh. This cannot be declared in 
-// because its a 
+// because it is used in the strcut proc declaration.
 struct vnode {
     const int mode_ = 0; // Read, write, or both
     std::atomic<off_t> offset_ = 0; // Offset from file, to be incremented on read/writes

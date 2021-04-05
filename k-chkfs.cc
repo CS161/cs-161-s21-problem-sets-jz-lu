@@ -1217,6 +1217,7 @@ int chkfsstate::mkdir(char* path) {
         return E_NOSPC;
 }
 
+
 int chkfsstate::rm(char* path) {
     if (strcmp(path, "/") == 0) {
         return E_PERM; // Cannot remove root directory!

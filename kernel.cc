@@ -632,6 +632,7 @@ int proc::syscall_fork(regstate* regs) {
     child_pt = kalloc_pagetable();
     if (FORK_TESTING == 1 && rand(0, 1) < 1) { // simulate child pt alloc failure
         log_printf("[forktest] Simulating child pt failed alloc for parent process %d\n", this->id_);
+        free_auto_allocs(child_pt);
         kfree(child_pt);
         child_pt = nullptr;
     }
@@ -1643,10 +1644,10 @@ int proc::syscall_open(regstate* regs) {
             return E_NOMEM;
         }
         fdtable[fd] = reinterpret_cast<vnode*>(svn);
-        {
-        spinlock_guard refguard(svn->open_close_lock_);
-        ++svn->refcount_;
-        }
+        // {
+        // spinlock_guard refguard(svn->open_close_lock_);
+        // ++svn->refcount_;
+        // }
     } 
     else { // Normal disk file
         fstlock.lock_write();
@@ -1696,10 +1697,10 @@ int proc::syscall_open(regstate* regs) {
             return E_NOMEM;
         }
         fdtable[fd] = reinterpret_cast<vnode*>(dvn);
-        {
-        spinlock_guard refguard(dvn->open_close_lock_);
-        ++dvn->refcount_;
-        }
+        // {
+        // spinlock_guard refguard(dvn->open_close_lock_);
+        // ++dvn->refcount_;
+        // }
         bufcache::get().prefetch(ino, 0, true);
     }
 
@@ -1826,14 +1827,14 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
     // TODO [MULTITH] lock accesses here.
     fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
     fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
-    {
-    spinlock_guard refguard(fdtable[wfd]->open_close_lock_);
-    ++fdtable[wfd]->refcount_;
-    }
-    {
-    spinlock_guard refguard(fdtable[rfd]->open_close_lock_);
-    ++fdtable[rfd]->refcount_;
-    }
+    // {
+    // spinlock_guard refguard(fdtable[wfd]->open_close_lock_);
+    // ++fdtable[wfd]->refcount_;
+    // }
+    // {
+    // spinlock_guard refguard(fdtable[rfd]->open_close_lock_);
+    // ++fdtable[rfd]->refcount_;
+    // }
 
     if (PIPE_PARANOIA >= 2) {
         log_printf("[syscall_pipe] Successfully made pipe, updated state below\n");
@@ -1846,6 +1847,7 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
         delete wr_vn->bbuf_;
         wr_vn->bbuf_ = nullptr;
     free_wr:
+        wr_vn->close();
         delete wr_vn;
     emem:
         return E_NOMEM;
@@ -2272,6 +2274,7 @@ int proc::syscall_execv(regstate* regs) {
             log_printf("[syscall_execv] Failed to allocate a new stack page\n");
         }
         ino->put();
+        free_auto_allocs(pt);
         kfree(pt);
         return E_NOMEM;
     } else if (VFS_PARANOIA >= 2 || VFS_MF_PARANOIA >= 2) {
@@ -2290,9 +2293,9 @@ int proc::syscall_execv(regstate* regs) {
         if (VFS_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_execv] Failed to load new process\n");
         }
+        free_auto_allocs(pt);
         kfree(pt);
         kfree(stkpg);
-        free_auto_allocs(pt); // Free any allocations made by loader
         ino->put();
         return r;
     } else if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
@@ -2330,7 +2333,10 @@ int proc::syscall_execv(regstate* regs) {
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] Old pagetable %p stored\n", old_pt);
     }
+    {
+    spinlock_guard guard(ptable_lock);
     init_user(id_, pt); // Install pt, reset regs_
+    }
     if (VFS_PARANOIA >= 3 || VFS_MF_PARANOIA >= 3) {
         log_printf("[syscall_execv] Process regs_ reset to initialized values\n");
     }
