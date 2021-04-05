@@ -233,18 +233,6 @@ static pid_t create_child(char** words, char nextch,
         } else {
             exit_status = 10;
         }
-    } else if (strcmp(words[0], "pwd") == 0) {
-        if (words[1]) {
-            exit_status = -4;
-        } else {
-            exit_status = 11;
-        }
-    } else if (strcmp(words[0], "rm") == 0) {
-        if (!words[1]) {
-            exit_status = -2;
-        } else {
-            exit_status = 12;
-        }
     }
 
 
@@ -297,24 +285,8 @@ static pid_t create_child(char** words, char nextch,
                 console_printf(0xc00, "Error: An unknown error has occurred\n");
             }
         }
-    } else if (exit_status == 11) {
-        char buf[256];
-        int read = sys_pwd(buf);
-        buf[read+1] = '\0';
-        buf[read] = '\n';
-        sys_write(1, buf, read+1);
-
-    } else if (exit_status == 12) {
-        if (words[1][0] == '/') {
-            sys_cd("/");
-            sys_rm(words[1]);
-        } else {
-            sys_unlink(words[1]);
-        }
     } else if (exit_status == -3) {
         sys_cd("/"); 
-    } else if (exit_status == -4) {
-        console_printf(0xc00, "Error: pwd has no arguments\n");
     } else if (exit_status != -1) {
         sys_exit(exit_status < 0 ? 1 : exit_status);
     }
