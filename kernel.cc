@@ -32,6 +32,9 @@ uint64_t BLOCK_NUM_RESUMES = 0;
 uds* socktable[NSOCK] = {0};
 spinlock socktable_lock; // Guards all accesses to socktable
 
+// Global file system tree lock (all creates/deletes/lookups of files and directories by name)
+rwlock fstlock;
+
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
 
@@ -1001,7 +1004,6 @@ void proc::free_auto_allocs(x86_64_pagetable* pt) {
 
 
 // proc::syscall_exit(regs)
-//    Exits a process without data races
 void proc::syscall_exit(regstate* regs) {
     proc* p = this;
     pid_t pid = this->id_;
@@ -1647,6 +1649,7 @@ int proc::syscall_open(regstate* regs) {
         }
     } 
     else { // Normal disk file
+        fstlock.lock_write();
         // Read the inode of the directory.
         char buf[chkfs::maxnamelen+1];
         if (pathname[0] != '/') {
@@ -1654,6 +1657,7 @@ int proc::syscall_open(regstate* regs) {
             pathname = buf;
         }
         if (chkfsstate::get().lookup_directory(pathname, true, false)) {
+            fstlock.unlock_write();
             return E_INVAL;
         }
         auto ino = chkfsstate::get().lookup_inode(pathname);
@@ -1662,12 +1666,15 @@ int proc::syscall_open(regstate* regs) {
                 // Create a new file and set ino to point to its new inode.
                 ino = disk_vnode::create_file(pathname);
                 if (!ino) {
+                    fstlock.unlock_write();
                     return E_IO;
                 }
             } else {
+                fstlock.unlock_write();
                 return E_NOENT;
             }
         }
+        fstlock.unlock_write();
         if (ino->type != chkfs::type_regular) { // File opened must be a file
             ino->put();
             return E_NOENT;
@@ -1967,7 +1974,9 @@ int proc::syscall_unlink(regstate* regs) {
         pathname = buf;
     }
 
+    fstlock.lock_write();
     if (chkfsstate::get().lookup_directory(pathname, true, false)) {
+        fstlock.unlock_write();
         log_printf("[unlink] Error: Cannot unlink a directory\n");
         return E_INVAL;
     }
@@ -1979,6 +1988,7 @@ int proc::syscall_unlink(regstate* regs) {
     // so that no new opens to this file can be made.
     auto ino = chkfsstate::get().lookup_inode(pathname);
     if (!ino) {
+        fstlock.unlock_write();
         return E_NOENT;
     }
     bcentry* ie = ino->entry();
@@ -1986,6 +1996,7 @@ int proc::syscall_unlink(regstate* regs) {
     if ((ino->flags & 1) != chkfs::linked) {
         ino->unlock_write();
         ino->put();
+        fstlock.unlock_write();
         return E_NOENT;
     }
     ie->get_write();
@@ -1995,6 +2006,7 @@ int proc::syscall_unlink(regstate* regs) {
     ino->unlock_write();
     ino->put();
     chkfsstate::get().free_direntry(ino);
+    fstlock.unlock_write();
     return 0;
 }
 
@@ -2038,7 +2050,10 @@ int proc::syscall_rename(regstate* regs) {
 
     // Walk the directory until the inode old file is found; rename it.
     // If it is not found, then return E_NOENT.
-    return chkfsstate::get().rename_direntry(oldpath, newpath);
+    fstlock.lock_write();
+    int r = chkfsstate::get().rename_direntry(oldpath, newpath);
+    fstlock.unlock_write();
+    return r;
 }
 
 
@@ -2537,10 +2552,13 @@ uintptr_t proc::syscall_readdiskfile(regstate* regs) {
         filename = temp;
     }
     
+    fstlock.lock_read();
     auto ino = chkfsstate::get().lookup_inode(filename);
     if (!ino) {
+        fstlock.unlock_read();
         return E_NOENT;
     }
+    fstlock.unlock_read();
 
     // read file inode
     ino->lock_read();
@@ -2597,7 +2615,6 @@ off_t proc::syscall_lseek(regstate* regs) {
 // proc::syscall_mkdir(regs)
 //    Make a new subdirectory.
 int proc::syscall_mkdir(regstate* regs) {
-    // TODO [MULTITH] should acquire the fdtable lock to avoid create races?
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (path[0] != '/') {
@@ -2607,24 +2624,28 @@ int proc::syscall_mkdir(regstate* regs) {
         log_printf("[syscall_mkdir] Invalid pathname\n");
         return r;
     }
+    fstlock.lock_write();
+    int r = 0;
     if (path[0] == '/') {
-        return chkfsstate::get().mkdir(path);
+        r = chkfsstate::get().mkdir(path);
     } else {
         // Create a buffer to concatenate the string.
         char buf[chkfs::maxnamelen+1];
         if (!pwd_->cat(path, buf)) {
+            fstlock.unlock_write();
             return E_NAMETOOLONG;
         } else {
-            return chkfsstate::get().mkdir(buf);
+            r = chkfsstate::get().mkdir(buf);
         }
     }
+    fstlock.unlock_write();
+    return r;
 }
 
 
 // proc::syscall_rm(regs)
 //    Delete an emppty subdirectory.
 int proc::syscall_rm(regstate* regs) {
-    // TODO [MULTITH] should acquire the fdtable lock to avoid create races
     char* path = reinterpret_cast<char*>(regs->reg_rdi);
     int pfxlen = 0;
     if (path[0] != '/') {
@@ -2634,17 +2655,22 @@ int proc::syscall_rm(regstate* regs) {
         log_printf("[syscall_mkdir] Invalid pathname\n");
         return r;
     }
+    int r = 0;
+    fstlock.lock_write();
     if (path[0] == '/') {
-        return chkfsstate::get().rm(path);
+        r = chkfsstate::get().rm(path);
     } else {
         // Create a buffer to concatenate the string.
         char buf[chkfs::maxnamelen+1];
         if (!pwd_->cat(path, buf)) {
+            fstlock.unlock_write();
             return E_NAMETOOLONG;
         } else {
-            return chkfsstate::get().rm(buf);
+            r = chkfsstate::get().rm(buf);
         }
     }
+    fstlock.unlock_write();
+    return r;
 }
 
 
@@ -2677,7 +2703,10 @@ int proc::syscall_cd(regstate* regs) {
         return r;
     }
     if (path[0] == '/') {
-        if (pwd_->write(path)) {
+        fstlock.lock_read();
+        char* wr = pwd_->write(path);
+        fstlock.unlock_read();
+        if (wr) {
             return 0;
         }
     } else {
@@ -2686,7 +2715,10 @@ int proc::syscall_cd(regstate* regs) {
         if (!pwd_->cat(path, buf)) {
             return E_NAMETOOLONG;
         } else {
-            if (pwd_->write(buf)) {
+            fstlock.lock_read();
+            char* wr = pwd_->write(buf);
+            fstlock.unlock_read();
+            if (wr) {
                 return 0;
             }
         }
@@ -2709,7 +2741,10 @@ int proc::syscall_ls(regstate* regs) {
 
     char path[chkfs::maxnamelen+1];
     pwd_->read(path);
-    return chkfsstate::get().ls(path, buf, bufsz);
+    fstlock.lock_read();
+    int r = chkfsstate::get().ls(path, buf, bufsz);
+    fstlock.unlock_read();
+    return r;
 }
 
 

@@ -280,7 +280,7 @@ static pid_t create_child(char** words, char nextch,
     if (exit_status == 10) {
         if (int r = sys_cd(words[1])) {
             if (r == E_NOENT) {
-                console_printf(0xc00, "Error: No such file or directory\n");
+                console_printf(0xc00, "Error: No such directory\n");
             } else {
                 console_printf(0xc00, "Error: An unknown error has occurred\n");
             }

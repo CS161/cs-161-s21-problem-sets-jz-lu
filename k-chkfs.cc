@@ -1562,8 +1562,10 @@ int cwd::pass(cwd* newcwd) {
     return 0;
 }
 
+// ===== R/W Lock Functions ===== //
+
 // Copied r/w lock from inode.
-void cwd::lock_read() {
+void rwlock::lock_read() {
     chkfs::mlock_t v = mlock.load(std::memory_order_relaxed);
     while (true) {
         if (v >= chkfs::mlock_t(-2)) {
@@ -1579,7 +1581,7 @@ void cwd::lock_read() {
     }
 }
 
-void cwd::unlock_read() {
+void rwlock::unlock_read() {
     chkfs::mlock_t v = mlock.load(std::memory_order_relaxed);
     assert(v != 0 && v != chkfs::mlock_t(-1));
     while (!mlock.compare_exchange_weak(v, v - 1,
@@ -1588,7 +1590,7 @@ void cwd::unlock_read() {
     }
 }
 
-void cwd::lock_write() {
+void rwlock::lock_write() {
     assert(!has_write_lock());
     chkfs::mlock_t v = 0;
     while (!mlock.compare_exchange_weak(v, chkfs::mlock_t(-1),
@@ -1598,12 +1600,12 @@ void cwd::lock_write() {
     }
 }
 
-void cwd::unlock_write() {
+void rwlock::unlock_write() {
     assert(has_write_lock());
     mlock.store(0, std::memory_order_release);
 }
 
-bool cwd::has_write_lock() const {
+bool rwlock::has_write_lock() const {
     return mlock.load(std::memory_order_relaxed) == chkfs::mlock_t(-1);
 }
 

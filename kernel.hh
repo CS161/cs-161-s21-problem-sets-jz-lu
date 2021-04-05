@@ -71,8 +71,7 @@ struct vnode {
     virtual ~vnode();
 };
 
-struct cwd {
-    char name[chkfs::maxnamelen + 1] = "/"; // Initialized to root directory
+struct rwlock {
     std::atomic<chkfs::mlock_t> mlock;
 
     void lock_read();
@@ -80,6 +79,11 @@ struct cwd {
     void lock_write();
     void unlock_write();
     bool has_write_lock() const;
+};
+
+struct cwd:rwlock {
+    char name[chkfs::maxnamelen + 1] = "/"; // Initialized to root directory
+    std::atomic<chkfs::mlock_t> mlock;
 
     char* write(char* buf);
     char* read(char* buf);
@@ -272,6 +276,7 @@ inline cpustate* this_cpu();
 
 extern wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 extern wait_heap time_heap; // Wait heap
+extern rwlock fstlock; // File system tree lock
 
 // Debugging and testing flags
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
