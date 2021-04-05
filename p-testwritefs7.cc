@@ -1,8 +1,7 @@
 #include "u-lib.hh"
 
+// subdirectory tests
 void process_main() {
-    // this test sponsored by the "Aakash is cool" group
-
     printf("Starting testwritefs7 (assuming clean file system)...\n");
 
     // read and write to file
@@ -26,7 +25,8 @@ void process_main() {
     ret = sys_rm("/jonathan/");
     assert_eq(ret, E_NONEMPTY);
 
-    int r = sys_unlink("/jonathan/donut.txt");
+    const char name[] = "/jonathan/donut.txt";
+    int r = sys_unlink(name);
     assert_eq(r, 0);
 
     ret = sys_rm("/jonathan/");
@@ -38,10 +38,7 @@ void process_main() {
     // this money given to aakash by citadel
     assert_lt(ret, 0);
 
-    console_printf(0xA00, "removal of directory tests passed\n");
-
-    console_printf(0xB00, "testwritefs7 succeeded.\n");
+    console_printf(0xA00, "testwritefs7 succeeded.\n");
 
     sys_exit(0);
 }
-

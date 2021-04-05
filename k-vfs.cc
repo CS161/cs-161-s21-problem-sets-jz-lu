@@ -579,13 +579,13 @@ uintptr_t disk_vnode::read(uintptr_t addr, size_t sz) {
 
 int disk_vnode::ftruncate(off_t len) {
     ino_->lock_write();
-    ino_->entry()->get_write();
     if (len <= ino_->size) {
+        ino_->entry()->get_write();
         ino_->size = len;
+        ino_->entry()->put_write();
         if (offset_ > len) {
             lseek_nolock(0, LSEEK_END); // Back up to end of truncated file
         }
-        ino_->entry()->put_write();
         ino_->unlock_write();
         return len;
     } else {
@@ -595,7 +595,6 @@ int disk_vnode::ftruncate(off_t len) {
         memset((void*) buf, '\0', len-end);
         uintptr_t sz = write_nolock(reinterpret_cast<uintptr_t>(buf), len-end);
         lseek_nolock(cur_off, LSEEK_SET);
-        ino_->entry()->put_write();
         ino_->unlock_write();
         return end+sz;
     }

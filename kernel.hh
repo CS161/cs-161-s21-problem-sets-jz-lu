@@ -72,13 +72,20 @@ struct vnode {
 };
 
 struct cwd {
-    char name[chkfs::maxnamelen + 1] = "/"; // Initialized to root
+    char name[chkfs::maxnamelen + 1] = "/"; // Initialized to root directory
+    std::atomic<chkfs::mlock_t> mlock;
+
+    void lock_read();
+    void unlock_read();
+    void lock_write();
+    void unlock_write();
+    bool has_write_lock() const;
+
     char* write(char* buf);
     char* read(char* buf);
-    void reset();
     int len();
-    char* cat(char* s, char* buf, bool dir=true);
     int pass(cwd* newcwd);
+    char* cat(char* s, char* buf, bool dir=true);
 };
 
 // Process descriptor type

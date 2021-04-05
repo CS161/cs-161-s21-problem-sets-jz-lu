@@ -87,6 +87,8 @@ void process_main() {
     console_printf(0xd00, "o");
     console_printf(0xe00, "r");
     console_printf(" TV!)\n");
+    console_printf(0xF00, "Note: once in a while /dev/random generates a null terminator character\n");
+    console_printf(0xF00, "      which makes the square end early. Just re-run to see OS GLORY!\n");
 
     sys_close(f);
 

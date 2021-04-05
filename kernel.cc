@@ -1891,7 +1891,6 @@ uintptr_t proc::syscall_write(regstate* regs) {
     }
     uintptr_t addr = regs->reg_rsi;
     size_t sz = regs->reg_rdx;
-    log_printf("[syscall_write] Writing %lu bytes to fd=%d\n", sz, fd); // !
 
     // Validate the write buffer.
     if (IO_invalid(this, addr, addr+sz)) {
@@ -2206,25 +2205,24 @@ int proc::syscall_execv(regstate* regs) {
     char* prgm_name = reinterpret_cast<char*>(regs->reg_rdi);
     const char** argv = reinterpret_cast<const char**>(regs->reg_rsi);
     int argc = regs->reg_rdx;
-    log_printf("Execing '%s'\n", prgm_name);
-    int pfxlen = 0;
-    if (prgm_name[0] != '/') {
-        pfxlen = pwd_->len();
-    }
+    // int pfxlen = 0;
+    // if (prgm_name[0] != '/') {
+    //     pfxlen = pwd_->len();
+    // }
     
     // Validate pathname.
-    if (pathname_invalid(this, prgm_name, pfxlen)) { // Check filename
+    if (pathname_invalid(this, prgm_name)) { // Check filename
         if (VFS_PARANOIA >= 1) {
             log_printf("[syscall_execv] Invalid program name\n");
         }
         return E_FAULT;
     }
 
-    char buf[chkfs::maxnamelen+1];
-    if (prgm_name[0] != '/') {
-        pwd_->cat((char*) prgm_name, buf, false);
-        prgm_name = buf;
-    }
+    // char buf[chkfs::maxnamelen+1];
+    // if (prgm_name[0] != '/') {
+    //     pwd_->cat((char*) prgm_name, buf, false);
+    //     prgm_name = buf;
+    // }
     if (chkfsstate::get().lookup_directory(prgm_name, true, false)) {
         log_printf("[open] Cannot open a directory as a file\n");
         return E_INVAL;
@@ -2354,10 +2352,7 @@ int proc::syscall_execv(regstate* regs) {
             pagetable_, old_pt);
         log_printf("[syscall_execv] Execv setup complete, yielding\n");
     }
-    // Reset the current working directory of the proc.
-    pwd_->reset();
     
-    log_printf("[execv] Setup done, yielding\n");
     // yield_noreturn() so the scheduler treats resume() like a regstate
     // and uses regs_ in the resumption state register set inseead of a yieldstate.
     yield_noreturn();
@@ -2677,7 +2672,7 @@ int proc::syscall_cd(regstate* regs) {
         pfxlen = pwd_->len();
     }
     if (int r = pathname_invalid(this, path, pfxlen)) { // Check filename
-        log_printf("[syscall_cd] Invalid pathname\n");
+        log_printf("[syscall_cd] Invalid pathname '%s'\n", path);
         return r;
     }
     if (path[0] == '/') {
@@ -2695,7 +2690,7 @@ int proc::syscall_cd(regstate* regs) {
             }
         }
     }
-    return E_PERM;
+    return E_NOENT;
 }
 
 

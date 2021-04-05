@@ -1275,7 +1275,6 @@ int chkfsstate::ls(const char* pathname, char* buf, size_t bufsz) {
     chkfs::inode* dirino = lookup_directory(pathname, true, false);
     char* buf_start = buf; // Stores start of buffer
     off_t off = 0;
-    int ncpy = 0;
     bool buf_full = false;
     assert(dirino); // The CWD should be correct!
     dirino->lock_read();
@@ -1292,14 +1291,10 @@ int chkfsstate::ls(const char* pathname, char* buf, size_t bufsz) {
                         break;
                     }
                     strcpy(buf, dirent->name);
-                    buf[len+1] = '\0';
-                    if (ncpy++ % 3 == 2) {
-                        buf[len] = '\n';
-                    } else {
-                        buf[len] = '\t';
-                    }
-                    buf += len + 2;
-                    off += len + 2;
+                    buf[len] = '\n';
+
+                    buf += len + 1;
+                    off += len + 1;
                 }
             }
             e->put();
@@ -1309,13 +1304,15 @@ int chkfsstate::ls(const char* pathname, char* buf, size_t bufsz) {
     }
     dirino->unlock_read();
 
-    if (buf_start[off-3] == '\t') {
-        buf_start[off-3] = '\n'; // Make last character a newline
-    } else if (buf_start[off-3] != '\n') {
-        log_printf("Last char: '%c'\n", buf_start[off-3]);
+    if (off == 0) {
+        buf_start[0] = '\0';
+    } else if (buf_start[off-1] != '\n') {
+        log_printf("Last char: '%c'\n", buf_start[off-1]);
         log_printf("Buf dump: '%s'\n", buf_start);
         panic("U done messed up your ls kiddo");
     }
+
+    buf_start[off] = '\0';
 
     if (buf_full) {
         return E_FBIG;
@@ -1462,7 +1459,6 @@ void diskfile_loader::put_page() {
 
 // ===== CWD Functions ===== //
 
-
 char* cwd::write(char* s) {
     char buf[strlen(s)];
     strcpy(buf, s);
@@ -1475,25 +1471,35 @@ char* cwd::write(char* s) {
     // First make sure that the directory exists.
     chkfs::inode* dir = chkfsstate::get().lookup_directory(buf, true, false);
     if (!dir) {
+        log_printf("look up directory failed\n");
         return nullptr;
     }
-    char* r = strcpy(name, buf);
-    return r;
+    lock_write();
+    strcpy(this->name, buf);
+    unlock_write();
+    return this->name;
 }
 
 int cwd::len() {
-    return strlen(name);
+    lock_read();
+    int len = strlen(name);
+    unlock_read();
+    return len;
 }
 
 char* cwd::cat(char* s, char* buf, bool dir) {
-    if (strlen(s) + strlen(name) > chkfs::maxnamelen-2) {
+    lock_read();
+    int len = strlen(name);
+    if (strlen(s) + len > chkfs::maxnamelen-2) {
+        unlock_read();
         return nullptr;
     }
     strcpy(buf, name);
+    unlock_read();
     if (s[0] == '/') {
         ++s;
     }
-    memcpy((void*) (buf+strlen(name)), (void*) s, strlen(s)+1);
+    memcpy((void*) (buf+len), (void*) s, strlen(s)+1);
     int blen = strlen(buf);
     if (dir && buf[blen-1] != '/') {
         buf[blen+1] = '\0';
@@ -1502,20 +1508,64 @@ char* cwd::cat(char* s, char* buf, bool dir) {
     return buf;
 }
 
-void cwd::reset() {
-    // Reset the CWD to root directory.
-    char rt[2] = "/";
-    strcpy(name, rt);
-}
-
 char* cwd::read(char* buf) {
-    char* ret = strcpy(buf, name);
+    lock_read();
+    char* ret = strcpy(buf, this->name);
+    unlock_read();
     return ret;
 }
 
 int cwd::pass(cwd* newcwd) {
     assert(newcwd);
+    lock_read();
     strcpy(newcwd->name, name);
+    unlock_read();
     return 0;
 }
+
+// Copied r/w lock from inode.
+void cwd::lock_read() {
+    chkfs::mlock_t v = mlock.load(std::memory_order_relaxed);
+    while (true) {
+        if (v >= chkfs::mlock_t(-2)) {
+            current()->yield();
+            v = mlock.load(std::memory_order_relaxed);
+        } else if (mlock.compare_exchange_weak(v, v + 1,
+                                               std::memory_order_acquire)) {
+            return;
+        } else {
+            // `compare_exchange_weak` already reloaded `v`
+            pause();
+        }
+    }
+}
+
+void cwd::unlock_read() {
+    chkfs::mlock_t v = mlock.load(std::memory_order_relaxed);
+    assert(v != 0 && v != chkfs::mlock_t(-1));
+    while (!mlock.compare_exchange_weak(v, v - 1,
+                                        std::memory_order_release)) {
+        pause();
+    }
+}
+
+void cwd::lock_write() {
+    assert(!has_write_lock());
+    chkfs::mlock_t v = 0;
+    while (!mlock.compare_exchange_weak(v, chkfs::mlock_t(-1),
+                                        std::memory_order_acquire)) {
+        current()->yield();
+        v = 0;
+    }
+}
+
+void cwd::unlock_write() {
+    assert(has_write_lock());
+    mlock.store(0, std::memory_order_release);
+}
+
+bool cwd::has_write_lock() const {
+    return mlock.load(std::memory_order_relaxed) == chkfs::mlock_t(-1);
+}
+
 

@@ -362,7 +362,7 @@ inline int sys_ftruncate(int fd, off_t len) {
 
 // sys_ls(buf)
 //    List everything inside the current directory.
-inline int sys_ftruncate(const char* buf, size_t sz) {
+inline int sys_ls(const char* buf, size_t sz) {
     return make_syscall(SYSCALL_LS, reinterpret_cast<uintptr_t>(buf), sz);
 }
 
