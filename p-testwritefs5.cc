@@ -80,7 +80,7 @@ void process_main() {
         i++;
     }
     
-    console_printf("\n You should see a square of random characters above (now in ");
+    console_printf("\nYou should see a square of random characters above (now in ");
     console_printf(0xa00, "c");
     console_printf(0xb00, "o");
     console_printf(0xc00, "l");

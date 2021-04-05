@@ -77,6 +77,7 @@ struct cwd {
     void reset();
     int len();
     char* cat(char* s, char* buf, bool dir=true);
+    int pass(cwd* newcwd);
 };
 
 // Process descriptor type

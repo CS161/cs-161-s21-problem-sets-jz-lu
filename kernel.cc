@@ -2657,7 +2657,7 @@ int proc::syscall_pwd(regstate* regs) {
         return r;
     }
     if (pwd_->read(buf)) {
-        return 0;
+        return pwd_->len();
     } else {
         return E_PERM;
     }

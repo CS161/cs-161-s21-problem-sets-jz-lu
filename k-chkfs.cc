@@ -628,6 +628,9 @@ chkfs::inode* chkfsstate::lookup_directory(const char* pathname, bool access_las
     if (s[strlen(s)-1] == dlm) {
         s[strlen(s)-1] = '\0';
     }
+    if (strlen(s) == 0) { // Special case: an empty string gets root
+        return curdir;
+    }
 
     // Parse the string, and replace delimiters with nulls terminators.
     for (int i = 0; s[i]; ++i) {
@@ -639,7 +642,7 @@ chkfs::inode* chkfsstate::lookup_directory(const char* pathname, bool access_las
     if (!ndelims) {
         if (!access_last) {
             return curdir;
-        } else if (is_file) { // TODO if we have a pwd, add another else if in that case
+        } else if (is_file) {
             curdir->put();
             return nullptr;
         }
@@ -1218,6 +1221,9 @@ int chkfsstate::mkdir(char* path) {
 }
 
 int chkfsstate::rm(char* path) {
+    if (strcmp(path, "/") == 0) {
+        return E_PERM; // Cannot remove root directory!
+    }
     // First make sure that the directory exists.
     chkfs::inode* dir = lookup_directory(path, true, false);
     if (!dir) {
@@ -1413,8 +1419,8 @@ char* cwd::write(char* s) {
     if (!dir) {
         return nullptr;
     }
-
-    return strcpy(this->name, buf);
+    char* r = strcpy(name, buf);
+    return r;
 }
 
 int cwd::len() {
@@ -1445,7 +1451,13 @@ void cwd::reset() {
 }
 
 char* cwd::read(char* buf) {
-    char* ret = strcpy(buf, this->name);
+    char* ret = strcpy(buf, name);
     return ret;
+}
+
+int cwd::pass(cwd* newcwd) {
+    assert(newcwd);
+    strcpy(newcwd->name, name);
+    return 0;
 }
 

@@ -780,7 +780,7 @@ uintptr_t special_vnode::read(uintptr_t addr, size_t sz) {
         char* ptr = reinterpret_cast<char*>(addr);
         off_t off = 0;
         while (sz > (size_t) off) {
-            ptr[off++] = rand(0, 255);
+            ptr[off++] = rand(1, 255); // Don't include the null character
         }
         return sz;
     } else {
