@@ -432,7 +432,7 @@ int bufcache::sync(int drop) {
                 } else if (e_[i].pflink_.is_linked()) {
                     waiter().block_until(read_wq_, [&] () {
                         return e_[i].pfstatus_ != E_AGAIN;
-                    }, guard); // TODO Is this necessary?
+                    }, guard);
                     assert(!e_[i].qlink_.is_linked());
                     bufcache::get().pfq_.erase(&e_[i]);
                 }
@@ -948,7 +948,9 @@ int chkfsstate::rename_direntry(inode* dirino,
 int chkfsstate::rename_direntry(const char* oldname, const char* newname) {
     auto dirino = lookup_directory(oldname);
     if (dirino) {
+        dirino->lock_write();
         int r = fs.rename_direntry(dirino, oldname, newname);
+        dirino->unlock_write();
         dirino->put();
         return r;
     } else {
@@ -961,7 +963,6 @@ int chkfsstate::rename_direntry(const char* oldname, const char* newname) {
 bool chkfsstate::directory_empty(inode* dirino) {
     assert(dirino);
     assert(dirino->type == chkfs::type_directory);
-    dirino->lock_read();
     chkfs_fileiter it(dirino);
     for (size_t diroff = 0; ; diroff += blocksize) {
         if (bcentry* e = it.find(diroff).get_disk_entry()) {
@@ -970,7 +971,6 @@ bool chkfsstate::directory_empty(inode* dirino) {
             for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
                 if (dirent->inum) {
                     e->put();
-                    dirino->unlock_read();
                     return false;
                 }
             }
@@ -979,7 +979,6 @@ bool chkfsstate::directory_empty(inode* dirino) {
             break;
         }
     }
-    dirino->unlock_read();
     return true;
 }
 

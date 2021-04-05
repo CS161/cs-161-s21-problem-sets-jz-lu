@@ -120,13 +120,15 @@ struct chkfsstate {
     // inode lookup starting at root directory, requires fstlock
     inode* lookup_inode(const char* name);
     // allocate a new direntry in a specified directory, return direntry and set de
-    // requires fstlock
+    // requires fstlock. Also needs dirino lock purely for legacy compatibility with chkfsiter.
     chkfs::dirent* allocate_direntry(inode* dirino, bcentry*& de);
     // direntry rename in directory `dirino`, requires fstlock
+    // Also needs dirino lock purely for legacy compatibility with chkfsiter.
     int rename_direntry(inode* dirino, const char* oldname, const char* newname);
     // direntry rename starting at root directory, requires fstlock
     int rename_direntry(const char* oldname, const char* newname);
     // direntry free in directory `dirino`, requires fstlock
+    // Also needs dirino lock purely for legacy compatibility with chkfsiter.
     int free_direntry(inode* dirino, inode* ino);
     // free direntry corresponding to the given inode, requires fstlock
     int free_direntry(inode* ino);

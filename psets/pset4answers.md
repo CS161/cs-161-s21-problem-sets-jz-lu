@@ -76,18 +76,44 @@ To create a file, we add the following helper functions. Many of them use a help
 All of these together are used by a new `static disk_vnode::create_file(pathname)` function, which allocates an inode, grabs it, allocates a direntry, sets the name, and releases all locks and references before returning the new `chkfs::inode*` to the caller. `syscall_open()` then calls `create_file()` when it fails to look up an inode but `OF_CREAT` is included in the open flags.
 
 ## Part F
-The below gives some basic documentation on the extra credit items we did for this problem set. To test them, see *Extra credit*.
+The below gives some basic documentation on the extra credit items we did for this problem set. To test them, see *Extra Credit*.
 
 ### Unlink
+There are two primary specs of `syscall_unlink()` that are to be implemented.
+1. A file to be unlinked should have all of its data freed, i.e. the inode and all its extents, when the last process holding the file open closes it. Note that this means a file may be unlinked while it is still open. After an unlink, processes that already had the file open may still perform I/O with it, but no process can open the file.
+2. Regardless of whether at least one process had the file open during unlink is called, immediately after `syscall_unlink()` returns (and it must not block, aside from calls to `get_disk_entry()`), the name of the file just unlinked must be available for reuse, via creating a new file.
+
+The following algorithm satisfies both specs. The key is that `chkfs::inode` currently has an unused `uintr32_t flags` variable. Use the first (least significant) bit as an indicator bit for whether the file is linked or not, and the remaining bits to store a per-inode `refcount`. Each `vnode` linked to that `inode` will hold one `refcount`; in particular, getting an inode does not affect the `refcount`, since many functions not associated with a user use `get_inode()`.
+1. Upon entry of `syscall_unlink(name)`, lookup the inode of the file with `name` and immediately free the `direntry` associated with the inode being freed. Mark the `inode` flag as `unlinked`.
+2. In the constructor of `disk_vnode`, increment the per-inode refcount using some bitwise arithmetic; in the destructor, `ino_->put()` is called.
+3. `chkfs::inode::put(bool user)` should decrement the per-inode refcount if the `put` is being called by the destructor of a disk vnode. If the per-inode refcount has dropped to 0, and the file is marked as unlinked, it will free the inode via `chkfsstate::free_inode()` discussed earlier (walks through the extents and frees it all, then marks the inode as free by setting `type_ = 0`).
 
 
 ### Rename
+Renaming a file does not require the inode at all, since the name is stored in the corresponding `direntry`. As such, our `chkfsstate::rename_direntry()` function just walks the directory until the given name is found, and changes the name to the new name, given that the `direntry` exists and the new name is valid memory- and size-wise.
 
 
 ### `ftruncate`
+`syscall_ftruncate(len)` may be called with `len` greater than or less than the inode size. 
+1. If `len < ino->size`, the inode size is simply updated to the new size (see discussion in *Part D* about true allocation size versus inode size).
+2. If `len > ino->size`, the file is extended with `len - ino->size` zero bytes.
+3. (If `len == ino->size` then nothing happens.)
+
+The first case is implemented the same way as supporting `OF_TRUNC` in `syscall_open()`. The second follows the algorithm below.
+```c++
+// ftruncate() in disk vnode...
+ftruncate() CALLED: args-> len // assume len > ino->size
+current_offset = offset_ // save current off
+buf = array of len-ino->size zero-bytes
+write(buf, len - ino->size) // updates offset_
+lseek(current_offset) // puts offset_ back
+```
+The synchronization plan is generally discussed in *Synchronization Invariants*, but this part requires a specific note. Before now `lseek()` and `write()` in the disk vnode each lock the inode associated with the vnode. However, the above algorithm requires them to be called in sequence. If the lock were to be released in between each call, it could cause a myriad of races; as an example, after the first `lseek()` completes, a child/parent/sibling process sharing the same vnode pointers calls `syscall_lseek(0, LSEEK_SET)`. Then when the `write` is made above, it corrupts part of the file! To circummvent this problem, it is key that the lock be acquired at the beginning of the algorithm's execution and released only at the end. To that end we added `write-nolock()` and `lseek_nolock()` in `disk_vnode` and modified `write()` and `lseek()` to just lock and call their nonlocking counterparts. In the above algorithm, we instead use the nonlocking versions, explcitly handling locking at the beginning and end of `ftruncate()`.
 
 
 ### Subdirectories
+
+
 
 #### Subdirectory Interface
 1. Making a directory: TODO
@@ -100,7 +126,7 @@ The below gives some basic documentation on the extra credit items we did for th
 
 
 ### Special files
-We added another derived vnode class `special_vnode` that holds a `type_` variable enumerated over `null, random, zero, full`. In `syscall_open()`, the `pathname` string is first checked to see if it is one of these special files, and if it is, a special vnode is allocated in place of a disk vnode, and initialized with the appropriate type. The full implementaion is in `k-vfs.hh/cc`. In total there are four special files; we added all of the special pseudo-files Linux uses. Their functions are given in *Extra credit*.
+We added another derived vnode class `special_vnode` that holds a `type_` variable enumerated over `null, random, zero, full`. In `syscall_open()`, the `pathname` string is first checked to see if it is one of these special files, and if it is, a special vnode is allocated in place of a disk vnode, and initialized with the appropriate type. The full implementaion is in `k-vfs.hh/cc`. In total there are four special files; we added all of the special pseudo-files Linux uses. Their functions are given in *Extra Credit*.
 
 
 ## Synchronization Invariants
@@ -137,17 +163,17 @@ Please enjoy the following fun additions to the OS and shell. **Below we will on
 12. Support for a per-process *current working directory*: you can now remember where you are working in the directory tree, and do not need to specify the full path! This let's us do cool things like the last 3 extra credits below.
 13. `sys_pwd`: run `make cleanfs run-testwritefs9 fsck`, as well as the shell stuff below.
 14. `sys_cd`: run `make cleanfs run-testwritefs9 fsck`, as well as the shell stuff below.
-15. We added a lot of extra programs that give the shell a big upgrade! We added support for shell commands `mkdir, cd, pwd` and `rm`, which will actually deduce whether the object you are trying to remove is a file or a directory, and call `syscall_unlink()/syscall_rm()` accordingly. As we know from CS 61 PSet 5, `cd, pwd` are special because we can't just spawn a child to call `sys_cd`; for those we directory modified `p-sh.cc` to allow for changing and printing the directory without spawning a child process like usual, following the lead from the driver code's implementation of the shell command `exit`. Try it out! See example below.
-```
-mkdir /mickens/
-cd /mickens/
+15. We added a lot of extra programs that give the shell a big upgrade! We added support for shell commands `mkdir, cd, pwd` and `rm`, which will actually deduce whether the object you are trying to remove is a file or a directory, and call `syscall_unlink()/syscall_rm()` accordingly. As we know from CS 61 PSet 5, `cd, pwd` are special because we can't just spawn a child to call `sys_cd`; for those we directory modified `p-sh.cc` to allow for changing and printing the directory without spawning a child process like usual, following the lead from the driver code's implementation of the shell command `exit`. Try it out! See example below (test sponsored by [this video](https://youtu.be/D5xh0ZIEUOE)).
+```bash
+mkdir mickens
+cd mickens
 pwd
 cat /thoreau.txt > javascript_sux.txt
 cat javascript_sux.txt
 rm javascript_sux.txt
 cd /
 pwd
-rm /mickens/
+rm mickens
 ```
 **Important Note**: there is a key implementation detail unique to Chickadee, in that all shell processes are always in the cleaned file system image, and they all live in root. Thus `syscall_execv`
 ()` cannot add on a prefix, or else the shell functions will fail to execute. As such it is important to note that if any executables are ever placed in a subdirectory, the entire path must be specified to run it, not just the name, regardless of the CWD.
