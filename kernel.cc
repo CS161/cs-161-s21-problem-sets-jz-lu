@@ -625,6 +625,7 @@ int proc::syscall_fork(regstate* regs) {
             log_printf("[fork] Child proc struct va: %p, pa: 0x%x\n", child, kptr2pa(child));
         }
     }
+    pwd_->pass(pwd);
     child_pt = kalloc_pagetable();
     if (FORK_TESTING == 1 && rand(0, 1) < 1) { // simulate child pt alloc failure
         log_printf("[forktest] Simulating child pt failed alloc for parent process %d\n", this->id_);

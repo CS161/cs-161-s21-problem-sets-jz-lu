@@ -1475,9 +1475,9 @@ char* cwd::write(char* s) {
         return nullptr;
     }
     lock_write();
-    strcpy(this->name, buf);
+    strcpy(name, buf);
     unlock_write();
-    return this->name;
+    return name;
 }
 
 int cwd::len() {
@@ -1510,7 +1510,7 @@ char* cwd::cat(char* s, char* buf, bool dir) {
 
 char* cwd::read(char* buf) {
     lock_read();
-    char* ret = strcpy(buf, this->name);
+    char* ret = strcpy(buf, name);
     unlock_read();
     return ret;
 }
