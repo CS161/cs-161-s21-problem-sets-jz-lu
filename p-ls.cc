@@ -9,10 +9,10 @@ void process_main(int argc, char** argv) {
     	console_printf(0xc00, "Error: print buffer too large\n");
     	sys_exit(1);
     }
+
+    sys_write(1, buf, strlen(buf)+1);
     if (ret == E_FBIG) {
     	console_printf(0xe00, "Warning: too many entries to show all\n");
     }
-
-    sys_write(1, buf, strlen(buf)+1);
     sys_exit(0);
 }

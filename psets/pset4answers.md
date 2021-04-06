@@ -112,27 +112,56 @@ The synchronization plan is generally discussed in *Synchronization Invariants*,
 
 
 ### Subdirectories
+We added support for subdirectories of arbitrary depth, so long as the total path does not exceed `chkfs::maxnamelen` in length. Below we outline the functions used to make this possible, as well as changes to functions already implemented at this point.
 
 
-
-#### Subdirectory Interface
+#### Subdirectory Execution Interface
 1. Making a directory: TODO
 2. Removing a directory: TODO
 
 ### Current Working Directory
+We added support for a per-thread tracking of a current working directory, which will allow processes to store and work within a particular subdirectory. This is implemented by a `struct cwd:rwlock` which derives from a parent class `rwlock` (see *Synchronization Invariants*). 
+```c++
+struct cwd:rwlock {
+    char name[chkfs::maxnamelen+1] = '/'; // initialized to root directory
+    int write(char* path); // change cwd to path
+    int read(char* buf); // read cwd into buffer
+    int cat(char* path, char* buf); // add cwd as prefix onto path, place into buf
+    bool subset(char* path); // is 'path' contained in the cwd?
+    size_t len(); // length of cwd path
+};
+```
+It is critical that `cwd` inherits `rwlock`, since I/O to `cwd::name` must be properly synchronized. As such, `cat(), read(), subset()` all use the read lock, and `write()` uses the write lock. `write()` also calls `chkfsstate::lookup_directory()` to ensure that the directory the user is changing to is valid. `struct proc` holds a new pointer `cwd* pwd_`, which holds a pointer to a `cwd` struct. The constructor `proc::proc()` takes in an argument `pwd`, and sets `pwd_ = pwd`, and the destructor deletes non-null `pwd_` pointers. `boot_process_start()` and `sys_fork()` allocate a new `struct cwd` and pass it to the newly allocated `struct proc`. All processes, except `idle_task, k_proc_init` have a CWD; those that do not have `pwd_ = nullptr`. As an aside, the shell function `pwd` stands for `print working directory`, whereas in this context `pwd` stands for `present working directory`; these should not be confused.
 
+To allow for compatibility with our previous work, we do not change `lookup_directory()` or any of the `struct chkfsstate` member functions. Instead, whenever a pathname is specified at a syscall level, we affix a prefix (the part of the full path not fully specified by the user, but stored instead in `proc::pwd_`) length to the path total length while validating, if the path does not begin with a `'/'` (beginning with a slash indicates starting from the root, i.e. the user is specifying the whole path already, so no changes are necessary in that case), and before passing the path name into any `chkfsstate` interface functions, the partial path given by the user is concatenated with the prefix in `cwd` using `cwd::cat()`. As such, whenever a path is passed into `chkfsstate` member functions, it appears as if the user specified the entire path.
+
+#### New System Calls
+The documentation of `fstlock`, the global file system tree lock, is given in *Synchronization Invariants*.
+1. `syscall_mkdir()`: write-locks `fstlock`, and calls `chkfsstate::mkdir()` which ensures that the path (a) does not already exist, (b) does not have the same name as a file, and (c) has a valid parent directory to be stored in (will always be true unless some corruption has occurred or the parent has no more room for `direntry`'s). If valid, it calls `allocate_inode(type=chkfs::type_directory)` to get a new directory inode, `allocate_direntry()` to add the new directory to the parent directory's entries, and stores the new directory inode information in the new direntry.
+2. `syscall_rm()`: write-locks `fstlock` and calls `chkfsstate::rm()`, which ensures that the path (a) exists as a directory (b) refers to an empty directory, and (c) has a valid parent directory to be stored in. If valid, it looks up the directory's parent inode, uses it to free the direntry corresponding to the directory being removed, then looks up hte inode of the directory itself, freeing it.
+3. `syscall_pwd()`: does not require traversing the file system tree, so it does not lock `fstlock`. It simply calls `pwd_->read()`, which has its own locking system, and returns the buffer.
+4. `syscall_cd()`: read-locks `fstlock` (because `pwd_->write()` uses `chkfsstate::lookup_directory()`) and calls `pwd_->write()`. If necessary, it first concatenates with the current path via `pwd_->cat()`.
+5. `syscall_ls()`: read-locks `fstlock`, `proc::pwd_->read()`s the current directory into a path buffer, and and calls `chkfsstate::ls(pathbuf, buf)`, which looks up the directory associated with the path in the buffer and traverses it, storing each nonempty `direntry` name into `buf`, separating with a newline.
 
 ### Shell Upgrade
-
+We equipped the process shell `p-sh.cc` with the tools to interact with the subdirectory execution interface as well as 
+1. `p-mkdir.cc`: Calls `sys_mkdir()`, and includes a comprehensive error-handling suite.
+2. `p-rm.cc`: Examines the argument string and determines whether it was intended to be a directory or a file. Calls `sys_rm()` or `sys_unlink()` accordingly. A comprehensive error-handling suite included.
+3. `p-ls.cc`: Calls `sys_ls()`. Slightly less powerful than the bash equivalent, as our version will only allow listing of the current working directory (bash allows listing of an arbitrary directory as well).
+4. `p-pwd.cc`: Calls `sys_pwd()`.
+5. `cd`: As we know from CS 61, Problem Set 5, Part 9, `cd` is special because it cannot be executed by a child calling `sys_cd`, since that would just change the directory of the child, which rthen immediately exits. The behavior we seek is a change in directory on the shell process. As such we directly modified `p-sh.cc` to allow for changing and printing the directory without spawning a child process like usual, following the lead from the driver code's implementation of the shell command `exit`. In essence, the shell function `run_list()` checks if the command is `cd`, and if it is, directly calls `sys_cd()`; the spawned child process does nothing and exits immediately.
 
 ### Special files
 We added another derived vnode class `special_vnode` that holds a `type_` variable enumerated over `null, random, zero, full`. In `syscall_open()`, the `pathname` string is first checked to see if it is one of these special files, and if it is, a special vnode is allocated in place of a disk vnode, and initialized with the appropriate type. The full implementaion is in `k-vfs.hh/cc`. In total there are four special files; we added all of the special pseudo-files Linux uses. Their functions are given in *Extra Credit*.
 
 
 ## Synchronization Invariants
+
+### General Synchronization Plan
 Synchronization plan FIX talk about the basic inode locks, and then about serializing vnode offset changes to prevent parent/child/sibling processes from making offset ludicrous (i.e. serialize reads within a vnode) using the same per-vnode lock `vnode::open_close_lock_`. If multiple processes sharing a `vnode` (e.g. parent-child) with separate `fdtable`s read at the same time, it is up to the processes to synchronize, as while `offset_` is atomic, the entire function will not be locked, so if not synchronized the processes could be reading the same thing twice (this is not a problem with writing, since the inode is locked, but the r/w lock allows multiple readers at the same time). In `cwd::pass()`, the argument `cwd` need not be locked--we enforce the invariant that this function can only be called while creating the child process in `fork()` (or, in the future, `clone()`), so that there are no race conditions.
 
-Summary of invariant changes: 
+### Changes to Invariants
+Summary of invariants changed with respect to those given in the Chickadee Buffer Cache invariant list [here](https://read.seas.harvard.edu/cs161/2021/doc/synchronization-invariants/) .
 1. The `bcentry::buf_` is no longer constant after writing, but may not be modified without holding the `bcentry` write reference via `bcentry::get_write()`. 
 2. When a kernel task holds a reference to a bufcache entry, the state must satisfy `buf_ != nullptr` and `estate_ == es_clean || es_dirty`. 
 3. Just as one may check whether the state is `es_empty` without entry lock, one may also do so with `es_prefetching`. The queue for prefetching (either completed or not, but no process has yet to ask for it) is protected by the `bufcache::lock_`, as are all the other queues/lists in `bufcache`. 
@@ -163,7 +192,7 @@ Please enjoy the following fun additions to the OS and shell. **Below we will on
 12. Support for a per-process *current working directory*: you can now remember where you are working in the directory tree, and do not need to specify the full path! This let's us do cool things like the last 3 extra credits below.
 13. `sys_pwd`: run `make cleanfs run-testwritefs9 fsck`, as well as the shell stuff below.
 14. `sys_cd`: run `make cleanfs run-testwritefs9 fsck`, as well as the shell stuff below.
-15. We added a lot of extra programs that give the shell a big upgrade! We added support for shell commands `mkdir, cd, pwd` and `rm`, which will actually deduce whether the object you are trying to remove is a file or a directory, and call `syscall_unlink()/syscall_rm()` accordingly. As we know from CS 61 PSet 5, `cd, pwd` are special because we can't just spawn a child to call `sys_cd`; for those we directory modified `p-sh.cc` to allow for changing and printing the directory without spawning a child process like usual, following the lead from the driver code's implementation of the shell command `exit`. Try it out! See example below (test sponsored by [this video](https://youtu.be/D5xh0ZIEUOE)).
+15. We added a lot of extra programs that give the shell a big upgrade! We added support for shell commands `mkdir, cd, pwd` and `rm`; the latter will actually deduce whether the object you are trying to remove is a file or a directory, and call `syscall_unlink()/syscall_rm()` accordingly. Try it out! See example below (test sponsored by [this video](https://youtu.be/D5xh0ZIEUOE)).
 ```bash
 mkdir mickens
 cd mickens
