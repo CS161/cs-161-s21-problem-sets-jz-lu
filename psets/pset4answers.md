@@ -114,10 +114,50 @@ The synchronization plan is generally discussed in *Synchronization Invariants*,
 ### Subdirectories
 We added support for subdirectories of arbitrary depth, so long as the total path does not exceed `chkfs::maxnamelen` in length. Below we outline the functions used to make this possible, as well as changes to functions already implemented at this point.
 
+#### New Functions
+All of the below functions, except `chkfsstate::path_find_last(char* s)`, require holding of `fstlock` (see *Synchronization Invariants*).
+1. `chkfsstate::lookup_directory(pathname)`: splits the pathname string, separated by deliminating characters `'/'` in a similar fashion to how the c-string function `strtok()` would except we implemented our own version, into "chunks". Starting at the root directory inode, `for` loop over the `direntry`s until either the current chunk is found, or the end of the directory is reached, in which case an error is returned. Has specifications `access_last`, which decides whether to skip the last chunk (usually because it is a filename and not a directory), and `is_file`, which is useful for error checking
+2. `contains(dirino, inum)`: walks through the `direntry`s of `dirino` and checks whether it contains the inode indexed by `inum`.
+3. `contains(dirino, name)`: same as `contains(inum)`, but searches `direntry`s by name rather than inode number.
+4. `chkfsstate::lookup_directory(start_dirino, inode)`: overloaded version of (1). However, when searching by inode, we no longer have the luxury of knowing where we are going the next time--we cannot simply search for the next chunk since no information is given except the final destination. This function implements the search by DFS, with base case `contains(dirino, inum)` and recursing over each subdirectory until the inode has been found, or the entire tree has been searched. This function is necessary for freeing inodes.
+5. `chkfsstate::path_find_last(char* s)`: returns the last chunk of a path. For example, if the path is `/brother/edward/says/how/dare/you/sleep/holding/a/spinlock.txt`, it would return a `char*` pointer to `spinlock.txt`.
+6. `chkfsstate::directory_empty(inode* dirino)`: checks if a particular directory has any non-empty `direntry`s. Logic is essentially the same as `contains()`, but with a different stopping condition.
+7. `free_direntry(inode* ino)`: frees the directory entry associated with a given inode. Utilizes `chkfsstate::lookup_directory(start_dirino, inode)` to find the directory, then calls `chkfsstate::free_direntry(inode* dirino, inode* ino)` which behaves similarly to `contains()`, but frees the directory entry once found rather than just returning.
+8. `chkfsstate::mkdir(char* path)`: See *New System Calls* below as well.
+9. `chkfsstate::rm(char* path)`: See *New System Calls* below as well.
+10. `chkfsstate::ls(char* path)`: See *New System Calls* below as well.
+
+#### Changes to Existing Functions
+Every `chkfsstate` member function that looked up the root directory will be replaced by a `lookup_directory(filename)` call, which grabs the parent subdirectory of the file. For example, the below is the meat of the `chkfsstate::lookup_inode(filename)` function.
+```c++
+auto dirino = lookup_directory(filename);
+if (dirino) {
+    auto ino = fs.lookup_inode(dirino, path_find_last((char*) filename)); // bottom level
+    dirino->put();
+    return ino;
+}
+```
+Most function calls have a **2-level sequence**, where the top level declared like `function(name/inode)` will be the only level ever called by other functions (with a few exceptions, such as if the parent directory is already known in some helper functions), and the bottom level declared like `function(dirino, name/inode)` is called by the top level. The top level always just calls `lookup_directory()` to find the right `dirino`, and then passes it to the bottom level, which does the work. This layering allows us to reuse all of the lofic from the code developed in the single-layer directory phase, by abstracting the subdirectory system to a different level of work. The bottom level function searches through the given `dirino` as if it were the only directory in the file system. As an example, the code block above is the top level of `lookup_inode()` and the line with an affixed comment `bottom level` is the call to the bottom level function.
+
+Similarly, for system calls like `open(), unlink()`, etc. `lookup_directory()` is used to validate the path before any actions are made.
+
+#### Directory Locking
+In thd driver code, the primary invariant is that any access to a directory required the root directory inode to be locked for writing. For example, the `lookup_inode()` top-level function from the code block in the above section would have locked the root directory before calling the bottom-level function. In our case, we shall replace this with a file system tree lock. We implement this lock as a readers-writers lock identical to the locking mechanisms for inodes, except that we declared a struct globally.
+```c++
+struct rwlock {
+    std::atomic<chkfs::mlock_t> mlock;
+    void lock_read();
+    void unlock_read();
+    void lock_write();
+    void unlock_write();
+    bool has_write_lock() const;
+} fstlock;
+```
+The file system tree lock `fstlock` is a readers-writers lock that locks the entire file directory tree (we define a **file system directory tree** to be the set of all directory inodes and their `direntry`s). We locked all syscalls that read (read lock) or modify (write lock) the file system tree in `kernel.cc` which completes subdirectory synchronization. These syscalls are `open(), rm(), unlink(), cd(), rename(), execv()`. N.B.: there are two aspects of locking to file systems, one in directories and one on file inodes. The latter has already been discussed as part of the problem set instructions, and will not be repeated here; the key observation is that file inodes can be modified independently of the directory, so the two locking mechanisms are independent of each other. Locking order still must be enforced; see *Synchrnization Invariants*.
 
 #### Subdirectory Execution Interface
-1. Making a directory: TODO
-2. Removing a directory: TODO
+1. Making a directory: call `syscall_mkdir(path)`.
+2. Removing a directory: call `syscall_rm(path)`. Note that `rm()` as a syscall is only use to remove directories, while `rm` the shell function (see *Shell Upgrade*) is used to remove both directories and files, depending on the format of the string passed in.
 
 ### Current Working Directory
 We added support for a per-thread tracking of a current working directory, which will allow processes to store and work within a particular subdirectory. This is implemented by a `struct cwd:rwlock` which derives from a parent class `rwlock` (see *Synchronization Invariants*). 
@@ -136,7 +176,7 @@ It is critical that `cwd` inherits `rwlock`, since I/O to `cwd::name` must be pr
 To allow for compatibility with our previous work, we do not change `lookup_directory()` or any of the `struct chkfsstate` member functions. Instead, whenever a pathname is specified at a syscall level, we affix a prefix (the part of the full path not fully specified by the user, but stored instead in `proc::pwd_`) length to the path total length while validating, if the path does not begin with a `'/'` (beginning with a slash indicates starting from the root, i.e. the user is specifying the whole path already, so no changes are necessary in that case), and before passing the path name into any `chkfsstate` interface functions, the partial path given by the user is concatenated with the prefix in `cwd` using `cwd::cat()`. As such, whenever a path is passed into `chkfsstate` member functions, it appears as if the user specified the entire path.
 
 #### New System Calls
-The documentation of `fstlock`, the global file system tree lock, is given in *Synchronization Invariants*.
+The documentation of `fstlock`, the global file system tree lock, is given in *Directory Locking* and *Synchronization Invariants*.
 1. `syscall_mkdir()`: write-locks `fstlock`, and calls `chkfsstate::mkdir()` which ensures that the path (a) does not already exist, (b) does not have the same name as a file, and (c) has a valid parent directory to be stored in (will always be true unless some corruption has occurred or the parent has no more room for `direntry`'s). If valid, it calls `allocate_inode(type=chkfs::type_directory)` to get a new directory inode, `allocate_direntry()` to add the new directory to the parent directory's entries, and stores the new directory inode information in the new direntry.
 2. `syscall_rm()`: write-locks `fstlock` and calls `chkfsstate::rm()`, which ensures that the path (a) exists as a directory (b) refers to an empty directory, and (c) has a valid parent directory to be stored in. If valid, it looks up the directory's parent inode, uses it to free the direntry corresponding to the directory being removed, then looks up hte inode of the directory itself, freeing it.
 3. `syscall_pwd()`: does not require traversing the file system tree, so it does not lock `fstlock`. It simply calls `pwd_->read()`, which has its own locking system, and returns the buffer.
