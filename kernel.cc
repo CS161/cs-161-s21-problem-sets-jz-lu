@@ -1644,10 +1644,6 @@ int proc::syscall_open(regstate* regs) {
             return E_NOMEM;
         }
         fdtable[fd] = reinterpret_cast<vnode*>(svn);
-        // {
-        // spinlock_guard refguard(svn->open_close_lock_);
-        // ++svn->refcount_;
-        // }
     } 
     else { // Normal disk file
         fstlock.lock_write();
@@ -1697,10 +1693,6 @@ int proc::syscall_open(regstate* regs) {
             return E_NOMEM;
         }
         fdtable[fd] = reinterpret_cast<vnode*>(dvn);
-        // {
-        // spinlock_guard refguard(dvn->open_close_lock_);
-        // ++dvn->refcount_;
-        // }
         bufcache::get().prefetch(ino, 0, true);
     }
 
@@ -1827,14 +1819,6 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
     // TODO [MULTITH] lock accesses here.
     fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
     fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
-    // {
-    // spinlock_guard refguard(fdtable[wfd]->open_close_lock_);
-    // ++fdtable[wfd]->refcount_;
-    // }
-    // {
-    // spinlock_guard refguard(fdtable[rfd]->open_close_lock_);
-    // ++fdtable[rfd]->refcount_;
-    // }
 
     if (PIPE_PARANOIA >= 2) {
         log_printf("[syscall_pipe] Successfully made pipe, updated state below\n");
