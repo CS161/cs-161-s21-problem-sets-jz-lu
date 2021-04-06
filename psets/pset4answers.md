@@ -250,11 +250,15 @@ mkdir mickens
 cd mickens
 pwd
 cat /thoreau.txt > javascript_sux.txt
+ls
 cat javascript_sux.txt
 rm javascript_sux.txt
-cd /
+ls
+cd # goes to root directory
 pwd
-rm mickens
+rm mickens # this should return error!
+rm mickens/
+ls
 ```
 **Important Note**: there is a key implementation detail unique to Chickadee, in that all shell processes are always in the cleaned file system image, and they all live in root. Thus `syscall_execv`
 ()` cannot add on a prefix, or else the shell functions will fail to execute. As such it is important to note that if any executables are ever placed in a subdirectory, the entire path must be specified to run it, not just the name, regardless of the CWD.
