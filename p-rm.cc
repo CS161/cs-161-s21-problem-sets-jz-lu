@@ -2,6 +2,11 @@
 
 // shell 'rm' function
 void process_main(int argc, char** argv) {
+    if (!argv[1]) {
+        console_printf(0xc00, "Error: no argument specified\n");
+        sys_exit(1);
+    }
+    
     char* name = argv[1];
     if (name[strlen(name)-1] == '/') {
         // Case 1: remove a directory.

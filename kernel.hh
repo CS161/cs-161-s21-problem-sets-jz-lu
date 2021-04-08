@@ -101,7 +101,7 @@ struct __attribute__((aligned(4096))) proc {
     };
 
     // These four members must come first:
-    pid_t id_ = 0;                             // Process ID
+    pid_t id_ = 0;                             // Thread ID
     regstate* regs_ = nullptr;                 // Process's current registers
     yieldstate* yields_ = nullptr;             // Process's current yield state
     std::atomic<int> pstate_ = ps_blank;       // Process state
@@ -112,6 +112,7 @@ struct __attribute__((aligned(4096))) proc {
     pid_t childpids_[NPROC] = {0};             // PID Array of children
     vnode* fdtable[MAX_FD] = {0};              // Per-process (threads share) file descriptor table
     cwd* pwd_ = nullptr;                       // Per-process working directory
+    pid_t pid_ = 0;                            // Process ID
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
     uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
@@ -149,9 +150,7 @@ struct __attribute__((aligned(4096))) proc {
 
     // Make an exact copy of the process.
     int syscall_fork(regstate* regs);
-
-    // A nasty allocation syscall that corrupts the kernel stack via resursive local variable
-    int syscall_nasty(regstate* regs);
+    int syscall_nasty(regstate* regs); // don't call this...
     int syscall_testkalloc(regstate* regs);
     int syscall_wildalloc(regstate* regs);
 
@@ -185,6 +184,8 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_pwd(regstate* regs);
     int syscall_cd(regstate* regs);
     int syscall_ls(regstate* regs);
+    int syscall_clone(regstate* regs);
+    int syscall_texit(regstate* regs);
 
     inline irqstate lock_pagetable_read();
     inline void unlock_pagetable_read(irqstate& irqs);

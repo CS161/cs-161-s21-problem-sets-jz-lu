@@ -3,6 +3,9 @@
 // Run the shell command 'ls'
 void process_main(int argc, char** argv) {
     char buf[256];
+    if (argv[1]) {
+        console_printf(0xe00, "Warning: ignoring arguments\n");
+    }
 
     int ret = sys_ls(buf, 256);
     if (ret == E_2BIG) {

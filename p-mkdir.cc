@@ -2,6 +2,11 @@
 
 // shell 'mkdir' function
 void process_main(int argc, char** argv) {
+    if (!argv[1]) {
+        console_printf(0xc00, "Error: no argument specified\n");
+        sys_exit(1);
+    }
+
     int r = sys_mkdir(argv[1]);
     if (r) {
         if (r == E_FAULT) {
