@@ -6,10 +6,34 @@ Leave your name out of this file. Put collaboration notes and credit in
 Answers to written questions
 ----------------------------
 
-## Changes to VFS and Chickadee FS
-From Problem Set 3, our setup of the per-process file descriptor table `int proc::fdtable[]` was a static array within `struct proc`. However, since threads each have their own `struct proc` but must share a `struct proc`, we replace the static array with `int* proc::fdtable`, which like `struct cwd` is to be allocated by the creator of the `struct proc`. As such, during `boot_process_start()` and `syscall_fork()` we can explicitly allocate (and check for allocation failures) `proc::fdtable`, while in the new `syscall_clone()` we can pass in the pointer to the new `struct proc` for sharing between threads. We increased `MAXFD` from `8` to `16` since with multiple threads it is reasonable to want more entries.
+## New Design of Thread Architecture
+When implementing threads it becomes apparent that certain metadata are shared among a group of threads, while others are per-thread. Group-shared data include file descriptors, thread group ID (process ID), linked list of thread pointers, and a per-process lock. It is thus convenient to combine them all into one struct and pass pointers to it into new threads when cloning. Note that we generally want each thread to be able to traverse directories independently, so we give each thread its own `cwd`.
+```c++
+struct thgrp {
+    spinlock proc_lock_;
+    pid_t tgid_;                        // what used to be id_ (now id_ is thread ID)
+    int fdtable[MAXFD];                 // file descriptors
+    list<proc, &proc::thlink> th;       // list of pointers to threads
+    int nth = 1;                        // num threads
+}
+```
+This design implies that `list_links thlink` must be added to `struct proc`. See *Synchronization Invariants* for documentation on per-process locking strategies. We increase `MAXFD` from 8 to 16 since with multiple threads it is reasonable to want more entries. The constructor of `struct proc` now takes in a `thgrp` pointer in addition to a `cwd` pointer, incrementing `nth` and adding `this` to `th`. It is the job of `syscall_fork()` to initialize the thread group ID.
 
-Since it is likely that users would want each thread to be able to traverse directories independently, we give each thread its own `cwd`; in other words, working directories are a per-thread structure.
+Henceforth we shall use `proc::id_` as the *thread ID*, and `sys_getpid()` will instad return `proc::thgrp::tgid_`. The per-thread ID shall be used to index `ptable`, so allocating and freeing IDs there does not change. Since the per-process ID no longer requires a specific bound (as it no longer serves as the index to any table), we can assign it by simply keeping a global atomic variable `curpid` that increments it; creating a new process will involve an ID assignment as below.
+```c++
+// after allocation...
+p->tgid_ = curpid++;
+```
+
+
+### Thread Exit
+
+
+### Changes to Process Exit
+
+
+## Synchronization Invariants
+
 
 Grading notes
 -------------
