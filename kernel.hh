@@ -93,6 +93,8 @@ struct cwd:rwlock {
     bool subset(char* path);
 };
 
+struct thgrp;
+
 // Process descriptor type
 struct __attribute__((aligned(4096))) proc {
     // TODO [MULTITH] Add per-process lock to lock accesses to fdtable, see other flagged TODOs
@@ -112,7 +114,7 @@ struct __attribute__((aligned(4096))) proc {
     pid_t childpids_[NPROC] = {0};             // PID Array of children
     vnode* fdtable[MAX_FD] = {0};              // Per-process (threads share) file descriptor table
     cwd* pwd_ = nullptr;                       // Per-process working directory
-    pid_t pid_ = 0;                            // Process ID
+    thgrp* thgrp_ = nullptr;                   // Thread group data
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
     uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
@@ -120,9 +122,7 @@ struct __attribute__((aligned(4096))) proc {
     int sanitizer_status_ = 0;
 #endif
 
-    list_links runq_links_;
-
-
+    list_links runq_links_, thlink_;
 
     proc(cwd* pwd);
     NO_COPY_OR_ASSIGN(proc);
@@ -203,6 +203,20 @@ struct __attribute__((aligned(4096))) proc {
     void free_auto_allocs(proc* p);
     void free_auto_allocs(x86_64_pagetable* pt);
     uint64_t canary = CANARY_EV;
+};
+
+struct thgrp {
+    spinlock proc_lock_;
+    const pid_t tgid_;                      // what used to be id_ (now id_ is thread ID)
+    vnode* fdtable_[MAX_FD];                 // file descriptors
+    list<proc, &proc::thlink_> th_;         // list of pointers to threads
+    int nth_ = 1;                           // num threads
+    list_links chlink_;                     // list link for process ancestry
+    list<thgrp, &thgrp::chlink_> children_; // list of child processes (thread groups)
+    int nchildren_ = 0;                     // number of children
+    inline thgrp(pid_t tgid, proc* p) : tgid_(tgid) {
+        th_.push_back(p);
+    }
 };
 
 extern proc* ptable[NPROC];

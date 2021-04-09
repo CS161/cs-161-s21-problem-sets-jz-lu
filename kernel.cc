@@ -18,6 +18,9 @@ std::atomic<unsigned long> ticks;
 // Display type; initially KDISPLAY_CONSOLE.
 std::atomic<int> kdisplay;
 
+// Thread allocator.
+std::atomic<pid_t> cur_tgid = 0;
+
 // Global Stdio vnode on VFS.
 vnode* global_cnode = nullptr;
 
