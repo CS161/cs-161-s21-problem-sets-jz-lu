@@ -9,7 +9,9 @@ spinlock ptable_lock;           // protects `ptable`
 
 // proc::proc()
 //    The constructor initializes the `proc` to empty.
-proc::proc(cwd* pwd) {
+proc::proc(thgrp* grp, cwd* pwd) {
+    pwd_ = pwd;
+    thgrp_ = grp;
     if (PROC_PARANOIA >= 2) {
         log_printf("[proc] [constructor] struct proc constructor called\n");
     }
@@ -22,17 +24,20 @@ proc::proc(cwd* pwd) {
             log_printf("[proc] [constructor] No global kb_c vnode found, allocating one\n");
         }
         kb_c_vnode* cn = knew<kb_c_vnode>();
+        assert(cn);
         global_cnode = reinterpret_cast<vnode*>(cn);
     }
-    for (int fd = 0; fd <= 2; ++fd) { // TODO [MULTITH] lock fdtable accesses
-        if (fdtable[fd] != global_cnode) {
-            assert(!fdtable[fd]);
-            fdtable[fd] = global_cnode;
-            spinlock_guard guard(global_cnode->open_close_lock_);
-            ++global_cnode->refcount_;
+    { // TODO fix refcount
+    spinlock_guard guard(global_cnode->open_close_lock_);
+    global_cnode->refcount_ += 3;
+    }
+    spinlock_guard guard(thgrp_->thgrp_lock_);
+    for (int fd = 0; fd <= 2; ++fd) {
+        if (thgrp_->fdtable_[fd] != global_cnode) {
+            assert(!thgrp_->fdtable_[fd]);
+            thgrp_->fdtable_[fd] = global_cnode;
         }
     }
-    pwd_ = pwd;
 }
 
 // proc::~proc()

@@ -33,6 +33,7 @@ p->tgid_ = curpid++;
 
 
 ## Synchronization Invariants
+`ptable_lock` must precede per-process thread group locks `thgrp::thgrp_lock_`. The thread group `fdtable_, nth_, th_` must be protected by `thgrp::thgrp_lock_` after the process has become runnable, i.e. after `boot_process_start() / syscall_fork()`.
 
 
 Grading notes

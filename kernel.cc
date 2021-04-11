@@ -18,8 +18,8 @@ std::atomic<unsigned long> ticks;
 // Display type; initially KDISPLAY_CONSOLE.
 std::atomic<int> kdisplay;
 
-// Thread allocator.
-std::atomic<pid_t> cur_tgid = 0;
+// Group ID allocator.
+std::atomic<pid_t> cur_tgid = 1;
 
 // Global Stdio vnode on VFS.
 vnode* global_cnode = nullptr;
@@ -55,10 +55,12 @@ void k_proc_init() {
     while (true) {
         {
         spinlock_guard guard(ptable_lock);
-        if (WAITPID_PARANOIA >= 1 && kinit->nchildren_) {
-            log_printf("Children of ALMIGHTY INIT with PID=%d (bow down): [", kinit->id_);
-            for (int i = 0; i < (kinit->nchildren_); ++i) {
-                log_printf("%d ", kinit->childpids_[i]);
+        if (WAITPID_PARANOIA >= 1 && kinit->thgrp_->nchildren_) {
+            log_printf("Children of ALMIGHTY INIT with TID=%d, TGID=%d: [", 
+                kinit->id_, kinit->thgrp_->tgid_);
+            for (auto it = kinit->thgrp_->children_.front(); 
+                 it; it = kinit->thgrp_->children_.next(it)) {
+                log_printf("%d ", it->tgid_);
             }
             log_printf("]\n");
         }
@@ -84,6 +86,7 @@ void kernel_start(const char* command) {
     init_hardware();
     console_clear();
 
+    // TODO [MULTITH]
     proc *init_task = knew<proc>(nullptr); // no struct cwd for init
     {
         spinlock_guard guard(ptable_lock);
@@ -120,6 +123,7 @@ void boot_process_start(pid_t pid, const char* name) {
     assert(ld.memfile_ && ld.pagetable_);
     int r = proc::load(ld);
     assert(r >= 0);
+    // TODO [MULTITH] allocate the thgrp
 
     // allocate process, initialize memory
     cwd* pwd = knew<cwd>();
@@ -278,11 +282,14 @@ uintptr_t proc::syscall(regstate* regs) {
         break;
     
     case SYSCALL_GETPPID: {
+        {
         spinlock_guard guard(ptable_lock);
         if (PPID_PARANOIA >= 1) {
-            log_printf("[syscall_ppid] Process PID=%d has PPID=%d\n", id_, ppid_);
+            log_printf("[syscall_ppid] Process TID=%d, TGID=%d has PTGID=%d\n", 
+                id_, thgrp_->tgid_, thgrp_->pthgrp_->tgid_);
         }
-        syscall_retval = ppid_;
+        syscall_retval = thgrp_->pthgrp_->tgid_;
+        }
         break;
     }
 
@@ -358,6 +365,10 @@ uintptr_t proc::syscall(regstate* regs) {
         syscall_retval = pid;
         break;
     }
+
+    case SYSCALL_CLONE:
+        syscall_retval = syscall_clone(regs);
+        break;
     
     case SYSCALL_NASTY: {
         long n = syscall_nasty(regs);
@@ -435,6 +446,10 @@ uintptr_t proc::syscall(regstate* regs) {
 
     case SYSCALL_EXIT:
         syscall_exit(regs);
+        break;
+    
+    case SYSCALL_TEXIT:
+        syscall_texit(regs);
         break;
     
     case SYSCALL_MSLEEP:
@@ -607,13 +622,18 @@ int proc::syscall_fork(regstate* regs) {
     }
     int memcpy_failed = 1; // Initialize variables before goto statements.
     x86_64_pagetable* child_pt = nullptr;
-    cwd* pwd = knew<cwd>();
+    cwd* pwd = nullptr;
     proc* child = nullptr;
-    if (!pwd) {
+    thgrp* grp = knew<thgrp>(++cur_tgid);
+    if (!grp) {
         goto eret;
     }
+    pwd = knew<cwd>();
+    if (!pwd) {
+        goto free_grp;
+    }
 
-    child = knew<proc>(pwd); // allocate new process
+    child = knew<proc>(grp, pwd); // allocate new process
     if (FORK_TESTING == 1 && rand(0, 5) < 1) { // Testing: simulate struct proc alloc failure
         log_printf("[forktest] Simulating child struct proc failed alloc for parent process %d\n", this->id_);
         delete child;
@@ -624,8 +644,7 @@ int proc::syscall_fork(regstate* regs) {
         if (FORK_PARANOIA >= 1) {
             log_printf("[fork] ERROR: no available memory remaining for child process struct.\n");
         }
-        delete pwd;
-        goto eret;
+        goto free_pwd;
     } else {
         if (FORK_PARANOIA >= 2) {
             log_printf("[fork] Child proc struct va: %p, pa: 0x%x\n", child, kptr2pa(child));
@@ -674,12 +693,12 @@ int proc::syscall_fork(regstate* regs) {
     }
 
     // Copy over parent's fdtable and increment refcount.
-    // TODO [MULTITH] lock access to fdtable
-    memcpy((void*) &(child->fdtable), (void*) &fdtable, MAX_FD*sizeof(vnode*));
+    thgrp_->thgrp_lock_.lock_noirq();
+    memcpy((void*) &(child->thgrp_->fdtable_), (void*) &thgrp_->fdtable_, MAX_FD*sizeof(vnode*));
     for (int fd = 0; fd < MAX_FD; ++fd) {
-        if (fdtable[fd]) {
-            spinlock_guard refguard(fdtable[fd]->open_close_lock_);
-            ++fdtable[fd]->refcount_;
+        if (thgrp_->fdtable_[fd]) {
+            spinlock_guard refguard(thgrp_->fdtable_[fd]->open_close_lock_);
+            ++thgrp_->fdtable_[fd]->refcount_;
         }
     }
     if (FORK_PARANOIA >= 1 || VFS_PARANOIA >= 2) {
@@ -687,6 +706,7 @@ int proc::syscall_fork(regstate* regs) {
             id_, pid);
         child->show_fdtable_();
     }
+    thgrp_->thgrp_lock_.unlock_noirq();
 
     // Add to process table (requires lock in case another CPU is already
     // running processes)
@@ -701,22 +721,23 @@ int proc::syscall_fork(regstate* regs) {
     }
 
     if (FORK_PARANOIA >= 1) {
-        log_printf("[fork] Returning NEW process PID %d\n", pid);
+        log_printf("[fork] Returning NEW process TID %d\n", pid);
     }
 
-    child->ppid_ = this->id_;
-    this->childpids_[this->nchildren_] = pid;
-    this->nchildren_++;
+    child->thgrp_->pthgrp_ = thgrp_;
+    thgrp_->children_.push_back(child->thgrp_);
+    ++thgrp_->nchildren_;
     if (FORK_PARANOIA >= 1) {
-        log_printf("[fork] Setting child ppid to %d and updating this parent's metadata\n", child->ppid_);
+        log_printf("[fork] Setting child ptgid to %d and updating this parent's metadata\n", 
+            child->thgrp_->pthgrp_->tgid_);
     }
 
     // Print updated metrics for waitpid.
     if (WAITPID_PARANOIA >= 1) {
-        log_printf("[fork] [return] this pid: %i, num_children: %i, child pids: [", 
-            this->id_, this->nchildren_);
-        for (int i = 0; i < this->nchildren_; ++i) {
-            log_printf("%d ", this->childpids_[i]);
+        log_printf("[fork] [return] parent tid: %d/tgid=%d, num_children: %d, child tgids: [", 
+            id_, thgrp_->tgid_, thgrp_->nchildren_);
+        for (auto it = thgrp_->children_.front(); it; it = thgrp_->children_.next(it)) {
+            log_printf("%d ", it->tgid_);
         }
         log_printf("]\n");
     }
@@ -733,13 +754,11 @@ int proc::syscall_fork(regstate* regs) {
             log_printf("[fork] Process pagetable freed\n");
         }
     free_proc:
-        if (FORK_PARANOIA || FORK_TESTING) {
-            log_printf("[fork] Fork failed, freeing struct proc\n");
-        }
         delete child;
-        if (FORK_PARANOIA || FORK_TESTING) {
-            log_printf("[fork] Struct proc freed\n");
-        }
+    free_pwd:
+        delete pwd;
+    free_grp:
+        delete grp;
     eret:
         if (FORK_PARANOIA || FORK_TESTING) {
             log_printf("[fork] Exiting with exit status %d (no memory)\n", E_NOMEM);

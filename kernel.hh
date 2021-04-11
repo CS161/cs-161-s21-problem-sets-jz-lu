@@ -108,11 +108,6 @@ struct __attribute__((aligned(4096))) proc {
     yieldstate* yields_ = nullptr;             // Process's current yield state
     std::atomic<int> pstate_ = ps_blank;       // Process state
     uint64_t retval = 0;                       // Return value of process
-    pid_t ppid_ = 1;                           // Parent ID, initialized to k_proc_init's ID
-    int nchildren_ = 0;                        // Number of children
-    std::atomic<int> e_intr = 0;               // Interrupt code
-    pid_t childpids_[NPROC] = {0};             // PID Array of children
-    vnode* fdtable[MAX_FD] = {0};              // Per-process (threads share) file descriptor table
     cwd* pwd_ = nullptr;                       // Per-process working directory
     thgrp* thgrp_ = nullptr;                   // Thread group data
 
@@ -124,7 +119,7 @@ struct __attribute__((aligned(4096))) proc {
 
     list_links runq_links_, thlink_;
 
-    proc(cwd* pwd);
+    proc(thgrp* grp, cwd* pwd);
     NO_COPY_OR_ASSIGN(proc);
     ~proc();
 
@@ -185,7 +180,7 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_cd(regstate* regs);
     int syscall_ls(regstate* regs);
     int syscall_clone(regstate* regs);
-    int syscall_texit(regstate* regs);
+    void syscall_texit(regstate* regs);
 
     inline irqstate lock_pagetable_read();
     inline void unlock_pagetable_read(irqstate& irqs);
@@ -206,17 +201,17 @@ struct __attribute__((aligned(4096))) proc {
 };
 
 struct thgrp {
-    spinlock proc_lock_;
-    const pid_t tgid_;                      // what used to be id_ (now id_ is thread ID)
-    vnode* fdtable_[MAX_FD];                 // file descriptors
+    const pid_t tgid_;                      // thread group ID, no lock needed after init
+    thgrp* pthgrp_ = nullptr;               // protected by ptable lock
+    list_links chlink_;                     // list link for process ancestry
+    list<thgrp, &thgrp::chlink_> children_; // list of child thgrps, ptable lock protected
+    int nchildren_ = 0;                     // number of children, ptable lock protected
+    spinlock thgrp_lock_;                   // protects everything below
+    vnode* fdtable_[MAX_FD] = {0};          // file descriptors
     list<proc, &proc::thlink_> th_;         // list of pointers to threads
     int nth_ = 1;                           // num threads
-    list_links chlink_;                     // list link for process ancestry
-    list<thgrp, &thgrp::chlink_> children_; // list of child processes (thread groups)
-    int nchildren_ = 0;                     // number of children
-    inline thgrp(pid_t tgid, proc* p) : tgid_(tgid) {
-        th_.push_back(p);
-    }
+    std::atomic<int> e_intr_ = 0;           // tg interrupt signal
+    inline thgrp(pid_t tgid) : tgid_(tgid) {}
 };
 
 extern proc* ptable[NPROC];
@@ -679,7 +674,7 @@ inline bool proc::resumable() const {
 //    Sets a proc pstate from blocked to runnable.
 inline void proc::wake() {
     if (WAITQ_PARANOIA >= 1 || WAITH_PARANOIA >= 1) {
-        log_printf("[p::wake] wakey wakey from process PID=%d, parent PID=%d\n", id_, ppid_);
+        log_printf("[p::wake] wakey wakey from process TID=%d\n", id_, );
     }
     // This already holds a lock from waiter, so just go ahead and check pstate
     int s = ps_blocked;
