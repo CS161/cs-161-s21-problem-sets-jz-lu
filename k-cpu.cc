@@ -95,12 +95,18 @@ void cpustate::schedule(proc* yielding_from) {
         yielding_from = idle_task_;
     }
 
-    // Wake up the parent process to notify them of an exit.
+    // Flip kill switch on exiting processes
+    if (current_->exit_signal_== E_INTR && current_->pstate_ == proc::ps_runnable) {
+        current_->pstate_ = proc::ps_exiting;
+        current_->exit_signal_ = 0; // reset exit signal
+        current_->thgrp_->wq_.wake_all();
+    }
+
     if (yielding_from && !USING_PSEUDO_BLOCKING && yielding_from->pstate_ == proc::ps_transition) {
+        --yielding_from->thgrp_->nth_;
         current_ = nullptr;
         yielding_from->pstate_ = proc::ps_blank;
-        parent_child_queue.wake_one(ptable[yielding_from->ppid_]);
-        parent_child_queue.wake_one(ptable[1]);
+        parent_child_queue.wake_all(); // must wake all since parent may be multithreaded
     }
 
     // increment schedule counter

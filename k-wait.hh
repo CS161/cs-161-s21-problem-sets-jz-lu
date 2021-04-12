@@ -113,7 +113,7 @@ inline void waiter::block_until(wait_queue& wq, F predicate) {
         if (WAITQ_PARANOIA >= 3) {
             log_printf("[k-wait] [block_until] Prepared. Predicate VA=%p\n", predicate);
         }
-        if (predicate()) {
+        if (predicate() || p_->exit_signal_) {
             if (WAITQ_PARANOIA >= 3) {
                 log_printf("[k-wait] [block_until] Predicate immediately passed without block() called\n");
             }
@@ -140,7 +140,7 @@ inline void waiter::block_until(wait_queue& wq, F predicate,
                                 spinlock& lock, irqstate& irqs) {
     while (true) {
         prepare(wq);
-        if (predicate()) {
+        if (predicate() || p_->exit_signal_) {
             break;
         }
         lock.unlock(irqs);
@@ -332,8 +332,8 @@ inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicat
         if (WAITH_PARANOIA >= 3) {
             log_printf("[HEAP-waiter] Prepared PID=%d. Predicate VA=%p\n", p_->id_, predicate);
         }
-        if (predicate()) {
-            if (p_->e_intr != 0) {
+        if (predicate() || p_->exit_signal_) {
+            if (p_->thgrp_->e_intr != 0) {
                 log_printf("[HEAP-waiter] Predcheck passed. Signal to parent PID=%d\n", p_->id_);
             }
             break;
@@ -360,7 +360,7 @@ inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicat
                                 spinlock& lock, irqstate& irqs) {
     while (true) {
         prepare(wh, wakeup_time);
-        if (predicate()) {
+        if (predicate() || p_->exit_signal_) {
             break;
         }
         lock.unlock(irqs);

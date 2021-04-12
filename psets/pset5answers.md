@@ -32,8 +32,11 @@ p->tgid_ = curpid++;
 ### Changes to Process Exit
 
 
+
 ## Synchronization Invariants
-`ptable_lock` must precede per-process thread group locks `thgrp::thgrp_lock_`. The thread group `fdtable_, nth_, th_` must be protected by `thgrp::thgrp_lock_` after the process has become runnable, i.e. after `boot_process_start() / syscall_fork()`.
+1. `ptable_lock` must precede per-process thread group locks `thgrp::thgrp_lock_`; however, in almost all cases, except for 1-2 lines on occasion, the two locks will not be simultaneously held. 
+2. The thread group `fdtable_, th_` must be protected by `thgrp::thgrp_lock_` after the process has become runnable, i.e. after `boot_process_start() / syscall_fork()`. `nth_` is atomic and may be changed atomically by the scheduler and kernel tasks without holding a lock, if it is the only thing being changed and can be done in a single operation. However, the elements of `thgrp_` need not be locked if there is only one thread remaining. In particular, `syscall_exit()` need not do any per-`thgrp` locking after it has woken up from waiting for all threads except for the calling thread to stop running.
+3. To synchronize the exiting of all threads at once via `syscall_exit()`, we add a new state `proc::ps_exiting` and decree that once a process state has become `ps_exiting`, it may no longer become runnable again; `cpustate::schedule()` is endowed with the privilege of changing exit-signaled processes to have `pstate_ = ps_exiting`, which will be checked by `syscall_exit()`. Otherwise, the process state of `proc p` may only be changed by the kernel task for `p`, or by an atomic compare and exchange process, such as that given in `proc::wake()` which is not necessarily called by the kernel task `p`.
 
 
 Grading notes

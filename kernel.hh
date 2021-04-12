@@ -99,7 +99,7 @@ struct thgrp;
 struct __attribute__((aligned(4096))) proc {
     // TODO [MULTITH] Add per-process lock to lock accesses to fdtable, see other flagged TODOs
     enum pstate_t {
-        ps_blank = 0, ps_runnable = PROC_RUNNABLE, ps_broken, ps_blocked, ps_transition
+        ps_blank = 0, ps_runnable = PROC_RUNNABLE, ps_broken, ps_blocked, ps_transition, ps_exiting
     };
 
     // These four members must come first:
@@ -110,6 +110,7 @@ struct __attribute__((aligned(4096))) proc {
     uint64_t retval = 0;                       // Return value of process
     cwd* pwd_ = nullptr;                       // Per-process working directory
     thgrp* thgrp_ = nullptr;                   // Thread group data
+    std::atomic<int> exit_signal_ = 0;         // Signal sent to kill all threads
 
     x86_64_pagetable* pagetable_ = nullptr;    // Process's page table
     uintptr_t recent_user_rip_ = 0;            // Most recent user-mode %rip
@@ -117,7 +118,7 @@ struct __attribute__((aligned(4096))) proc {
     int sanitizer_status_ = 0;
 #endif
 
-    list_links runq_links_, thlink_;
+    list_links runq_links_, thlink_, zlink_;
 
     proc(thgrp* grp, cwd* pwd);
     NO_COPY_OR_ASSIGN(proc);
@@ -201,17 +202,26 @@ struct __attribute__((aligned(4096))) proc {
 };
 
 struct thgrp {
-    const pid_t tgid_;                      // thread group ID, no lock needed after init
+    const pid_t tgid_;                      // what used to be id_ (now id_ is thread ID)
     thgrp* pthgrp_ = nullptr;               // protected by ptable lock
     list_links chlink_;                     // list link for process ancestry
     list<thgrp, &thgrp::chlink_> children_; // list of child thgrps, ptable lock protected
     int nchildren_ = 0;                     // number of children, ptable lock protected
+    std::atomic<int> e_intr_ = 0;           // atomic parent-child signal holder
     spinlock thgrp_lock_;                   // protects everything below
     vnode* fdtable_[MAX_FD] = {0};          // file descriptors
     list<proc, &proc::thlink_> th_;         // list of pointers to threads
-    int nth_ = 1;                           // num threads
-    std::atomic<int> e_intr_ = 0;           // tg interrupt signal
-    inline thgrp(pid_t tgid) : tgid_(tgid) {}
+    list<proc, &proc::zlink_> z_;
+    std::atomic<int> nth_ = 1;              // num threads
+    wait_queue wq_;
+    uint64_t retval_;
+    inline thgrp(pid_t tgid) : tgid_(tgid) {
+    }
+    inline ~thgrp() {
+        wq_.wake_all();
+        assert(th_.empty());
+        assert(!nth_);
+    }
 };
 
 extern proc* ptable[NPROC];
@@ -674,7 +684,7 @@ inline bool proc::resumable() const {
 //    Sets a proc pstate from blocked to runnable.
 inline void proc::wake() {
     if (WAITQ_PARANOIA >= 1 || WAITH_PARANOIA >= 1) {
-        log_printf("[p::wake] wakey wakey from process TID=%d\n", id_, );
+        log_printf("[p::wake] wakey wakey from process TID=%d\n", id_);
     }
     // This already holds a lock from waiter, so just go ahead and check pstate
     int s = ps_blocked;

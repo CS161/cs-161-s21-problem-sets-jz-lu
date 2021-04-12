@@ -70,10 +70,6 @@ void k_proc_init() {
             break; // No children
         }
     }
-    if (TRUEBLOCK_TESTING) {
-        log_printf("[k_proc_init] [TRUE BLOCK TEST] [TYPE=%s] Total num resumes recorded: %lu\n",
-            USING_PSEUDO_BLOCKING ? "Pseudoblock" : "Trueblock", BLOCK_NUM_RESUMES);
-    }
     log_printf("[k_proc_init] halting QEMU, goodbye cruel world\n");
     process_halt();
 }
@@ -86,24 +82,31 @@ void kernel_start(const char* command) {
     init_hardware();
     console_clear();
 
-    // TODO [MULTITH]
-    proc *init_task = knew<proc>(nullptr); // no struct cwd for init
+    thgrp* grp = knew<thgrp>(1);
+    assert(grp);
+    proc* init_task = knew<proc>(grp, nullptr);
+    assert(init_task);
+
+    // per-thread sync invariant
+    auto irqs = grp->thgrp_lock_.lock();
+    grp->th_.push_back(init_task);
+    grp->thgrp_lock_.unlock(irqs);
+
     {
-        spinlock_guard guard(ptable_lock);
-        // set up process descriptors
-        for (pid_t i = 0; i < NPROC; i++) {
-            ptable[i] = nullptr;
-        }
-        init_task->ppid_ = 1;
-        init_task->init_kernel(1, k_proc_init);
-        assert(!ptable[1]);
-        ptable[1] = init_task;
-        init_task->childpids_[init_task->nchildren_] = 2;
-        ++init_task->nchildren_;
+    spinlock_guard guard(ptable_lock);
+    // set up process descriptors
+    for (pid_t i = 0; i < NPROC; i++) {
+        ptable[i] = nullptr;
     }
+    init_task->thgrp_->pthgrp_ = grp;
+    init_task->init_kernel(1, k_proc_init);
+    assert(!ptable[1]);
+    ptable[1] = init_task;
+    }
+
     cpus[0].enqueue(init_task);
 
-    // start first process, at pid = 2
+    // start first process with pid 2 instead
     boot_process_start(2, CHICKADEE_FIRST_PROCESS);
 
     // start running processes
@@ -123,27 +126,35 @@ void boot_process_start(pid_t pid, const char* name) {
     assert(ld.memfile_ && ld.pagetable_);
     int r = proc::load(ld);
     assert(r >= 0);
-    // TODO [MULTITH] allocate the thgrp
 
     // allocate process, initialize memory
+    thgrp* grp = knew<thgrp>(pid);
+    assert(grp);
     cwd* pwd = knew<cwd>();
-    assert(pwd); // The first process cannot run out of memory
-    proc* p = knew<proc>(pwd);
+    assert(pwd);
+    proc* p = knew<proc>(grp, pwd);
+    assert(p);
+
+    grp->th_.push_back(p); 
+    // push back the process to the list as well
+
     p->init_user(pid, ld.pagetable_);
     p->regs_->reg_rip = ld.entry_rip_;
-
     void* stkpg = kalloc(PAGESIZE);
     assert(stkpg);
     vmiter(p, MEMSIZE_VIRTUAL - PAGESIZE).map(stkpg, PTE_PWU);
-    vmiter(p, CONSOLE_ADDR).map(CONSOLE_ADDR, PTE_PWU); // Map virtual console addr to physical console addr
+    vmiter(p, CONSOLE_ADDR).map(CONSOLE_ADDR, PTE_PWU); 
     p->regs_->reg_rsp = MEMSIZE_VIRTUAL;
 
     // add to process table (requires lock in case another CPU is already
     // running processes)
     {
         spinlock_guard guard(ptable_lock);
+        grp->pthgrp_ = ptable[1]->thgrp_;
         assert(!ptable[pid]);
         ptable[pid] = p;
+        ptable[1]->thgrp_->pthgrp_->children_.push_back(grp);
+        ptable[1]->thgrp_->pthgrp_->nchildren_++;
     }
 
     // add to run queue
@@ -278,6 +289,10 @@ uintptr_t proc::syscall(regstate* regs) {
         break;                  // will not be reached
 
     case SYSCALL_GETPID:
+        syscall_retval = thgrp_->tgid_;
+        break;
+
+    case SYSCALL_GETTID:
         syscall_retval = id_;
         break;
     
@@ -707,6 +722,7 @@ int proc::syscall_fork(regstate* regs) {
         child->show_fdtable_();
     }
     thgrp_->thgrp_lock_.unlock_noirq();
+    child->thgrp_->th_.push_back(child);
 
     // Add to process table (requires lock in case another CPU is already
     // running processes)
@@ -742,7 +758,7 @@ int proc::syscall_fork(regstate* regs) {
         log_printf("]\n");
     }
 
-    return pid;
+    return thgrp_->tgid_;
 
     // Fork failure cleanup methods, accessed via goto.
     free_pt:
@@ -1132,54 +1148,45 @@ int proc::syscall_msleep(regstate* regs) {
     // Make sure there's no overflow
     assert(wakeup_time > ticks, "Invalid sleep request, reboot Chickadee or make sleep time smaller");
 
-    if (USING_PSEUDO_BLOCKING) {
-        log_printf("[msleep] [PSEUDOBLOCK] msleep called by PID=%d, to wake at ticks=%lu\n", 
+    if (WAITQ_PARANOIA >= 1 || WAITH_PARANOIA >= 1) {
+        log_printf("[msleep] [TRUEBLOCK] msleep called by process PID=%d to sleep until %lu\n", 
             id_, wakeup_time);
-        while (long(wakeup_time - ticks) > 0 && e_intr == 0) {
-            yield();
-        }
     }
-    else {
-        if (WAITQ_PARANOIA >= 1 || WAITH_PARANOIA >= 1) {
-            log_printf("[msleep] [TRUEBLOCK] msleep called by process PID=%d to sleep until %lu\n", 
-                id_, wakeup_time);
-        }
 
-        if (USING_TIME_HEAP) {
-            wait_heap* wh = &time_heap;
+    if (USING_TIME_HEAP) {
+        wait_heap* wh = &time_heap;
+        if (WAITH_PARANOIA >= 2) {
+            log_printf("[msleep] wh VA=%p, PA=0x%x, ticks=%ld\n",
+                wh, kptr2pa(wh), (unsigned long) ticks);
+        }
+        thgrp_->e_intr_ = 0; // Zero out flag until checking
+        hwaiter().block_until(*wh, wakeup_time, [&] () {
             if (WAITH_PARANOIA >= 2) {
-                log_printf("[msleep] wh VA=%p, PA=0x%x, ticks=%ld\n",
-                    wh, kptr2pa(wh), (unsigned long) ticks);
+                log_printf("[predicate] waketime=%d\n", wakeup_time);
             }
-            e_intr = 0; // Zero out flag until checking
-            hwaiter().block_until(*wh, wakeup_time, [&] () {
-                if (WAITH_PARANOIA >= 2) {
-                    log_printf("[predicate] waketime=%d\n", wakeup_time);
-                }
-                return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
-            });
+            return (long(wakeup_time - ticks) <= 0 || thgrp_->e_intr_ != 0);
+        });
+    }
+    else { // Using time wheel
+        wait_queue* wq = &time_wheel[wakeup_time%NUM_WQS];
+        if (WAITQ_PARANOIA >= 2) {
+            log_printf("[msleep] wq VA=%p, PA=0x%x, ticks=%ld\n", 
+                wq, kptr2pa(wq), (unsigned long) ticks);
         }
-        else { // Using time wheel
-            wait_queue* wq = &time_wheel[wakeup_time%NUM_WQS];
+        thgrp_->e_intr_ = 0; // Zero out flag until checking
+        waiter().block_until(*wq, [&] () {
             if (WAITQ_PARANOIA >= 2) {
-                log_printf("[msleep] wq VA=%p, PA=0x%x, ticks=%ld\n", 
-                    wq, kptr2pa(wq), (unsigned long) ticks);
+                log_printf("[predicate] waketime=%d\n", wakeup_time);
             }
-            e_intr = 0; // Zero out flag until checking
-            waiter().block_until(*wq, [&] () {
-                if (WAITQ_PARANOIA >= 2) {
-                    log_printf("[predicate] waketime=%d\n", wakeup_time);
-                }
-                return (long(wakeup_time - ticks) <= 0 || e_intr != 0);
-            });
-        }
+            return (long(wakeup_time - ticks) <= 0 || thgrp_->e_intr_ != 0);
+        });
     }
 
     if (WAITQ_PARANOIA >= 2 || WAITH_PARANOIA >= 2) {
         log_printf("[msleep] SLEEP OVER from process PID=%d\n", id_);
     }
 
-    return e_intr;
+    return thgrp_->e_intr_;
 }
 
 
@@ -1470,11 +1477,10 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
 //    Can exclude one fd if necessary (e.g. if it were temporarily taken but not yet assigned).
 //    If exclude_one is turned on then taken_fd must be passed in.
 //    Returns E_MFILE if none available.
+//    Assumes that thgrp lock is held.
 int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
-    // TODO [MULTITH] DO NOT LOCK THIS! Lock places that call this, as lock usually
-    // TODO needed until after mem alloc successful.
     for (int fd = 3; fd < MAX_FD; ++fd) {
-        if (!fdtable[fd] && (!exclude_one || fd != taken_fd)) {
+        if (!thgrp_->fdtable_[fd] && (!exclude_one || fd != taken_fd)) {
             return fd;
         }
     }
@@ -1483,14 +1489,14 @@ int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
 
 
 // proc::show_fdtable_()
-//   Prints state of the fdtable
+//   Prints state of the fdtable.
+//   Assumes that thgrp lock is held.
 void proc::show_fdtable_() {
-    // TODO [MULTITH] lock this function
     log_printf("[show_fdtable_] Process PID=%d fdtable HEAD --> [", id_);
     for (int fd = 0; fd < MAX_FD-1; ++fd) {
-        log_printf("%d:%s | ", fd, fdtable[fd] ? "T" : "F"); // T is taken, F is free
+        log_printf("%d:%s | ", fd, thgrp_->fdtable_[fd] ? "T" : "F"); // T is taken, F is free
     }
-    log_printf("%d:%s] <-- TAIL\n", MAX_FD-1, fdtable[MAX_FD-1] ? "T" : "F");
+    log_printf("%d:%s] <-- TAIL\n", MAX_FD-1, thgrp_->fdtable_[MAX_FD-1] ? "T" : "F");
 }
 
 
@@ -1635,17 +1641,7 @@ int proc::syscall_open(regstate* regs) {
     }
 
     // Attempt to open the file.
-    // TODO [MULTITH] lock access to fdtable until red comment.
-    long fd = find_open_fd(false);
-    if (fd == E_MFILE) { // Handle no open fdtable entries
-        if (VFS_MF_PARANOIA >= 1) {
-            log_printf("[syscall_open] No open fdtable entry: fd=%d\n", fd);
-        }
-        return E_MFILE;
-    } else if (VFS_PARANOIA >= 2) {
-        log_printf("[syscall_open] Found valid fd=%d for new open\n", fd);
-    }
-
+    long fd = -1;
     bool is_dev_null = !strcmp(pathname, "/dev/null");
     bool is_dev_rand = !strcmp(pathname, "/dev/random");
     bool is_dev_full = !strcmp(pathname, "/dev/full");
@@ -1665,7 +1661,19 @@ int proc::syscall_open(regstate* regs) {
         if (!svn) {
             return E_NOMEM;
         }
-        fdtable[fd] = reinterpret_cast<vnode*>(svn);
+        spinlock_guard guard(thgrp_->thgrp_lock_);
+        fd = find_open_fd(false);
+        if (fd == E_MFILE) { // Handle no open fdtable entries
+            if (VFS_MF_PARANOIA >= 1) {
+                log_printf("[syscall_open] No open fdtable entry: fd=%d\n", fd);
+            }
+            svn->close();
+            delete svn;
+            return E_MFILE;
+        } else if (VFS_PARANOIA >= 2) {
+            log_printf("[syscall_open] Found valid fd=%d for new open\n", fd);
+        }
+        thgrp_->fdtable_[fd] = reinterpret_cast<vnode*>(svn);
     } 
     else { // Normal disk file
         fstlock.lock_write();
@@ -1714,11 +1722,22 @@ int proc::syscall_open(regstate* regs) {
             ino->put();
             return E_NOMEM;
         }
-        fdtable[fd] = reinterpret_cast<vnode*>(dvn);
+        auto irqs = thgrp_->thgrp_lock_.lock();
+        fd = find_open_fd(false);
+        if (fd == E_MFILE) { // Handle no open fdtable entries
+            if (VFS_MF_PARANOIA >= 1) {
+                log_printf("[syscall_open] No open fdtable entry: fd=%d\n", fd);
+            }
+            dvn->close();
+            delete dvn;
+            return E_MFILE;
+        } else if (VFS_PARANOIA >= 2) {
+            log_printf("[syscall_open] Found valid fd=%d for new open\n", fd);
+        }
+        thgrp_->fdtable_[fd] = reinterpret_cast<vnode*>(dvn);
+        thgrp_->thgrp_lock_.unlock(irqs);
         bufcache::get().prefetch(ino, 0, true);
     }
-
-    //! Only here can we unlock fdtable access, since we know that we secured a node alloc.
 
     if (VFS_MF_PARANOIA >= 2) {
         log_printf("[syscall_open] Open successful\n");
@@ -1735,13 +1754,14 @@ int proc::syscall_dup2(regstate* regs) {
     // TODO [MULTITH] lock fdtable accesses
     int oldfd = regs->reg_rdi;
     int newfd = regs->reg_rsi;
+    spinlock_guard guard(thgrp_->thgrp_lock_);
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_dup2] Dup2 called by process PID=%d. old=%d, new=%d\n",
             id_, oldfd, newfd);
     }
     if (oldfd < 0 || oldfd >= MAX_FD || newfd < 0 || newfd >= MAX_FD) { // Invalid fd
         return E_BADF;
-    } else if (!fdtable[oldfd]) { // Non-open old fd
+    } else if (!thgrp_->fdtable_[oldfd]) { // Non-open old fd
         return E_BADF;
     } 
 
@@ -1750,23 +1770,23 @@ int proc::syscall_dup2(regstate* regs) {
         return newfd;
     }
 
-    if (fdtable[newfd]) { // Close newfd if open
+    if (thgrp_->fdtable_[newfd]) { // Close newfd if open
             if (VFS_PARANOIA >= 2) {
                 log_printf("[syscall_dup2] newfd=%d is open, closing\n", newfd);
             }
-        if (!fdtable[newfd]->close()) { // If refcount hits 0
+        if (!thgrp_->fdtable_[newfd]->close()) { // If refcount hits 0
             if (VFS_PARANOIA >= 1) {
                 log_printf("[syscall_dup2] Closed node at newfd=%d empty, freeing\n", newfd);
             }
-            delete fdtable[newfd];
+            delete thgrp_->fdtable_[newfd];
         }
     }
 
     // Set the old fd vnode ptr to the new one and increment refcount.
-    fdtable[newfd] = fdtable[oldfd];
+    thgrp_->fdtable_[newfd] = thgrp_->fdtable_[oldfd];
     {
-    spinlock_guard refguard(fdtable[newfd]->open_close_lock_);
-    ++fdtable[newfd]->refcount_;
+    spinlock_guard refguard(thgrp_->fdtable_[newfd]->open_close_lock_);
+    ++thgrp_->fdtable_[newfd]->refcount_;
     }
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_dup2] Dup2 done, showing new fdtable state:\n");
@@ -1780,13 +1800,13 @@ int proc::syscall_dup2(regstate* regs) {
 //    Creates a read and write pipe and writes fd's into a single long as rfd | (wfd << 32).
 uintptr_t proc::syscall_pipe(regstate* regs) {
     // Examine the fd table and ensure that there are at least 2 available spots.
-    // TODO [MULTITH] lock fdtable accesses
     if (PIPE_PARANOIA >= 2) {
         log_printf("[syscall_pipe] Pipe called by process PID=%d\n", id_);
     }
     long rfd, wfd;
     pipe_vnode *wr_vn = nullptr, *rd_vn = nullptr;
 
+    spinlock_guard guard(thgrp_->thgrp_lock_);
     rfd = find_open_fd(false);
     if (rfd == E_MFILE) {
         if (PIPE_PARANOIA >= 2) {
@@ -1838,9 +1858,8 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
     }
 
     // At this points all allocations have been successfully made.
-    // TODO [MULTITH] lock accesses here.
-    fdtable[wfd] = reinterpret_cast<vnode*>(wr_vn);
-    fdtable[rfd] = reinterpret_cast<vnode*>(rd_vn);
+    thgrp_->fdtable_[wfd] = reinterpret_cast<vnode*>(wr_vn);
+    thgrp_->fdtable_[rfd] = reinterpret_cast<vnode*>(rd_vn);
 
     if (PIPE_PARANOIA >= 2) {
         log_printf("[syscall_pipe] Successfully made pipe, updated state below\n");
@@ -1867,7 +1886,7 @@ uintptr_t proc::syscall_read(regstate* regs) {
     sti();
     int fd = regs->reg_rdi;
     // TODO [MULTITH] lock ftable access
-    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+    if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_read] fd %d invalid or not open\n", fd);
         }
@@ -1889,7 +1908,7 @@ uintptr_t proc::syscall_read(regstate* regs) {
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_read] NEW read request for PID=%d, fd=%d\n", id_, fd);
     }
-    return fdtable[fd]->read(addr, sz);
+    return thgrp_->fdtable_[fd]->read(addr, sz);
 }
 
 
@@ -1899,7 +1918,7 @@ uintptr_t proc::syscall_write(regstate* regs) {
 
     int fd = regs->reg_rdi;
     // TODO [MULTITH] lock ftable access
-    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+    if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_write] fd %d invalid or not open\n", fd);
         }
@@ -1921,31 +1940,31 @@ uintptr_t proc::syscall_write(regstate* regs) {
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_write] NEW write request for PID=%d, fd=%d\n", id_, fd);
     }
-    return fdtable[fd]->write(addr, sz);
+    return thgrp_->fdtable_[fd]->write(addr, sz);
 }
 
 
 // proc::syscall_close(regs)
 //    Closes a file descriptor, freeing if necessary.
 int proc::syscall_close(regstate* regs) {
-    // TODO [MULTITH] lock ftable access
     int fd = regs->reg_rdi;
     if (VFS_PARANOIA >= 2 || UDS_PARANOIA >= 1) {
         log_printf("[syscall_close] Closing fd=%d for process PID=%d\n", fd, id_);
     }
-    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+    spinlock_guard guard(thgrp_->thgrp_lock_);
+    if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
         if (VFS_PARANOIA >= 2) {
             log_printf("[syscall_close] fd=%d invalid, returning\n", fd);
         }
         return E_BADF;
     }
-    if (!fdtable[fd]->close()) { // If refcount hits 0
+    if (!thgrp_->fdtable_[fd]->close()) { // If refcount hits 0
         if (VFS_PARANOIA >= 1) {
             log_printf("[syscall_close] Closed node at fd=%d empty, freeing\n", fd);
         }
-        delete fdtable[fd];
+        delete thgrp_->fdtable_[fd];
     }
-    fdtable[fd] = nullptr;
+    thgrp_->fdtable_[fd] = nullptr;
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_close] Close successful, new state:\n");
         show_fdtable_();
@@ -2073,7 +2092,7 @@ int proc::syscall_rename(regstate* regs) {
 int proc::syscall_ftruncate(regstate* regs) {
     int fd = regs->reg_rdi;
     // TODO [MULTITH] lock ftable access
-    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+    if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
         return E_BADF;
     }
     off_t len = regs->reg_rsi;
@@ -2081,12 +2100,12 @@ int proc::syscall_ftruncate(regstate* regs) {
         return E_INVAL;
     }
 
-    return fdtable[fd]->ftruncate(len);
+    return thgrp_->fdtable_[fd]->ftruncate(len);
 }
 
 
 // proc::show_argv()
-//    Prints argv. Don't call unless you know it's valid or for debugging.
+//    Prints argv. Don't call unless you know it's valid or for debugging. (not mutexed)
 void proc::show_argv(int argc, const char** argv) {
     log_printf("argv --> [");
     for (int i = 0; i < argc-1; ++i) {
@@ -2223,6 +2242,9 @@ uintptr_t proc::copy_argv(x86_64_pagetable* pt, void* stkpg_uptr, int argc,
 // proc::syscall_execv(regs)
 //    Replaces current process image with a fresh binary given in args.
 int proc::syscall_execv(regstate* regs) {
+    auto irqs = thgrp_->thgrp_lock_.lock();
+    assert(thgrp_->nth_ == 1); // ensure single-threaded caller assumption holds
+    thgrp_->thgrp_lock_.unlock(irqs);
     if (VFS_PARANOIA >= 2 || VFS_MF_PARANOIA >= 2) {
         log_printf("[syscall_execv] Execv called by process PID=%d\n", id_);
     }
@@ -2490,10 +2512,12 @@ int proc::syscall_sendfd(regstate* regs) {
     int name_invalid = pathname_invalid(this, name);
     if (name_invalid) return name_invalid;
     int fd = regs->reg_rsi;
-    // TODO [MULTITH] lock fdtable access
-    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) { // Invalid fd
+    auto irqs = thgrp_->thgrp_lock_.lock();
+    if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) { // Invalid fd
+        thgrp_->thgrp_lock_.unlock(irqs);
         return E_BADF;
     }
+    thgrp_->thgrp_lock_.unlock(irqs);
 
     uds* sock = find_socket(name);
     if (!sock) {
@@ -2609,11 +2633,11 @@ off_t proc::syscall_lseek(regstate* regs) {
         || origin == LSEEK_SET || origin == LSEEK_SIZE)) {
         return E_INVAL;
     }
-    // TODO [MULTITH] lock ftable access
-    if (fd < 0 || fd >= MAX_FD || !fdtable[fd]) {
+    spinlock_guard guard(thgrp_->thgrp_lock_);
+    if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
         return E_BADF;
     }
-    return fdtable[fd]->lseek(off, origin);
+    return thgrp_->fdtable_[fd]->lseek(off, origin);
 }
 
 
