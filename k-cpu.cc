@@ -85,26 +85,22 @@ void cpustate::schedule(proc* yielding_from) {
     assert(contains(rdrsp()));     // running on CPU stack
     assert(is_cli());              // interrupts are currently disabled
     assert(spinlock_depth_ == 0);  // no spinlocks are held
-    log_printf("[schedule] working\n");
 
     // initialize idle task
     if (!idle_task_) {
         init_idle_task();
     }
-    log_printf("[schedule] 1\n");
     // don't immediately re-run idle task
     if (current_ == idle_task_) {
         yielding_from = idle_task_;
     }
-    log_printf("[schedule] 2\n");
     // Flip kill switch on exiting processes
     if (current_->exit_signal_== E_INTR && current_->pstate_ == proc::ps_runnable) {
         current_->pstate_ = proc::ps_exiting;
         current_->exit_signal_ = 0; // reset exit signal
         current_->thgrp_->wq_.wake_all();
-        ewq.wake_all();
+        // ewq.wake_all();
     }
-    log_printf("[schedule] 3\n");
 
     if (yielding_from && !USING_PSEUDO_BLOCKING && yielding_from->pstate_ == proc::ps_transition) {
         --yielding_from->thgrp_->nth_;
@@ -112,7 +108,6 @@ void cpustate::schedule(proc* yielding_from) {
         yielding_from->pstate_ = proc::ps_blank;
         parent_child_queue.wake_all(); // must wake all since parent may be multithreaded
     }
-    log_printf("[schedule] 4\n");
 
     // increment schedule counter
     ++nschedule_;
@@ -138,7 +133,6 @@ void cpustate::schedule(proc* yielding_from) {
         // no need to skip `current_` if no other runnable procs
         yielding_from = nullptr;
     }
-    log_printf("[schedule] 5\n");
 
     // run `current_`
     set_pagetable(current_->pagetable_);

@@ -214,9 +214,7 @@ struct thgrp {
     std::atomic<int> nth_ = 1;              // num threads
     wait_queue wq_;                         // general-purpose wait queue
     uint64_t retval_;                       // per-process exit status
-    inline thgrp(pid_t tgid) : tgid_(tgid) {
-        log_printf("[thgrp-constructor] new tgid=%d\n", tgid_);
-    }
+    inline thgrp(pid_t tgid);
     inline ~thgrp() {
         assert(th_.empty());
         assert(!nth_);
@@ -590,6 +588,9 @@ void console_memviewer(proc* p);
 __noinline void log_printf(const char* format, ...);
 __noinline void log_vprintf(const char* format, va_list val);
 
+inline thgrp::thgrp(pid_t tgid) : tgid_(tgid) {
+    // log_printf("[thgrp-constructor] new tgid=%d\n", tgid_);
+}
 
 // log_backtrace
 //    Print a backtrace to the host's `log.txt` file, either for the current

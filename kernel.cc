@@ -27,7 +27,7 @@ vnode* global_cnode = nullptr;
 // Global blocking data.
 const uint64_t NUM_WQS = 5;
 wait_queue time_wheel[NUM_WQS]; // Sleep wait wheel
-wait_queue ewq; // wait on exit
+// wait_queue ewq; // wait on exit
 wait_heap time_heap; // Sleep wait heap
 wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 uint64_t BLOCK_NUM_RESUMES = 0;
@@ -130,7 +130,7 @@ void boot_process_start(pid_t pid, const char* name) {
     assert(r >= 0);
 
     // allocate process, initialize memory
-    thgrp* grp = knew<thgrp>(pid);
+    thgrp* grp = knew<thgrp>(++cur_tgid);
     assert(grp);
     cwd* pwd = knew<cwd>();
     assert(pwd);
@@ -151,12 +151,12 @@ void boot_process_start(pid_t pid, const char* name) {
     // add to process table (requires lock in case another CPU is already
     // running processes)
     {
-        spinlock_guard guard(ptable_lock);
-        grp->pthgrp_ = ptable[1]->thgrp_;
-        assert(!ptable[pid]);
-        ptable[pid] = p;
-        ptable[1]->thgrp_->pthgrp_->children_.push_back(grp);
-        ptable[1]->thgrp_->pthgrp_->nchildren_++;
+    spinlock_guard guard(ptable_lock);
+    grp->pthgrp_ = ptable[1]->thgrp_;
+    assert(!ptable[pid]);
+    ptable[pid] = p;
+    ptable[1]->thgrp_->pthgrp_->children_.push_back(grp);
+    ptable[1]->thgrp_->pthgrp_->nchildren_++;
     }
 
     // add to run queue
@@ -777,6 +777,8 @@ int proc::syscall_fork(regstate* regs) {
     free_pwd:
         delete pwd;
     free_grp:
+        grp->nth_ = 0;
+        while (grp->th_.pop_front()) {} // empty the group
         delete grp;
     eret:
         if (FORK_PARANOIA || FORK_TESTING) {
@@ -1091,11 +1093,9 @@ void proc::syscall_exit(regstate* regs) {
     pwd_ = nullptr;
     
     irqs = ptable_lock.lock();
-
     set_pagetable(early_pagetable);
     free_auto_allocs(pagetable_);
     kfree(pagetable_);
-    
     pagetable_= nullptr;  // and we set this to nullptr, extremely important for memviewer
 
     // this child is being freed so we want to alert the parent by setting this flag
@@ -1106,16 +1106,17 @@ void proc::syscall_exit(regstate* regs) {
     proc *kinit = ptable[1];
     // iterating through this processes' children
 
-    auto it = thgrp_->children_.front();
-
+    kinit->thgrp_->thgrp_lock_.lock_noirq();
+    assert(kinit->thgrp_);
+    auto it = thgrp_->children_.pop_front();
     while (it) {
-        it = thgrp_->children_.pop_front();
         it->pthgrp_ = kinit->thgrp_; // set new parent pid
         kinit->thgrp_->children_.push_back(it);
         kinit->thgrp_->nchildren_++;
+        it = thgrp_->children_.pop_front();
         // we need to remember to update the init process' metadata
     }
-
+    kinit->thgrp_->thgrp_lock_.unlock_noirq();
     ptable_lock.unlock(irqs);
 
     pstate_ = ps_transition;
@@ -1310,8 +1311,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
     thgrp* cgrp = nullptr; // child thgrp
     // Search for child.
     {
-        spinlock_guard guard(ptable_lock); // lock process hierarchy 
-
+        spinlock_guard guard(ptable_lock); // lock process hierarchy
         thgrp_->thgrp_lock_.lock_noirq();
         for (auto it = thgrp_->children_.front(); it; it = thgrp_->children_.next(it)) {
             if (it->tgid_ == pid) {
