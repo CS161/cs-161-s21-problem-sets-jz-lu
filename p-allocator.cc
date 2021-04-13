@@ -8,11 +8,11 @@ uint8_t* stack_bottom;
 
 void process_main() {
     sys_kdisplay(KDISPLAY_MEMVIEWER);
+
     sys_map_console(console); // Map the console to the addr iin lib.hh
     for (int i = 0; i < CONSOLE_ROWS * CONSOLE_COLUMNS; ++i) {
         console[i] = '$' | 0x8A00;
     }
-
     // Fork three new copies. (But ignore failures.)
     (void) sys_fork();
     (void) sys_fork();

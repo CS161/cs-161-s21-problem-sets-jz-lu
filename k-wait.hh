@@ -51,7 +51,7 @@ inline void waiter::prepare(wait_queue& wq) {
 }
 
 inline void waiter::block() {
-    assert(p_ == current(), "You have yee'd your last haw!\n");
+    assert(p_ == current());
 
     if (p_->pstate_ == proc::ps_blocked) {
         if (WAITQ_PARANOIA >= 3) {
@@ -164,17 +164,8 @@ inline void waiter::block_until(wait_queue& wq, F predicate,
 //    Lock the wait queue, then clear it by waking all waiters.
 inline void wait_queue::wake_all() {
     spinlock_guard guard(lock_);
-    if (WAITQ_PARANOIA >= 2) {
-        log_printf("[wake_all] [%s] Waking all now.\n", 
-            this == &parent_child_queue ? "PCQ" : "TW");
-        show();
-    }
     while (auto w = q_.pop_front()) {
         w->wake();
-    }
-    if (WAITQ_PARANOIA >= 2) {
-        log_printf("[wake_all] Everyone woken up\n");
-        show();
     }
 }
 
@@ -257,7 +248,7 @@ inline void hwaiter::prepare(wait_heap& wh, uint64_t wakeup_time) {
 }
 
 inline void hwaiter::block() {
-    assert(p_ == current(), "If the lettuce comes on top of the salad, I send it back!\n");
+    assert(p_ == current());
 
     if (p_->pstate_ == proc::ps_blocked) {
         if (WAITH_PARANOIA >= 3) {
@@ -333,7 +324,7 @@ inline void hwaiter::block_until(wait_heap& wh, uint64_t wakeup_time, F predicat
             log_printf("[HEAP-waiter] Prepared PID=%d. Predicate VA=%p\n", p_->id_, predicate);
         }
         if (predicate() || p_->exit_signal_) {
-            if (p_->thgrp_->e_intr != 0) {
+            if (p_->thgrp_->e_intr_ != 0) {
                 log_printf("[HEAP-waiter] Predcheck passed. Signal to parent PID=%d\n", p_->id_);
             }
             break;

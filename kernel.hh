@@ -97,7 +97,6 @@ struct thgrp;
 
 // Process descriptor type
 struct __attribute__((aligned(4096))) proc {
-    // TODO [MULTITH] Add per-process lock to lock accesses to fdtable, see other flagged TODOs
     enum pstate_t {
         ps_blank = 0, ps_runnable = PROC_RUNNABLE, ps_broken, ps_blocked, ps_transition, ps_exiting
     };
@@ -210,15 +209,15 @@ struct thgrp {
     std::atomic<int> e_intr_ = 0;           // atomic parent-child signal holder
     spinlock thgrp_lock_;                   // protects everything below
     vnode* fdtable_[MAX_FD] = {0};          // file descriptors
-    list<proc, &proc::thlink_> th_;         // list of pointers to threads
-    list<proc, &proc::zlink_> z_;
+    list<proc, &proc::thlink_> th_;         // list of pointers to active threads
+    list<proc, &proc::zlink_> z_;           // list of pointers to zombie threads
     std::atomic<int> nth_ = 1;              // num threads
-    wait_queue wq_;
-    uint64_t retval_;
+    wait_queue wq_;                         // general-purpose wait queue
+    uint64_t retval_;                       // per-process exit status
     inline thgrp(pid_t tgid) : tgid_(tgid) {
+        log_printf("[thgrp-constructor] new tgid=%d\n", tgid_);
     }
     inline ~thgrp() {
-        wq_.wake_all();
         assert(th_.empty());
         assert(!nth_);
     }
@@ -297,6 +296,7 @@ inline cpustate* this_cpu();
 
 extern wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 extern wait_heap time_heap; // Wait heap
+extern wait_queue ewq; // exit wait queue
 extern rwlock fstlock; // File system tree lock
 
 // Debugging and testing flags

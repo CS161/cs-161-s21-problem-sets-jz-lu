@@ -31,29 +31,21 @@ proc::proc(thgrp* grp, cwd* pwd) {
     spinlock_guard guard(global_cnode->open_close_lock_);
     global_cnode->refcount_ += 3;
     }
-    spinlock_guard guard(thgrp_->thgrp_lock_);
-    for (int fd = 0; fd <= 2; ++fd) {
-        if (thgrp_->fdtable_[fd] != global_cnode) {
-            assert(!thgrp_->fdtable_[fd]);
-            thgrp_->fdtable_[fd] = global_cnode;
+    if (grp) {
+        spinlock_guard guard(thgrp_->thgrp_lock_);
+        for (int fd = 0; fd <= 2; ++fd) {
+            if (thgrp_->fdtable_[fd] != global_cnode) {
+                assert(!thgrp_->fdtable_[fd]);
+                thgrp_->fdtable_[fd] = global_cnode;
+            }
         }
     }
 }
 
 // proc::~proc()
-//    The destructor closes all open file descriptors.
 proc::~proc() {
     if (PROC_PARANOIA >= 2 || UDS_PARANOIA >= 1) {
         log_printf("[proc] [destructor] proc destructor called\n");
-    }
-    for (int fd = 3; fd < MAX_FD; ++fd) {
-        if (fdtable[fd]) {
-            fdtable[fd]->close();
-            fdtable[fd] = nullptr;
-        }
-    }
-    if (pwd_) {
-        delete pwd_;
     }
 }
 

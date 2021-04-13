@@ -70,6 +70,27 @@ void assert_fail(const char* file, int line, const char* msg,
 //    Create a new thread.
 
 pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top) {
-    // Your code here
-    return E_NOSYS;
+    asm volatile("mov %%rdi, %%r12 \n" : : : "%r12"); // function
+    asm volatile("mov %%rsi, %%r13 \n" : : : "%r13"); // arg
+
+    make_syscall(SYSCALL_CLONE, reinterpret_cast<uintptr_t>(function), 
+        reinterpret_cast<uintptr_t>(arg), reinterpret_cast<uintptr_t>(stack_top));
+    
+    long r;
+    asm volatile("movq %%rax, %0\n" : "=r"(r) : :);
+
+    if (r) {
+        return r;
+    }
+
+    asm volatile (
+        "mov %%r13, %%rdi \n"
+        "call *%%r12 \n"
+        : : : "%rdi"
+    );
+    sys_texit(0);
+
+    // will never be reached
+    return 0;
 }
+

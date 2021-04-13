@@ -999,15 +999,19 @@ int uds::read(proc* p) {
         return E_SOCKTIMEOUT;
     } else if (!received_) {
         // Add the file descriptor to the fdtable, if possible.
-        // TODO lock access to fdtable
-        vnode* vn = client_->fdtable[fd_];
+        vnode* vn = nullptr;
+        {
+        spinlock_guard cguard(client_->thgrp_->thgrp_lock_);
+        vn = client_->thgrp_->fdtable_[fd_];
         if (!vn) { // Client could have closed the file since the send!
             fd_ = -1;
             received_ = true;
             return E_BADF;
         }
+        }
+        spinlock_guard sguard(server_->thgrp_->thgrp_lock_);
         int newfd;
-        if (!server_->fdtable[fd_]) {
+        if (!server_->thgrp_->fdtable_[fd_]) {
             newfd = fd_;
         } else {
             newfd = server_->find_open_fd(false, 0);
@@ -1016,10 +1020,10 @@ int uds::read(proc* p) {
                 return E_MFILE;
             }
         }
-        server_->fdtable[newfd] = vn;
+        server_->thgrp_->fdtable_[newfd] = vn;
         {
         spinlock_guard refguard(vn->open_close_lock_);
-        ++server_->fdtable[newfd]->refcount_;
+        ++server_->thgrp_->fdtable_[newfd]->refcount_;
         }
         fd_ = -1;
         received_ = true;

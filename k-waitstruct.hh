@@ -1,6 +1,7 @@
 #ifndef CHICKADEE_K_WAITSTRUCT_HH
 #define CHICKADEE_K_WAITSTRUCT_HH
 #include "k-list.hh"
+#include "k-lock.hh"
 #define WAITNPROC 16 // Redefinition from kernel.hh to avoid including everything
 struct proc;
 struct wait_queue;

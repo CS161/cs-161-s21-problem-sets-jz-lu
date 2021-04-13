@@ -27,6 +27,7 @@ vnode* global_cnode = nullptr;
 // Global blocking data.
 const uint64_t NUM_WQS = 5;
 wait_queue time_wheel[NUM_WQS]; // Sleep wait wheel
+wait_queue ewq; // wait on exit
 wait_heap time_heap; // Sleep wait heap
 wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 uint64_t BLOCK_NUM_RESUMES = 0;
@@ -105,6 +106,7 @@ void kernel_start(const char* command) {
     }
 
     cpus[0].enqueue(init_task);
+    log_printf("[kernel_start] init done\n");
 
     // start first process with pid 2 instead
     boot_process_start(2, CHICKADEE_FIRST_PROCESS);
@@ -159,6 +161,7 @@ void boot_process_start(pid_t pid, const char* name) {
 
     // add to run queue
     cpus[pid % ncpu].enqueue(p);
+    log_printf("[boot_process_start] done\n");
 }
 
 
@@ -1043,102 +1046,190 @@ void proc::free_auto_allocs(x86_64_pagetable* pt) {
 
 
 // proc::syscall_exit(regs)
+//    Transcend this process.
 void proc::syscall_exit(regstate* regs) {
-    proc* p = this;
-    pid_t pid = this->id_;
-
-    {
-    spinlock_guard guard(ptable_lock);
-
-    if (EXIT_PARANOIA >= 1 || WAITQ_PARANOIA >= 1 || WAITPID_PARANOIA >= 1) {
-        log_printf("[exit] Freeing process at VA 0x%x with pid %lu\n", p, pid);
-    }
-
-    // Close all open file descriptors.
-    if (EXIT_PARANOIA >= 2 || VFS_PARANOIA >= 2) {
-        log_printf("[exit] Closing all open file descriptors\n");
-    }
-    // TODO [MULTITH] lock fdtable accesses.
-    for (int fd = 0; fd < MAX_FD; ++fd) {
-        if (fdtable[fd]) {
-            if (UDS_PARANOIA >= 1) {
-                log_printf("[exit] Closing node fd=%d for PID=%d\n", fd, id_);
-            }
-            int new_refcount = fdtable[fd]->close();
-            if (!new_refcount) { // If refcount hits 0
-                if (VFS_PARANOIA >= 1 || EXIT_PARANOIA >= 2) {
-                    log_printf("[exit] Closed node fd=%d empty, freeing\n", fd);
-                }
-                delete fdtable[fd];
-                if (VFS_PARANOIA >= 1 || EXIT_PARANOIA >= 2) {
-                    log_printf("[exit] Freed fd=%d\n", fd);
-                }
-            }
-            fdtable[fd] = nullptr;
+    // Signal all processes to DIE, then wait for them to obey.
+    auto irqs = thgrp_->thgrp_lock_.lock();
+    for (auto it = thgrp_->th_.front(); it; it = thgrp_->th_.next(it)) {
+        if (this != it) {
+            it->exit_signal_ = E_INTR;
         }
     }
 
-    // Set pagetable to early_pagetable and
-    // Free all allocations except L4 pt and struct proc.
+    waiter().block_until(thgrp_->wq_, [&] () {
+        assert(thgrp_->nth_ >= 1);
+        auto it = thgrp_->th_.front();
+        while (it) {
+            if (it->pstate_ == ps_exiting) {
+                --thgrp_->nth_;
+                auto temp = thgrp_->th_.next(it);
+                thgrp_->z_.push_back(it);
+                delete it->pwd_;
+                it->pwd_ = nullptr;
+                thgrp_->th_.erase(it);
+                it = temp;
+            } else {
+                it = thgrp_->th_.next(it);
+            }
+        }
+        return thgrp_->nth_ == 1;
+    }, thgrp_->thgrp_lock_, irqs);
+    thgrp_->thgrp_lock_.unlock(irqs);
+    assert(thgrp_->nth_ == 1); // only 1 thread should remain by now
+    
+    assert(global_cnode->refcount_ > 0); // make sure global node should never be deleted
+    for (int i = 0; i < MAX_FD; ++i) {
+        vnode* vn = thgrp_->fdtable_[i];
+        if (vn) {
+            if (!vn->close()) {
+                delete vn;
+            }
+            thgrp_->fdtable_[i] = nullptr;
+        }
+    }
+    delete pwd_;
+    pwd_ = nullptr;
+    
+    irqs = ptable_lock.lock();
+
     set_pagetable(early_pagetable);
-    free_auto_allocs(this);
+    free_auto_allocs(pagetable_);
+    kfree(pagetable_);
+    
+    pagetable_= nullptr;  // and we set this to nullptr, extremely important for memviewer
 
-    // Free the L4 pagetable of the process.
-    kfree(this->pagetable_);
-    this->pagetable_= nullptr;
+    // this child is being freed so we want to alert the parent by setting this flag
+    thgrp_->pthgrp_->e_intr_ = E_INTR;
 
-    if (EXIT_PARANOIA >=1) {
-        log_printf("[exit] this process has ppid %d, who has %d children\n", 
-            this->ppid_, ptable[this->ppid_]->nchildren_);
-        log_printf("[exit] Children PIDs: [");
-        for (int i = 0; i < ptable[this->ppid_]->nchildren_; ++i) {
-            log_printf("%d ", ptable[this->ppid_]->childpids_[i]);
-        }
-        log_printf("]\n");
-    }
-
-    // Don't update the process's parent's metadata in exit(). Instead, we will do it
-    // in waitpid() once the process is fully freed from zombie mode.
-    // BUT we do want to set the parent proc interrupt flag to E_INTR.
-    ptable[ppid_]->e_intr = E_INTR;
-
-    // Reparent process's children to k_proc_init.
+    // now we reparent this processes' children to the initprocess
+    // which will use waitpid to elminate the remainder of the memory not cleaned up here
     proc *kinit = ptable[1];
-    for (int i = 0; i < this->nchildren_; ++i) {
-       ptable[this->childpids_[i]]->ppid_ = 1; // Reparent to k_proc_init
-       if (WAITPID_PARANOIA >= 1) {
-           log_printf("[exit] REPARENTED child process PID=%d, NEW-PPID=%d to k_proc_init\n", 
-            ptable[this->childpids_[i]]->id_, ptable[this->childpids_[i]]->ppid_);
-       }
-       kinit->childpids_[kinit->nchildren_] = this->childpids_[i];
-       kinit->nchildren_++;
-    }
-    if (WAITPID_PARANOIA >= 1) {
-        log_printf("[exit] UPDATED k_proc_init child array to [");
-        for (int i = 0; i < ptable[1]->nchildren_; ++i) {
-            log_printf("%d ", ptable[1]->childpids_[i]);
-        }
-        log_printf("]\n");
+    // iterating through this processes' children
+
+    auto it = thgrp_->children_.front();
+
+    while (it) {
+        it = thgrp_->children_.pop_front();
+        it->pthgrp_ = kinit->thgrp_; // set new parent pid
+        kinit->thgrp_->children_.push_back(it);
+        kinit->thgrp_->nchildren_++;
+        // we need to remember to update the init process' metadata
     }
 
-    // Mark the process as transitioning, but don't clear its entry on pagetable.
-    // (that's for waitpid to do!)
-    p->pstate_ = USING_PSEUDO_BLOCKING ? ps_blank : ps_transition;
-    p->retval = regs->reg_rdi; // Set the return value to the status specified by caller of exit.
+    ptable_lock.unlock(irqs);
 
-    if (USING_TIME_HEAP) {
-        if (WAITH_PARANOIA >= 2) {
-            log_printf("[exit] Flushing time heap to wake all time-sleeping processes\n");
-        }
-        time_heap.flush(true);
-    }
+    pstate_ = ps_transition;
+    assert(thlink_.is_linked());
+    assert(!zlink_.is_linked());
+    thgrp_->th_.erase(this);
+    thgrp_->z_.push_back(this);
 
-    if (EXIT_PARANOIA >= 1) {
-        log_printf("[exit] Finished turning process PID=%d into a zombie\n", this->id_);
-    }
-    }
+    this->retval = regs->reg_rdi;
+    thgrp_->retval_ = this->retval;
+
     yield_noreturn();
 }
+
+
+// proc::syscall_clone(regs)
+//    Kernel-side work for cloning a new thread and making it runnable.
+int proc::syscall_clone(regstate* regs) {
+    uintptr_t function = reinterpret_cast<uintptr_t>(regs->reg_rdi);
+    uintptr_t args = reinterpret_cast<uintptr_t>(regs->reg_rsi);
+    uintptr_t stack_bottom = reinterpret_cast<uintptr_t>(regs->reg_rdx) - PAGESIZE;
+
+    // Memory validation.
+    if (!function ||
+        !(vmiter(this, function).present() || 
+         vmiter(this, function).user())) {
+        return E_FAULT;
+    }
+    if (!args || 
+        !(vmiter(this, args).present() || 
+         vmiter(this, args).user())) {
+        return E_FAULT;
+    }
+    if (!stack_bottom) {
+        return E_FAULT;
+    }
+
+    vmiter it(this, stack_bottom);
+    while (it.va() < stack_bottom + PAGESIZE) {
+        if (!it.present() || !it.user()) {
+            return E_FAULT;
+        }
+        it.next();
+    }
+
+    // Allocate a new `struct proc` and initialize it.
+    spinlock_guard guard(ptable_lock);
+    pid_t tid = 0;
+    for (pid_t i = 2; i < NPROC; i++) {
+        if (!ptable[i]) {
+            tid = i;
+            break;
+        }
+    }
+
+    if (!tid) {
+        return -1;
+    }
+
+    cwd* pwd = knew<cwd>();
+    if (!pwd) {
+        return E_NOMEM;
+    }
+    proc* p = knew<proc>(thgrp_, pwd);
+    if (!p) {
+        delete pwd;
+        return E_NOMEM;
+    }
+    pwd_->pass(p->pwd_);
+
+    // Add thread to list of processes.
+    thgrp_->thgrp_lock_.lock_noirq();
+    thgrp_->th_.push_back(this);
+    thgrp_->thgrp_lock_.unlock_noirq();
+
+    p->id_ = tid;
+    p->init_user(tid, pagetable_);
+    memcpy(p->regs_, regs, sizeof(regstate)); 
+    p->regs_->reg_rsp = stack_bottom + PAGESIZE;
+    p->regs_->reg_rax = 0; // child returns 0
+
+    ptable[tid] = p;
+    cpus[tid % ncpu].enqueue(p); 
+    return tid;
+}
+
+// proc::syscall_texit(regs)
+//    Exits a single thread. Behaves like `syscall_exit()` 
+//    if calling thread is last of its group.
+void proc::syscall_texit(regstate* regs) {
+    int status = regs->reg_rdi;
+    this->retval = status;
+
+    auto irqs = thgrp_->thgrp_lock_.lock();
+    bool last_thread = (thgrp_->nth_ == 1);
+    if (!last_thread) {
+        pstate_ = ps_transition;
+        assert(thlink_.is_linked());
+        assert(!zlink_.is_linked());
+        thgrp_->th_.erase(this);
+        thgrp_->z_.push_back(this);
+    }
+    thgrp_->thgrp_lock_.unlock(irqs);
+
+    if (last_thread) {
+        syscall_exit(regs);
+    } else {
+        delete pwd_;
+        pwd_ = nullptr;
+    }
+
+    yield_noreturn();
+}
+
 
 
 // proc::syscall_msleep(regs)
@@ -1192,278 +1283,125 @@ int proc::syscall_msleep(regstate* regs) {
 
 // release_child()
 //    Helper function to sys_waitpid()
-//    Updates the child metadata to complete the zombie reaping.
-static void release_child(proc* p, pid_t cpid) { 
-    if (WAITPID_PARANOIA >= 2) {
-        log_printf("[release_child] Release child called\n");
+//    Updates the parent/child metadata to complete the zombie reaping.
+static void release_child(thgrp* pgrp, thgrp* cgrp) { 
+    assert(ptable_lock.is_locked());
+    while (cgrp->z_.front()) {
+        auto it = cgrp->z_.pop_front();
+        ptable[it->id_] = nullptr; 
+        delete it;
     }
-    int ch_ind = -1;
-    for (int i = 0; i < p->nchildren_; ++i) {
-        if (WAITPID_PARANOIA >= 2) {
-            log_printf("[release_child] From parent pid %d, freeing child pid %d. Current search: arr[%d]=%d\n", 
-                p->id_, cpid, i, p->childpids_[i]);
-        }
-        if (cpid == p->childpids_[i]) {
-            ch_ind = i;
-            if (WAITPID_PARANOIA >= 2) {
-                log_printf("[release_child] MATCHED child to arr[%d]=%d\n", i, p->childpids_[i]);
-            }
-            break;
-        }
-    }
-    assert(ch_ind != -1);
-
-    // Update the child-array to get rid of the fully exited child proc.
-    for (int i = ch_ind + 1; i < p->nchildren_; ++i) {
-        p->childpids_[i-1] = p->childpids_[i];
-    }
-    --p->nchildren_;
-
-    if (WAITPID_PARANOIA >= 2) {
-        log_printf("[release_child] Updated child array: [");
-        for (int i = 0; i < ptable[p->id_]->nchildren_; ++i) {
-            log_printf("%d ", ptable[p->id_]->childpids_[i]);
-        }
-        log_printf("]; num (alive) children = %d\n", p->nchildren_);
-    }
+    // break the news to the parents. oh, the heartbreak.
+    pgrp->children_.erase(cgrp);
+    --pgrp->nchildren_;
 }
 
 
 // proc::syscall_waitpid(regs)
 //    Waits for either a specific child PID or the first to exit and cleans up.
 uint64_t proc::syscall_waitpid(regstate *regs) {
-    pid_t pid = regs->reg_rdi;
-    if (pid < 0 || pid >= NPROC) {
-        log_printf("[syscall_waitpid] Invalid pid=%d argument!\n", pid);
-        return E_INVAL;
-    }
-    int* status = reinterpret_cast<int*>(regs->reg_rsi);
-    int options = regs->reg_rdx;
+    pid_t pid = regs->reg_rdi;      // we get the pid from the value we stored in the first arg
+    int options = regs->reg_rdx;    // options was set in the 3rd
 
-    if (WAITPID_PARANOIA >= 1 && this->id_ != 1) {
-        log_printf("[waitpid] WAITPID CALLED. Parent (caller) pid: %d, arg_pid: %d, status: %p, options: %d\n",
-            this->id_, pid, status, options);
+    if (pid <= 1) {
+        return -1;
     }
 
-    int ind_found = -1;
+    thgrp* cgrp = nullptr; // child thgrp
+    // Search for child.
     {
-    spinlock_guard guard(ptable_lock);
-    for (int i = 0; i < this->nchildren_; ++i) {
-        if (this->childpids_[i] == pid) {
-            ind_found = i;
-            break;
-        }
-    }
+        spinlock_guard guard(ptable_lock); // lock process hierarchy 
 
-    // If the waitpid is invalid, return immediately.
-    if ((this->nchildren_ == 0) || (ind_found == -1 && pid != 0)) {
-        if (WAITPID_PARANOIA && this->id_ != 1) {
-            log_printf("[waitpid] E_CHILD | parent (caller) pid: %d, arg_pid: %d, num_children: %d, ind_found: %d\n",
-                this->id_, pid, this->nchildren_, ind_found);
+        thgrp_->thgrp_lock_.lock_noirq();
+        for (auto it = thgrp_->children_.front(); it; it = thgrp_->children_.next(it)) {
+            if (it->tgid_ == pid) {
+                cgrp = it;
+                break;
+            }
         }
-        return E_CHILD;
-    }
-    }
-    
-    if (pid != 0) { // If a pid is specified then search for it.
-        if (!options) { // Block
-            proc* child = ptable[pid];
-            if (USING_PSEUDO_BLOCKING) {
-                log_printf("[waitpid] [PSEUDOBLOCK] PID=%d waiting on process PID=%d\n",
-                    id_, pid);
-                while (true) {
-                    {
-                    spinlock_guard guard(ptable_lock);
-                    if (child->pstate_ == ps_blank) {
-                        break;
-                    }
-                    }
-                    yield();
-                }
-                log_printf("[waitpid] [PSEUDOBLOCK]  Child process PID=%d exited\n", pid);
-            }
-            else {
-                {
-                    spinlock_guard guard(ptable_lock);
-                    waiter().block_until(parent_child_queue, [&] () {
-                        return (child->pstate_ == ps_blank);
-                    }, guard);
-                }
-            }
 
-            uint64_t retpid = (child->retval << 32) + child->id_;
-            if (WAITPID_PARANOIA && this->id_ != 1) {
-                log_printf("[waitpid] REAP INIT child PID=%d for parent PID=%d\n",
-                    pid, this->id_);
-                log_printf("[waitpid] PTABLE ENTRY for child struct proc=%p with retval %d\n", 
-                    child, child->retval);
-            }
+        // If the waitpid is invalid, return immediately.
+        if ((thgrp_->nchildren_ == 0) || (!cgrp && pid != 0)) {
+            thgrp_->thgrp_lock_.unlock_noirq();
+            return E_CHILD;
+        } 
+        thgrp_->thgrp_lock_.unlock_noirq();
+    } // end of locking structure
+
+    if (pid != 0) { // If a pid is specified then we run this case
+        if (!options) { // Blocking case
             {
                 spinlock_guard guard(ptable_lock);
-                release_child(this, pid);
-                delete child;
-                ptable[pid] = nullptr;
-                if (WAITPID_PARANOIA >= 1) {
-                    log_printf("[waitpid] REAPED ZOMBIE PID=%d\n", pid);
-                }
+                waiter().block_until(parent_child_queue, [&] () {
+                    return cgrp->nth_ == 0;
+                }, guard);
+            }
+            uint64_t retpid = (cgrp->retval_ << 32) + cgrp->tgid_;
+            { // complete zombie reaping 
+            spinlock_guard guard(ptable_lock);
+            release_child(thgrp_, cgrp);   
             }
             return retpid;
-        } else { // Poll
-            proc* child = ptable[pid];
-            if (child->pstate_ != ps_blank) { // Child is not free. Return error: try again.
-                if (WAITPID_PARANOIA >= 1 && this->id_ != 1) {
-                    log_printf("[waitpid] TRY AGAIN: poll failed on ppid %d, cpid %d\n",
-                        this->id_, pid);
-                }
+
+        } else { // Polling, specified child tgid
+            if (cgrp->nth_ == 0) {
                 return E_AGAIN;
-            } else { // Child is free! Release and return.
-                uint64_t retpid = (child->retval << 32) + child->id_;
+            } else { // complete zombie reaping
+                uint64_t retpid = (cgrp->retval_ << 32) + cgrp->tgid_;
                 {
-                    spinlock_guard guard(ptable_lock);
-                    release_child(this, pid);
-                    delete child;
-                    ptable[pid] = nullptr;
-                    if (WAITPID_PARANOIA >= 1) {
-                        log_printf("[waitpid] REAPED ZOMBIE PID=%d\n", pid);
-                    }
+                spinlock_guard guard(ptable_lock);
+                release_child(thgrp_, cgrp);
                 }
                 return retpid;
             }
         }
-    } 
-    else { // If no pid is specified then walk through to find the first free one.
-        if (!options) { // Block
-            int child_ind = -1;
-            if (USING_PSEUDO_BLOCKING) {
-                log_printf("[waitpid] [PSEUDOBLOCK] PID=%d waiting on first process to exit\n",
-                    id_, pid);
-                while (true) {
-                    {
-                    spinlock_guard guard(ptable_lock);
-                    for (int i = 0; i < this->nchildren_; ++i) {
-                        if (WAITPID_PARANOIA && this->id_ != 1) {
-                            log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
-                                this->childpids_[i], this->id_);
-                        }
-                        if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
-                            child_ind = i;
-                            if (WAITPID_PARANOIA && this->id_ != 1) {
-                                log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
-                                    this->childpids_[i], this->id_);
-                            }
-                            break;
-                        }
-                    }
-
-                    if (child_ind != -1) {
-                        log_printf("[waitpid] [PSEUDOBLOCK] Child process PID=%d exited\n", 
-                            childpids_[child_ind]);
-                        break;
-                    }
-                    if (WAITPID_PARANOIA && this->id_ != 1) {
-                        log_printf("[waitpid] Did not find any exited children this time, yielding\n");
-                    }
-                    }
-                    yield();
-                }
-            }
-
-            else {
-                {
-                spinlock_guard guard(ptable_lock);
-                waiter().block_until(parent_child_queue, [&] () {
-                    for (int i = 0; i < this->nchildren_; ++i) {
-                        if (WAITPID_PARANOIA && this->id_ != 1) {
-                            log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
-                                this->childpids_[i], this->id_);
-                        }
-                        if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
-                            child_ind = i;
-                            if (WAITPID_PARANOIA && this->id_ != 1) {
-                                log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
-                                    this->childpids_[i], this->id_);
-                            }
-                            break;
-                        }
-                    }
-                    return (child_ind != -1);
-                }, guard);
-                }
-            }
-
-            proc* child = ptable[this->childpids_[child_ind]];
-            if (WAITPID_PARANOIA && this->id_ != 1) {
-                log_printf("[waitpid] REAP INIT child PID=%d (at ind=%d) for parent PID=%d\n",
-                    this->childpids_[child_ind], child_ind, this->id_);
-                log_printf("[waitpid] PTABLE ENTRY for child struct proc=%p with retval %d and cpid %d\n", 
-                    child, child->retval, child->id_);
-            }
-            uint64_t retpid = (child->retval << 32) + child->id_;
-            {
-                spinlock_guard guard(ptable_lock);
-                if (WAITPID_PARANOIA >= 1) {
-                    log_printf("[waitpid] REAPING ZOMBIE, PID=%d\n", child->id_);
-                }
-                release_child(this, child->id_);
-                ptable[child->id_] = nullptr;
-                delete child;
-                if (WAITPID_PARANOIA >= 1) {
-                    log_printf("[waitpid] REAPED ZOMBIE\n");
-                }
-            }
-            return retpid;
-
-        } else { // Poll
-            int child_ind = -1;
+    } else { // Find first available child group to reap
+        if (!options) { // Blocking, first child group
+            cgrp = nullptr;
             {
             spinlock_guard guard(ptable_lock);
-            for (int i = 0; i < this->nchildren_; ++i) {
-                if (WAITPID_PARANOIA && this->id_ != 1) {
-                    log_printf("[waitpid] SEARCHING child PID=%d for parent PID=%d\n",
-                        this->childpids_[i], this->id_);
-                }
-                if (ptable[this->childpids_[i]]->pstate_ == ps_blank) {
-                    child_ind = i;
-                    if (WAITPID_PARANOIA && this->id_ != 1) {
-                        log_printf("[waitpid] FOUND EXITED child PID=%d for parent PID=%d\n",
-                            this->childpids_[i], this->id_);
+            waiter().block_until(parent_child_queue, [&] () {
+                for (auto it = thgrp_->children_.front(); it; 
+                    it = thgrp_->children_.next(it)) {
+                    if (!it->nth_) {
+                        cgrp = it;
+                        break;
                     }
-                    break;
                 }
-            }
+                return (cgrp != nullptr); // return found status
+            }, guard);
             }
 
-            if (child_ind == -1) { // No exited processes found
-                if (WAITPID_PARANOIA >= 1) {
-                    log_printf("[waitpid] TRY AGAIN | WAITPID arg_pid: %d, num children: %d, child_ind: %d\n",
-                        pid, this->nchildren_, child_ind);
+            assert(cgrp);
+            uint64_t retpid = (cgrp->retval_ << 32) + cgrp->tgid_;
+            // we save the status and the child's pid in the return value.
+            {
+                spinlock_guard guard(ptable_lock);
+                release_child(thgrp_, cgrp);   
+                // we can now remove the child from the parent's list
+            }
+            return retpid;
+        } else { // Polling, first child group
+            cgrp = nullptr;
+            { // beginning of scoped lock
+                spinlock_guard guard(ptable_lock);
+                // once again we iterate through the parent's list of children
+                for (auto it = thgrp_->children_.front(); it; 
+                    it = thgrp_->children_.next(it)) {
+                    if (!it->nth_) {
+                        cgrp = it;
+                        break;
+                    }
                 }
+            }
+
+            if (!cgrp) { // No exited processes found during our search
                 return E_AGAIN;
-            } else { // Exited process found! Release and return.
-                proc* child = ptable[this->childpids_[child_ind]];
-                if (WAITPID_PARANOIA && this->id_ != 1) {
-                    log_printf("[waitpid] REAP INIT child PID=%d (at ind=%d) for parent PID=%d\n",
-                        this->childpids_[child_ind], child_ind, this->id_);
-                    log_printf("[waitpid] PTABLE ENTRY for child struct proc=%p with retval %d\n", 
-                        child, child->retval);
-                }
-                uint64_t retpid = (child->retval << 32) + child->id_;
+            } else { // we actually found a usable entry during the polling search
+                uint64_t retpid = (cgrp->retval_ << 32) + cgrp->tgid_;
                 {
-                    spinlock_guard guard(ptable_lock);
-                    if (WAITPID_PARANOIA >= 1) {
-                        log_printf("[waitpid] REAPING ZOMBIE | WAITPID arg_pid: %d, num children: %d, cpid: %d, cind: %d\n",
-                            pid, this->nchildren_, child->id_, child_ind);
-                    }
-                    release_child(this, child->id_);
-                    ptable[child->id_] = nullptr;
-                    delete child;
-                    if (WAITPID_PARANOIA >= 1) {
-                        log_printf("[waitpid] REAPED ZOMBIE\n");
-                    }
-                }
-                if (WAITPID_PARANOIA >= 1) {
-                    log_printf("[waitpid] retpid=%lu, pid=%lu, status=%lu\n",
-                        retpid, retpid & 0xFFFFFFFF, retpid >> 32);
+                spinlock_guard guard(ptable_lock);
+                release_child(thgrp_, cgrp);   // we can now remove the child from the parent's list
                 }
                 return retpid;
             }
