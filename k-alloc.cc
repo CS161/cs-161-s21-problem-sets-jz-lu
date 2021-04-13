@@ -273,6 +273,7 @@ void* kalloc(uint64_t sz) {
     }
     if (BALLOC_PARANOIA >= 2 || SALLOC_PARANOIA >= 2) {
         log_printf("[kalloc] KALLOC called by process %d\n", current()->id_);
+        log_backtrace();
     }
     if (sz == 0 || sz > (1 << MAX_ORDER)) {
         if (BALLOC_PARANOIA >= 1) {

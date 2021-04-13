@@ -84,6 +84,10 @@ void cpustate::enqueue(proc* p) {
 void cpustate::schedule(proc* yielding_from) {
     assert(contains(rdrsp()));     // running on CPU stack
     assert(is_cli());              // interrupts are currently disabled
+    if (spinlock_depth_) {
+        log_printf("[schedule] Current process tid=%d, tgid=%d\n", 
+        current_->id_, current_->thgrp_->tgid_);
+    }
     assert(spinlock_depth_ == 0);  // no spinlocks are held
 
     // initialize idle task

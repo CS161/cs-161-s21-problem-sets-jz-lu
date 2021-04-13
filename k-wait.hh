@@ -94,7 +94,6 @@ inline void waiter::clear() {
     
     // Unlock the wait queue.
     wq_->lock_.unlock(irqs);
-    log_printf("[Clear] [tid=%d] Clearing complete\n", p_->id_);
 }
 
 inline void waiter::wake() {

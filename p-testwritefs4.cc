@@ -142,7 +142,7 @@ void process_main() {
 
     // close (should free file data)
     printf("%s:%d: close...\n", __FILE__, __LINE__);
-
+    
     r = sys_close(f);
     assert_ge(r, 0);
 

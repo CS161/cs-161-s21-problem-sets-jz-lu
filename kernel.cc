@@ -71,7 +71,7 @@ void k_proc_init() {
             break; // No children
         }
     }
-    log_printf("[k_proc_init] halting QEMU, goodbye cruel world\n");
+    log_printf("Halting QEMU. Goodbye, cruel world!\n");
     process_halt();
 }
 
@@ -106,7 +106,6 @@ void kernel_start(const char* command) {
     }
 
     cpus[0].enqueue(init_task);
-    log_printf("[kernel_start] init done\n");
 
     // start first process with pid 2 instead
     boot_process_start(2, CHICKADEE_FIRST_PROCESS);
@@ -161,7 +160,6 @@ void boot_process_start(pid_t pid, const char* name) {
 
     // add to run queue
     cpus[pid % ncpu].enqueue(p);
-    log_printf("[boot_process_start] done\n");
 }
 
 
@@ -1058,15 +1056,12 @@ void proc::syscall_exit(regstate* regs) {
         }
     }
 
+    // Block until all threads are ready to exit, cleaning threads as we go.
     waiter().block_until(thgrp_->wq_, [&] () {
-        int a = thgrp_->nth_;
-        log_printf("[exit-deathcall] starting nth_ == %d\n", a);
         assert(thgrp_->nth_ >= 1);
         auto it = thgrp_->th_.front();
         while (it) {
             if (it->pstate_ == ps_exiting) {
-                log_printf("[exit-deathcall] found exiting thread tid=%d, tgid=%d\n", 
-                    it->id_, it->thgrp_->tgid_);
                 --thgrp_->nth_;
                 auto temp = thgrp_->th_.next(it);
                 thgrp_->z_.push_back(it);
@@ -1125,14 +1120,8 @@ void proc::syscall_exit(regstate* regs) {
     assert(thlink_.is_linked());
     assert(!zlink_.is_linked());
     thgrp_->th_.erase(this);
-    log_printf("EXIT th_ dump by caller (tid=%d, tgid=%d) -->[ ", id_, thgrp_->tgid_);
-    for (auto dit = thgrp_->th_.front(); dit; dit = thgrp_->th_.next(dit)) {
-        log_printf("%i ", dit->id_ );
-    }
-    log_printf("] :: status = %lu\n", regs->reg_rdi);
     assert(thgrp_->th_.empty());
     assert(thgrp_->nth_ == 1); // only 1 thread should remain by now
-    log_printf("[exit] tgid=%d has empty th_\n", thgrp_->tgid_);
     thgrp_->z_.push_back(this);
 
     this->retval = thgrp_->retval_ = regs->reg_rdi;
@@ -1200,11 +1189,6 @@ int proc::syscall_clone(regstate* regs) {
     // Add thread to list of processes.
     thgrp_->thgrp_lock_.lock_noirq();
     thgrp_->th_.push_back(p);
-    log_printf("CLONE th_ dump by caller (tid=%d, tgid=%d) -->[ ", id_, thgrp_->tgid_);
-    for (auto dit = thgrp_->th_.front(); dit; dit = thgrp_->th_.next(dit)) {
-        log_printf("%i ", dit->id_);
-    }
-    log_printf("] (just added tid=%d)\n", tid);
     ++thgrp_->nth_;
     thgrp_->thgrp_lock_.unlock_noirq();
 
@@ -1339,7 +1323,6 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
         // If the waitpid is invalid, return immediately.
         if ((thgrp_->nchildren_ == 0) || (!cgrp && pid != 0)) {
             thgrp_->thgrp_lock_.unlock_noirq();
-            log_printf("[waitpid] Returning E_CHILD\n");
             return E_CHILD;
         } 
         thgrp_->thgrp_lock_.unlock_noirq();
@@ -1920,7 +1903,6 @@ uintptr_t proc::syscall_write(regstate* regs) {
 //    Closes a file descriptor, freeing if necessary.
 int proc::syscall_close(regstate* regs) {
     int fd = regs->reg_rdi;
-    log_printf("[syscall_close] Closing fd=%d for process tid=%d\n", fd, id_);
     spinlock_guard guard(thgrp_->thgrp_lock_);
     if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
         if (VFS_PARANOIA >= 2) {
@@ -1928,21 +1910,24 @@ int proc::syscall_close(regstate* regs) {
         }
         return E_BADF;
     }
-    if (!thgrp_->fdtable_[fd]->active_) {
-        waiter().block_until(thgrp_->wq_, [&] () {
-            return !thgrp_->fdtable_[fd]->active_;
-        }, guard);
-    }
+
     if (!thgrp_->fdtable_[fd]->close()) { // If refcount hits 0
         if (VFS_PARANOIA >= 1) {
             log_printf("[syscall_close] Closed node at fd=%d empty, freeing\n", fd);
         }
-        delete thgrp_->fdtable_[fd];
-    }
-    thgrp_->fdtable_[fd] = nullptr;
-    if (VFS_PARANOIA >= 2) {
-        log_printf("[syscall_close] Close successful, new state:\n");
-        show_fdtable_();
+        // Do not delete the vnode while an I/O is occurring!
+        if (thgrp_->fdtable_[fd]->active_) {
+            waiter().block_until(thgrp_->wq_, [&] () {
+                return !thgrp_->fdtable_[fd]->active_;
+            }, guard);
+        }
+        // Cannot delete while holding spinlock, since the delete may sleep
+        auto temp = thgrp_->fdtable_[fd];
+        thgrp_->fdtable_[fd] = nullptr;
+        guard.unlock();
+        delete temp;
+    } else {
+        thgrp_->fdtable_[fd] = nullptr;
     }
     return 0;
 }
