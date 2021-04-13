@@ -94,6 +94,7 @@ inline void waiter::clear() {
     
     // Unlock the wait queue.
     wq_->lock_.unlock(irqs);
+    log_printf("[Clear] [tid=%d] Clearing complete\n", p_->id_);
 }
 
 inline void waiter::wake() {
@@ -115,7 +116,7 @@ inline void waiter::block_until(wait_queue& wq, F predicate) {
         }
         if (predicate() || p_->exit_signal_) {
             if (p_->exit_signal_) {
-                log_printf("[k-wait] [block_until] deathcall alert from tid=%d, tgid=%d\n", 
+                log_printf("[k-wait] [block_until] deathcall alert for tid=%d, tgid=%d\n", 
                     p_->id_, p_->thgrp_->tgid_);
             }
             break;
@@ -143,7 +144,7 @@ inline void waiter::block_until(wait_queue& wq, F predicate,
         prepare(wq);
         if (predicate() || p_->exit_signal_) {
             if (p_->exit_signal_) {
-                log_printf("[k-wait] [block_until] deathcall alert from tid=%d, tgid=%d\n", 
+                log_printf("[k-wait] [block_until] deathcall alert for tid=%d, tgid=%d\n", 
                     p_->id_, p_->thgrp_->tgid_);
             }
             break;
@@ -153,6 +154,11 @@ inline void waiter::block_until(wait_queue& wq, F predicate,
         irqs = lock.lock();
     }
     clear();
+    if (p_->exit_signal_) {
+        lock.unlock(irqs);
+        cli();
+        p_->yield_noreturn();
+    }
 }
 
 // waiter::block_until(wq, predicate, guard)

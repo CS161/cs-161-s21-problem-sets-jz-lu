@@ -1129,14 +1129,13 @@ void proc::syscall_exit(regstate* regs) {
     for (auto dit = thgrp_->th_.front(); dit; dit = thgrp_->th_.next(dit)) {
         log_printf("%i ", dit->id_ );
     }
-    log_printf("]\n");
+    log_printf("] :: status = %lu\n", regs->reg_rdi);
     assert(thgrp_->th_.empty());
     assert(thgrp_->nth_ == 1); // only 1 thread should remain by now
     log_printf("[exit] tgid=%d has empty th_\n", thgrp_->tgid_);
     thgrp_->z_.push_back(this);
 
-    this->retval = regs->reg_rdi;
-    thgrp_->retval_ = this->retval;
+    this->retval = thgrp_->retval_ = regs->reg_rdi;
 
     yield_noreturn();
 }
