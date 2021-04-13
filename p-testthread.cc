@@ -208,6 +208,6 @@ void process_main() {
     assert_eq(status, 161);
 
 
-    console_printf("testthread succeeded.\n");
+    console_printf(0xA00, "testthread succeeded.\n");
     sys_exit(0);
 }

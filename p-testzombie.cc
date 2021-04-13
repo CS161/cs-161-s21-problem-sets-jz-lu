@@ -23,6 +23,6 @@ void process_main() {
         sys_msleep(200);
     }
 
-    console_printf("testzombie succeeded.\n");
+    console_printf(0xA00, "testzombie succeeded.\n");
     sys_exit(0);
 }

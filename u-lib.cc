@@ -88,12 +88,13 @@ pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top) {
         "call *%%r12 \n"
         : : : "%rdi"
     );
+    
     asm volatile(
         "mov %%rax, %%rdi\n"
-        : : : "%rdi"
+        : : : "%rdi" // put return value in args
     );
     register uintptr_t rax asm("rax") = SYSCALL_TEXIT;
-    asm volatile ("syscall"
+    asm volatile ("syscall" // call sys_texit
             : "+a" (rax)
             : /* all input registers are also output registers */
             : "cc", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11");

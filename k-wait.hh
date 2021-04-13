@@ -114,7 +114,7 @@ inline void waiter::block_until(wait_queue& wq, F predicate) {
         if (WAITQ_PARANOIA >= 3) {
             log_printf("[k-wait] [block_until] Prepared. Predicate VA=%p\n", predicate);
         }
-        if (predicate() || p_->exit_signal_) {
+        if (predicate() || p_->exit_signal_ == E_INTR) {
             if (p_->exit_signal_) {
                 log_printf("[k-wait] [block_until] deathcall alert for tid=%d, tgid=%d\n", 
                     p_->id_, p_->thgrp_->tgid_);
@@ -130,6 +130,10 @@ inline void waiter::block_until(wait_queue& wq, F predicate) {
         }
     }
     clear();
+    if (p_->exit_signal_ == E_INTR) {
+        cli();
+        p_->yield_noreturn();
+    }
 }
 
 // waiter::block_until(wq, predicate, lock, irqs)
@@ -142,7 +146,7 @@ inline void waiter::block_until(wait_queue& wq, F predicate,
                                 spinlock& lock, irqstate& irqs) {
     while (true) {
         prepare(wq);
-        if (predicate() || p_->exit_signal_) {
+        if (predicate() || p_->exit_signal_ == E_INTR) {
             if (p_->exit_signal_) {
                 log_printf("[k-wait] [block_until] deathcall alert for tid=%d, tgid=%d\n", 
                     p_->id_, p_->thgrp_->tgid_);
@@ -154,7 +158,7 @@ inline void waiter::block_until(wait_queue& wq, F predicate,
         irqs = lock.lock();
     }
     clear();
-    if (p_->exit_signal_) {
+    if (p_->exit_signal_ == E_INTR) {
         lock.unlock(irqs);
         cli();
         p_->yield_noreturn();

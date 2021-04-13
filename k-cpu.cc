@@ -64,15 +64,6 @@ void cpustate::disable_irq(int irqno) {
 //    `p` must be resumable (or not runnable).
 
 void cpustate::enqueue(proc* p) {
-    // int s = proc::ps_runnable;
-    // if (p->exit_signal_ == E_INTR && p->pstate_.compare_exchange_strong(s, proc::ps_exiting)) {
-    //     p->exit_signal_ = 0;
-    //     p->thgrp_->wq_.wake_all();
-    //     log_printf("[enqueue] Set process tid=%d, tgid=%d to exiting (current tid=%d)\n", 
-    //         p->id_, p->thgrp_->tgid_, current_->id_);
-    //     assert(p->pstate_ == proc::ps_exiting);
-    //     return;
-    // }
     spinlock_guard guard(runq_lock_);
     if (current_ != p && !p->runq_links_.is_linked()) {
         if (WAITQ_PARANOIA >= 2) {
@@ -121,10 +112,6 @@ void cpustate::schedule(proc* yielding_from) {
     ++nschedule_;
 
     // find a runnable process
-    if (current_) {
-        log_printf("[scheduler] Current is tid=%d\n", 
-        current_->id_);
-    }
     while (!current_
            || current_->pstate_ != proc::ps_runnable
            || current_ == yielding_from) {
@@ -144,10 +131,6 @@ void cpustate::schedule(proc* yielding_from) {
         runq_lock_.unlock_noirq();
         // no need to skip `current_` if no other runnable procs
         yielding_from = nullptr;
-    }
-    if (current_) {
-        log_printf("[scheduler] About to resume process tid=%d\n", 
-        current_->id_);
     }
 
     // run `current_`

@@ -13,6 +13,6 @@ void process_main(int argc, char** argv) {
                argv[i], reinterpret_cast<uintptr_t>(argv[i]) - rsp,
                argv[i]);
     }
-    console_printf("If the above printed a1 through a6 in sequence as args, testargv succeeded\n");
+    console_printf(0xA00, "If the above printed a1 through a6 in sequence as args, testargv succeeded\n");
     sys_exit(0);
 }

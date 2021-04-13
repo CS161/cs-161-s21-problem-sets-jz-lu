@@ -117,6 +117,9 @@ void memusage::refresh() {
             if (p->pwd_) { // mark pwd allocation
                 mark(kptr2pa(p->pwd_), f_kernel | f_process(pid));
             }
+            if (p->thgrp_) { // mark thread group allocation
+                mark(kptr2pa(p->thgrp_), f_kernel | f_process(pid));
+            }
 
             auto irqs = p->lock_pagetable_read();
             if (p->pagetable_ && p->pagetable_ != early_pagetable) {

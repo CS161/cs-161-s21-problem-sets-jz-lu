@@ -89,6 +89,6 @@ void process_main() {
     assert_gt(r, 0);
 
 
-    console_printf("If you see 0-10 in sequence, testvfs succeeded.\n");
+    console_printf(0xA00, "If you see 0-10 in sequence, testvfs succeeded.\n");
     sys_exit(0);
 }

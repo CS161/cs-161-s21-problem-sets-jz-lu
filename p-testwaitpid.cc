@@ -39,7 +39,7 @@ void process_main() {
         assert_eq(order[idx], status);
     }
     assert_eq(sys_waitpid(0, nullptr, W_NOHANG), E_CHILD);
-    console_printf("waitpid(0, W_NOHANG) tests succeed.\n");
+    console_printf(0xA00, "waitpid(0, W_NOHANG) tests succeed.\n");
 
 
     console_printf("waitpid(pid, W_NOHANG) tests...\n");
@@ -56,7 +56,7 @@ void process_main() {
         assert_eq(order[i], status);
     }
     assert_eq(sys_waitpid(0, nullptr, W_NOHANG), E_CHILD);
-    console_printf("waitpid(pid, W_NOHANG) tests succeed.\n");
+    console_printf(0xA00, "waitpid(pid, W_NOHANG) tests succeed.\n");
 
 
     console_printf("waitpid(0) blocking tests...\n");
@@ -77,7 +77,7 @@ void process_main() {
         assert_eq(order[idx], status);
     }
     assert_eq(sys_waitpid(0), E_CHILD);
-    console_printf("waitpid(0) blocking tests succeed.\n");
+    console_printf(0xA00, "waitpid(0) blocking tests succeed.\n");
 
 
     console_printf("waitpid(pid) blocking tests...\n");
@@ -91,9 +91,9 @@ void process_main() {
         assert_eq(order[i], status);
     }
     assert_eq(sys_waitpid(0), E_CHILD);
-    console_printf("waitpid(pid) blocking tests succeed.\n");
+    console_printf(0xA00, "waitpid(pid) blocking tests succeed.\n");
 
 
-    console_printf("testwaitpid succeeded.\n");
+    console_printf(0xB00, "testwaitpid succeeded.\n");
     sys_exit(0);
 }

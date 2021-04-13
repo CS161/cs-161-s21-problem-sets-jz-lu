@@ -1,5 +1,6 @@
 #include "u-lib.hh"
 
+// Deprecated test--do not run on any commit past last commit of PSet 3!
 void process_main() {
     int f = sys_open("emerson.txt", OF_READ);
     assert_gt(f, 2);
