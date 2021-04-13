@@ -1921,9 +1921,7 @@ uintptr_t proc::syscall_write(regstate* regs) {
 //    Closes a file descriptor, freeing if necessary.
 int proc::syscall_close(regstate* regs) {
     int fd = regs->reg_rdi;
-    if (VFS_PARANOIA >= 2 || UDS_PARANOIA >= 1) {
-        log_printf("[syscall_close] Closing fd=%d for process PID=%d\n", fd, id_);
-    }
+    log_printf("[syscall_close] Closing fd=%d for process tid=%d\n", fd, id_);
     spinlock_guard guard(thgrp_->thgrp_lock_);
     if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
         if (VFS_PARANOIA >= 2) {
@@ -1931,9 +1929,11 @@ int proc::syscall_close(regstate* regs) {
         }
         return E_BADF;
     }
-    waiter().block_until(thgrp_->wq_, [&] () {
-        return !thgrp_->fdtable_[fd]->active_;
-    }, guard);
+    if (!thgrp_->fdtable_[fd]->active_) {
+        waiter().block_until(thgrp_->wq_, [&] () {
+            return !thgrp_->fdtable_[fd]->active_;
+        }, guard);
+    }
     if (!thgrp_->fdtable_[fd]->close()) { // If refcount hits 0
         if (VFS_PARANOIA >= 1) {
             log_printf("[syscall_close] Closed node at fd=%d empty, freeing\n", fd);
@@ -2082,7 +2082,9 @@ int proc::syscall_ftruncate(regstate* regs) {
 
     int r = thgrp_->fdtable_[fd]->ftruncate(len);
     irqs = thgrp_->thgrp_lock_.lock();
-    --thgrp_->fdtable_[fd]->active_;
+    if (!(--thgrp_->fdtable_[fd]->active_)) {
+        thgrp_->wq_.wake_all();
+    }
     thgrp_->thgrp_lock_.unlock(irqs);
     return r;
 }

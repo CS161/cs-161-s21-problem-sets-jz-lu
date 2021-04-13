@@ -321,9 +321,13 @@ uintptr_t pipe_bbuf::read(uintptr_t addr, size_t sz) {
             log_printf("[pipe_bbuf-read] Pipe bbuf empty, blocking\n");
         }
         waiter().block_until(rdq_, [&] () {
+            log_printf("[addr=%lu, sz=%lu] Pipe empty? %s, write closed? %s, conditional: %d\n", 
+                addr, sz, pipe_empty() ? "Yes" : "No", write_closed_ ? "Yes" : "No", 
+                !pipe_empty() || write_closed_);
             return (!pipe_empty() || write_closed_);
         }, guard);
     }
+    log_printf("[pipe:bbuf-read] [addr=%lu, sz=%lu] done blocking\n", addr, sz);
 
     // A drained pipe with the write end closed should return EOF.
     if (write_closed_ && pipe_empty()) {

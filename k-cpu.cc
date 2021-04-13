@@ -99,7 +99,9 @@ void cpustate::schedule(proc* yielding_from) {
         current_->pstate_ = proc::ps_exiting;
         current_->exit_signal_ = 0; // reset exit signal
         current_->thgrp_->wq_.wake_all();
-        // ewq.wake_all();
+    }
+    if (yielding_from && yielding_from->pstate_ == proc::ps_exiting) {
+        yielding_from->thgrp_->wq_.wake_all();
     }
 
     if (yielding_from && !USING_PSEUDO_BLOCKING && yielding_from->pstate_ == proc::ps_transition) {

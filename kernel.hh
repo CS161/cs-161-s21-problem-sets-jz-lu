@@ -311,7 +311,7 @@ const uint64_t WAITH_PARANOIA = 0;          // Wait heap
 const uint64_t VFS_KBC_PARANOIA = 0;        // Console and Keyboard VFS
 const uint64_t VFS_MF_PARANOIA = 0;         // Memfile VFS
 const uint64_t PROC_PARANOIA = 0;           // Struct proc constructor/destructor
-const uint64_t PIPE_PARANOIA = 0;
+const uint64_t PIPE_PARANOIA = 1;
 const uint64_t VFS_PARANOIA = 0;            // General VFS, set to max of others usually
 const uint64_t UDS_PARANOIA = 0;            // Unix Domain Sockets
 
@@ -685,9 +685,6 @@ inline bool proc::resumable() const {
 // proc::wake()
 //    Sets a proc pstate from blocked to runnable.
 inline void proc::wake() {
-    if (WAITQ_PARANOIA >= 1 || WAITH_PARANOIA >= 1) {
-        log_printf("[p::wake] wakey wakey from process TID=%d\n", id_);
-    }
     // This already holds a lock from waiter, so just go ahead and check pstate
     int s = ps_blocked;
     if (pstate_.compare_exchange_strong(s, ps_runnable)) {
@@ -701,6 +698,7 @@ inline void proc::wake() {
         cpus[cpu_].enqueue(this);
     }
 }
+
 
 // proc::lock_pagetable_read()
 //    Obtain a “read lock” on this process’s page table. While the “read
