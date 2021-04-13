@@ -761,7 +761,7 @@ int proc::syscall_fork(regstate* regs) {
         log_printf("]\n");
     }
 
-    return thgrp_->tgid_;
+    return child->thgrp_->tgid_;
 
     // Fork failure cleanup methods, accessed via goto.
     free_pt:
@@ -1077,7 +1077,6 @@ void proc::syscall_exit(regstate* regs) {
         return thgrp_->nth_ == 1;
     }, thgrp_->thgrp_lock_, irqs);
     thgrp_->thgrp_lock_.unlock(irqs);
-    assert(thgrp_->nth_ == 1); // only 1 thread should remain by now
     
     assert(global_cnode->refcount_ > 0); // make sure global node should never be deleted
     for (int i = 0; i < MAX_FD; ++i) {
@@ -1114,7 +1113,6 @@ void proc::syscall_exit(regstate* regs) {
         kinit->thgrp_->children_.push_back(it);
         kinit->thgrp_->nchildren_++;
         it = thgrp_->children_.pop_front();
-        // we need to remember to update the init process' metadata
     }
     kinit->thgrp_->thgrp_lock_.unlock_noirq();
     ptable_lock.unlock(irqs);
@@ -1123,6 +1121,9 @@ void proc::syscall_exit(regstate* regs) {
     assert(thlink_.is_linked());
     assert(!zlink_.is_linked());
     thgrp_->th_.erase(this);
+    assert(thgrp_->th_.empty());
+    assert(thgrp_->nth_ == 1); // only 1 thread should remain by now
+    log_printf("[exit] tgid=%d has empty th_\n", thgrp_->tgid_);
     thgrp_->z_.push_back(this);
 
     this->retval = regs->reg_rdi;
@@ -1295,6 +1296,7 @@ static void release_child(thgrp* pgrp, thgrp* cgrp) {
     // break the news to the parents. oh, the heartbreak.
     pgrp->children_.erase(cgrp);
     --pgrp->nchildren_;
+    delete cgrp;
 }
 
 
@@ -1304,7 +1306,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
     pid_t pid = regs->reg_rdi;      // we get the pid from the value we stored in the first arg
     int options = regs->reg_rdx;    // options was set in the 3rd
 
-    if (pid <= 1) {
+    if (pid < 0|| pid == 1) { // can't wait on almighty init
         return -1;
     }
 
@@ -1323,10 +1325,11 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
         // If the waitpid is invalid, return immediately.
         if ((thgrp_->nchildren_ == 0) || (!cgrp && pid != 0)) {
             thgrp_->thgrp_lock_.unlock_noirq();
+            log_printf("[waitpid] Returning E_CHILD\n");
             return E_CHILD;
         } 
         thgrp_->thgrp_lock_.unlock_noirq();
-    } // end of locking structure
+    }
 
     if (pid != 0) { // If a pid is specified then we run this case
         if (!options) { // Blocking case
@@ -1344,7 +1347,7 @@ uint64_t proc::syscall_waitpid(regstate *regs) {
             return retpid;
 
         } else { // Polling, specified child tgid
-            if (cgrp->nth_ == 0) {
+            if (cgrp->nth_ != 0) {
                 return E_AGAIN;
             } else { // complete zombie reaping
                 uint64_t retpid = (cgrp->retval_ << 32) + cgrp->tgid_;
