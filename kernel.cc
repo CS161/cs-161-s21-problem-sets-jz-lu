@@ -1059,10 +1059,14 @@ void proc::syscall_exit(regstate* regs) {
     }
 
     waiter().block_until(thgrp_->wq_, [&] () {
+        int a = thgrp_->nth_;
+        log_printf("[exit-deathcall] starting nth_ == %d\n", a);
         assert(thgrp_->nth_ >= 1);
         auto it = thgrp_->th_.front();
         while (it) {
             if (it->pstate_ == ps_exiting) {
+                log_printf("[exit-deathcall] found exiting thread tid=%d, tgid=%d\n", 
+                    it->id_, it->thgrp_->tgid_);
                 --thgrp_->nth_;
                 auto temp = thgrp_->th_.next(it);
                 thgrp_->z_.push_back(it);
@@ -1074,7 +1078,7 @@ void proc::syscall_exit(regstate* regs) {
                 it = thgrp_->th_.next(it);
             }
         }
-        return thgrp_->nth_ == 1;
+        return (thgrp_->nth_ == 1);
     }, thgrp_->thgrp_lock_, irqs);
     thgrp_->thgrp_lock_.unlock(irqs);
     
@@ -1121,6 +1125,11 @@ void proc::syscall_exit(regstate* regs) {
     assert(thlink_.is_linked());
     assert(!zlink_.is_linked());
     thgrp_->th_.erase(this);
+    log_printf("EXIT th_ dump by caller (tid=%d, tgid=%d) -->[ ", id_, thgrp_->tgid_);
+    for (auto dit = thgrp_->th_.front(); dit; dit = thgrp_->th_.next(dit)) {
+        log_printf("%i ", dit->id_ );
+    }
+    log_printf("]\n");
     assert(thgrp_->th_.empty());
     assert(thgrp_->nth_ == 1); // only 1 thread should remain by now
     log_printf("[exit] tgid=%d has empty th_\n", thgrp_->tgid_);
@@ -1186,14 +1195,20 @@ int proc::syscall_clone(regstate* regs) {
         delete pwd;
         return E_NOMEM;
     }
+    p->id_ = tid;
     pwd_->pass(p->pwd_);
 
     // Add thread to list of processes.
     thgrp_->thgrp_lock_.lock_noirq();
-    thgrp_->th_.push_back(this);
+    thgrp_->th_.push_back(p);
+    log_printf("CLONE th_ dump by caller (tid=%d, tgid=%d) -->[ ", id_, thgrp_->tgid_);
+    for (auto dit = thgrp_->th_.front(); dit; dit = thgrp_->th_.next(dit)) {
+        log_printf("%i ", dit->id_);
+    }
+    log_printf("] (just added tid=%d)\n", tid);
+    ++thgrp_->nth_;
     thgrp_->thgrp_lock_.unlock_noirq();
 
-    p->id_ = tid;
     p->init_user(tid, pagetable_);
     memcpy(p->regs_, regs, sizeof(regstate)); 
     p->regs_->reg_rsp = stack_bottom + PAGESIZE;
@@ -1692,7 +1707,6 @@ int proc::syscall_open(regstate* regs) {
 // proc::syscall_dup2(regs)
 //    Copies vnodes from a file descriptor to another. Returns new fd if successful.
 int proc::syscall_dup2(regstate* regs) {
-    // TODO [MULTITH] lock fdtable accesses
     int oldfd = regs->reg_rdi;
     int newfd = regs->reg_rsi;
     spinlock_guard guard(thgrp_->thgrp_lock_);
@@ -1826,11 +1840,12 @@ uintptr_t proc::syscall_read(regstate* regs) {
     // This is a slow system call, so allow interrupts by default
     sti();
     int fd = regs->reg_rdi;
-    // TODO [MULTITH] lock ftable access
+    auto irqs = thgrp_->thgrp_lock_.lock();
     if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_read] fd %d invalid or not open\n", fd);
         }
+        thgrp_->thgrp_lock_.unlock(irqs);
         return E_BADF;
     }
     uintptr_t addr = regs->reg_rsi;
@@ -1841,15 +1856,23 @@ uintptr_t proc::syscall_read(regstate* regs) {
         if (VFS_PARANOIA >= 1) {
             log_printf("[syscall_read] INVALID read request for PID=%d, fd=%d\n", id_, fd);
         }
+        thgrp_->thgrp_lock_.unlock(irqs);
         return E_FAULT;
     }
+    ++thgrp_->fdtable_[fd]->active_;
+    thgrp_->thgrp_lock_.unlock(irqs);
 
     // Read from open file.
-    // TODO [MULTITH] lock ftable access
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_read] NEW read request for PID=%d, fd=%d\n", id_, fd);
     }
-    return thgrp_->fdtable_[fd]->read(addr, sz);
+    uintptr_t r = thgrp_->fdtable_[fd]->read(addr, sz);
+    irqs = thgrp_->thgrp_lock_.lock();
+    if (!(--thgrp_->fdtable_[fd]->active_)) {
+        thgrp_->wq_.wake_all();
+    }
+    thgrp_->thgrp_lock_.unlock(irqs);
+    return r;
 }
 
 
@@ -1858,11 +1881,12 @@ uintptr_t proc::syscall_write(regstate* regs) {
     sti();
 
     int fd = regs->reg_rdi;
-    // TODO [MULTITH] lock ftable access
+    auto irqs = thgrp_->thgrp_lock_.lock();
     if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
         if (VFS_KBC_PARANOIA >= 1 || VFS_MF_PARANOIA >= 1) {
             log_printf("[syscall_write] fd %d invalid or not open\n", fd);
         }
+        thgrp_->thgrp_lock_.unlock(irqs);
         return E_BADF;
     }
     uintptr_t addr = regs->reg_rsi;
@@ -1873,15 +1897,23 @@ uintptr_t proc::syscall_write(regstate* regs) {
         if (VFS_PARANOIA >= 1) {
             log_printf("[syscall_write] INVALID write request for PID=%d, fd=%d\n", id_, fd);
         }
+        thgrp_->thgrp_lock_.unlock(irqs);
         return E_FAULT;
     }
+    ++thgrp_->fdtable_[fd]->active_;
+    thgrp_->thgrp_lock_.unlock(irqs);
 
     // Write to the file.
-    // TODO [MULTITH] lock ftable access
     if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_write] NEW write request for PID=%d, fd=%d\n", id_, fd);
     }
-    return thgrp_->fdtable_[fd]->write(addr, sz);
+    uintptr_t r = thgrp_->fdtable_[fd]->write(addr, sz);
+    irqs = thgrp_->thgrp_lock_.lock();
+    if (!(--thgrp_->fdtable_[fd]->active_)) {
+        thgrp_->wq_.wake_all();
+    }
+    thgrp_->thgrp_lock_.unlock(irqs);
+    return r;
 }
 
 
@@ -1899,6 +1931,9 @@ int proc::syscall_close(regstate* regs) {
         }
         return E_BADF;
     }
+    waiter().block_until(thgrp_->wq_, [&] () {
+        return !thgrp_->fdtable_[fd]->active_;
+    }, guard);
     if (!thgrp_->fdtable_[fd]->close()) { // If refcount hits 0
         if (VFS_PARANOIA >= 1) {
             log_printf("[syscall_close] Closed node at fd=%d empty, freeing\n", fd);
@@ -2032,16 +2067,24 @@ int proc::syscall_rename(regstate* regs) {
 //    if extending and the disk does not have enough space.
 int proc::syscall_ftruncate(regstate* regs) {
     int fd = regs->reg_rdi;
-    // TODO [MULTITH] lock ftable access
+    auto irqs = thgrp_->thgrp_lock_.lock();
     if (fd < 0 || fd >= MAX_FD || !thgrp_->fdtable_[fd]) {
+        thgrp_->thgrp_lock_.unlock(irqs);
         return E_BADF;
     }
     off_t len = regs->reg_rsi;
     if (len < 0) {
+        thgrp_->thgrp_lock_.unlock(irqs);
         return E_INVAL;
     }
+    ++thgrp_->fdtable_[fd]->active_;
+    thgrp_->thgrp_lock_.unlock(irqs);
 
-    return thgrp_->fdtable_[fd]->ftruncate(len);
+    int r = thgrp_->fdtable_[fd]->ftruncate(len);
+    irqs = thgrp_->thgrp_lock_.lock();
+    --thgrp_->fdtable_[fd]->active_;
+    thgrp_->thgrp_lock_.unlock(irqs);
+    return r;
 }
 
 

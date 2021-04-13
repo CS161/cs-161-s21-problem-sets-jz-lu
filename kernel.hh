@@ -37,6 +37,7 @@ struct elf_program;
 struct vnode {
     const int mode_ = 0; // Read, write, or both
     std::atomic<off_t> offset_ = 0; // Offset from file, to be incremented on read/writes
+    std::atomic<int> active_ = 0; // Is a read/write happening?
     int refcount_ = 0; // Number of processes with entry in fd table pointing here
     spinlock open_close_lock_; // To decrement refcount and offset if necessary
     // Locks declared in inheriters.

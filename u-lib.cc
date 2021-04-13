@@ -75,7 +75,7 @@ pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top) {
 
     make_syscall(SYSCALL_CLONE, reinterpret_cast<uintptr_t>(function), 
         reinterpret_cast<uintptr_t>(arg), reinterpret_cast<uintptr_t>(stack_top));
-    
+        
     long r;
     asm volatile("movq %%rax, %0\n" : "=r"(r) : :);
 
