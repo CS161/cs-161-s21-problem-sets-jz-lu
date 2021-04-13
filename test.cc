@@ -23,11 +23,7 @@ char* strapp(char* s1, char* s2, char* buf, bool dir=true) {
 }
 
 int main(void) {
-    char c2[24] = "/donut.txt";
-    char c1[15] = "/aakash/is/a/";
-    char s[strlen(c1)+strlen(c2)+1];
-    strapp(c1, c2, s, false);
-    printf("WORD: %s\n", s);
+    printf("WORD: ├ ─\n");
 
     return 0;
 }

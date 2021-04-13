@@ -178,6 +178,7 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_mkdir(regstate* regs);
     int syscall_rm(regstate* regs);
     int syscall_pwd(regstate* regs);
+    int syscall_tree(regstate* regs);
     int syscall_cd(regstate* regs);
     int syscall_ls(regstate* regs);
     int syscall_clone(regstate* regs);

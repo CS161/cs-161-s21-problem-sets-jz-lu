@@ -1313,6 +1313,77 @@ int chkfsstate::ls(const char* pathname, char* buf, size_t bufsz) {
 }
 
 
+int chkfsstate::tree(const char* pathname, char* buf, size_t bufsz) {
+    chkfs::inode* start = lookup_directory(pathname, true, false);
+    if (!start) {
+        return E_NOENT;
+    }
+    char dot[3] = ".\n";
+    memcpy(buf, dot, 2);
+    off_t off = 0;
+    off += 2;
+    int r = tree_dfs(start, buf, bufsz, off);
+    start->put();
+    buf[off] = '\0';
+    return r;
+}
+
+
+// DFS through directory tree, printing as we go.
+int chkfsstate::tree_dfs(chkfs::inode* dirino, char* buf, size_t bufsz, 
+    off_t& off, int depth) {
+    if (off >= (int) bufsz) {
+        return E_NOSPC; // emergency stop condition, out of buffer memory!
+    }
+    chkfs_fileiter it(dirino);
+    bcentry* de = nullptr;
+    for (size_t diroff = 0; ; diroff += blocksize) {
+        if ((de = it.find(diroff).get_disk_entry())) {
+            size_t bsz = min(dirino->size - diroff, blocksize);
+            auto dirent = reinterpret_cast<chkfs::dirent*>(de->buf_);
+            for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
+                if (dirent->inum) {
+                    size_t sz = strlen(dirent->name);
+                    if (off + sz + 4*depth + 9 >= bufsz) {
+                        off = bufsz;
+                        break;
+                    } else { // Add the tree entry into the buffer.
+                        for (int j = depth; j; --j) {
+                            memset(buf + off, '|', 1);
+                            off += 1;
+                            memset(buf + off, ' ', 3);
+                            off += 3;
+                        }
+                        memset(buf + off, '|', 1);
+                        off += 1;
+                        memset(buf + off, '-', 5);
+                        off += 5;
+                        memset(buf + off, ' ', 1);
+                        off += 1;
+                        memcpy(buf + off, dirent->name, sz);
+                        off += sz;
+                        memset(buf + off, '\n', 1);
+                        off += 1;
+                    }
+                    chkfs::inode* ino = get_inode(dirent->inum);
+                    if (ino->type == chkfs::type_directory) {
+                        // TODO add 1 to directory
+                        tree_dfs(ino, buf, bufsz, off, ++depth);
+                    } else {
+                        // TODO add 1 to files
+                    }
+                    ino->put();
+                }
+            }
+            de->put();
+        }
+        if (off >= (int) bufsz) {
+            break;
+        }
+    }
+    return 0;
+}
+
 // ===== Bitset helper functions ====== //
 // NOTE: all bitset helper functions below assume that the fbb cache entry
 // is locked by the caller.

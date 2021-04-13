@@ -389,11 +389,18 @@ inline int sys_rm(const char* path) {
     return make_syscall(SYSCALL_RM, reinterpret_cast<uintptr_t>(path));
 }
 
-// sys_pwd(path)
+// sys_pwd(buf)
 //    Reads current working directory into `buf`.
 inline int sys_pwd(const char* buf) {
     access_memory(buf);
     return make_syscall(SYSCALL_PWD, reinterpret_cast<uintptr_t>(buf));
+}
+
+// sys_tree(buf)
+//    Stores a file system tree representation in buf.
+inline int sys_tree(const char* buf, size_t bufsz) {
+    access_memory(buf);
+    return make_syscall(SYSCALL_TREE, reinterpret_cast<uintptr_t>(buf), bufsz);
 }
 
 // sys_cd(path)

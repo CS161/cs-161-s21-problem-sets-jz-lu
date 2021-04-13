@@ -520,6 +520,10 @@ uintptr_t proc::syscall(regstate* regs) {
         syscall_retval = syscall_pwd(regs);
         break;
     
+    case SYSCALL_TREE:
+        syscall_retval = syscall_tree(regs);
+        break;
+    
     case SYSCALL_CD:
         syscall_retval = syscall_cd(regs);
         break;
@@ -2690,6 +2694,32 @@ int proc::syscall_pwd(regstate* regs) {
     } else {
         return E_PERM;
     }
+}
+
+// proc::syscall_tree(regs)
+//    Build visualization of file system tree.
+int proc::syscall_tree(regstate* regs) {
+    char* buf = reinterpret_cast<char*>(regs->reg_rdi);
+    size_t bufsz = regs->reg_rsi;
+    vmiter it(this, regs->reg_rdi);
+    while (it.va() < regs->reg_rdi+bufsz) {
+        if (!it.present() || !it.user()) {
+            return E_FAULT;
+        }
+        it.next();
+    }
+    char* path = pwd_->read(buf);
+    if (!path) {
+        return E_FAULT;
+    }
+
+    fstlock.lock_read();
+    if (int r = chkfsstate::get().tree(path, buf, bufsz)) {
+        fstlock.unlock_read();
+        return r;
+    }
+    fstlock.unlock_read();
+    return 0;
 }
 
 

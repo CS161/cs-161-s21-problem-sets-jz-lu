@@ -294,6 +294,7 @@ struct bitset_view {
 #define SYSCALL_PWD             147            // Get current working directory
 #define SYSCALL_CD              148            // Change working directory
 #define SYSCALL_LS              149            // List entries in directory
+#define SYSCALL_TREE            150            // Build visualization of file system
 
 // System call error return values
 #define E_AGAIN         -11        // Try again
