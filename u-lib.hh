@@ -398,6 +398,7 @@ inline int sys_pwd(const char* buf) {
 
 // sys_tree(buf)
 //    Stores a file system tree representation in buf.
+//    Returns a concatenated nfile, ndir in one int.
 inline int sys_tree(const char* buf, size_t bufsz) {
     access_memory(buf);
     return make_syscall(SYSCALL_TREE, reinterpret_cast<uintptr_t>(buf), bufsz);

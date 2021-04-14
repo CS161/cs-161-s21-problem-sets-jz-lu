@@ -147,8 +147,9 @@ struct chkfsstate {
     // list contents of a directory, requires fstlock
     int ls(const char* pathname, char* buf, size_t bufsz);
     // print out directory tree
-    int tree_dfs(inode* dirino, char* buf, size_t bufsz, off_t& off, int depth=0);
-    int tree(const char* pathname, char* buf, size_t bufsz);
+    int tree_dfs(inode* dirino, char* buf, size_t bufsz, off_t& off, 
+        int& nfile, int& ndir, int depth=0);
+    int tree(const char* pathname, char* buf, size_t bufsz, int& nfile, int& ndir);
 
     bool block_is_free(void* fbb, blocknum_t bn);
     void mark_block_free(void* fbb, blocknum_t bn);

@@ -2712,14 +2712,15 @@ int proc::syscall_tree(regstate* regs) {
     if (!path) {
         return E_FAULT;
     }
-
+    int nfile = 0, ndir = 0;
     fstlock.lock_read();
-    if (int r = chkfsstate::get().tree(path, buf, bufsz)) {
+    if (int r = chkfsstate::get().tree(path, buf, bufsz, nfile, ndir)) {
         fstlock.unlock_read();
         return r;
     }
+    int cat = (nfile << 16) + ndir;
     fstlock.unlock_read();
-    return 0;
+    return cat;
 }
 
 

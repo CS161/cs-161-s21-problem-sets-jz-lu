@@ -1313,7 +1313,8 @@ int chkfsstate::ls(const char* pathname, char* buf, size_t bufsz) {
 }
 
 
-int chkfsstate::tree(const char* pathname, char* buf, size_t bufsz) {
+int chkfsstate::tree(const char* pathname, char* buf, 
+    size_t bufsz, int& nfile, int& ndir) {
     chkfs::inode* start = lookup_directory(pathname, true, false);
     if (!start) {
         return E_NOENT;
@@ -1322,7 +1323,7 @@ int chkfsstate::tree(const char* pathname, char* buf, size_t bufsz) {
     memcpy(buf, dot, 2);
     off_t off = 0;
     off += 2;
-    int r = tree_dfs(start, buf, bufsz, off);
+    int r = tree_dfs(start, buf, bufsz, off, nfile, ndir);
     start->put();
     buf[off] = '\0';
     return r;
@@ -1330,8 +1331,8 @@ int chkfsstate::tree(const char* pathname, char* buf, size_t bufsz) {
 
 
 // DFS through directory tree, printing as we go.
-int chkfsstate::tree_dfs(chkfs::inode* dirino, char* buf, size_t bufsz, 
-    off_t& off, int depth) {
+int chkfsstate::tree_dfs(inode* dirino, char* buf, size_t bufsz, off_t& off, 
+        int& nfile, int& ndir, int depth) {
     if (off >= (int) bufsz) {
         return E_NOSPC; // emergency stop condition, out of buffer memory!
     }
@@ -1367,15 +1368,16 @@ int chkfsstate::tree_dfs(chkfs::inode* dirino, char* buf, size_t bufsz,
                     }
                     chkfs::inode* ino = get_inode(dirent->inum);
                     if (ino->type == chkfs::type_directory) {
-                        // TODO add 1 to directory
-                        tree_dfs(ino, buf, bufsz, off, ++depth);
+                        tree_dfs(ino, buf, bufsz, off, nfile, ++ndir, ++depth);
                     } else {
-                        // TODO add 1 to files
+                        ++nfile;
                     }
                     ino->put();
                 }
             }
             de->put();
+        } else {
+            break;
         }
         if (off >= (int) bufsz) {
             break;

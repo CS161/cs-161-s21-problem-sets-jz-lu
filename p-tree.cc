@@ -22,16 +22,18 @@ void process_main(int argc, char** argv) {
         sys_exit(1);
     } else if (err == E_NOSPC) {
         warn = true;
-    } else {
-        console_printf(0xc00, "Error: an unknown error has occurred\n");
+    } else if (err >= E_MINERROR && err < 0) {
+        console_printf(0xc00, "Error: unexpected error %d has occurred\n", err);
         sys_exit(1);
     }
 
     assert_le(strlen(buf), PAGESIZE);
     sys_write(1, buf, strlen(buf));
+    int nfile = err >> 16, ndir = err & 0xFFFF;
+    console_printf(0xf00, "%d directories, %d files\n", ndir, nfile);
 
     if (warn) {
-        console_printf(0xe00, "Warning: tree build stopped early\n");
+        console_printf(0xe00, "Warning: tree build stopped early due to buffer overflow\n");
     }
     sys_exit(0);
 }
