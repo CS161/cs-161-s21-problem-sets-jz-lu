@@ -27,8 +27,9 @@ void process_main(int argc, char** argv) {
         sys_exit(1);
     }
 
-    assert_le(strlen(buf), PAGESIZE);
-    sys_write(1, buf, strlen(buf));
+    size_t len = strlen(buf);
+    assert_le(len, PAGESIZE);
+    sys_write(1, buf, len+1);
     int nfile = err >> 16, ndir = err & 0xFFFF;
     console_printf(0xf00, "%d directories, %d files\n", ndir, nfile);
 

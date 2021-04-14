@@ -68,6 +68,7 @@ int vnode::ftruncate(off_t len) {
 kb_c_vnode::kb_c_vnode() : vnode(OF_RDWR) {
     assert(offset_ == 0);
     assert(refcount_ == 1);
+    signature_ = vnode::kbc;
     if (VFS_KBC_PARANOIA >= 1) {
         log_printf("[kb_c_vnode] Stdio vnode constructor called\n");
     }
@@ -153,6 +154,7 @@ memfile_vnode::memfile_vnode(int mode, memfile* mf) : vnode(mode) {
             mode);
     }
     mf_ = mf;
+    signature_ = vnode::memf;
     assert(offset_ == 0);
     assert(refcount_ == 0);
 }
@@ -356,6 +358,7 @@ pipe_vnode::pipe_vnode(int mode, pipe_bbuf* bbuf)
     : vnode(mode) {
     bool mode_valid = (mode == OF_READ || mode == OF_WRITE);
     assert(mode_valid);
+    signature_ = vnode::pipe;
     if (PIPE_PARANOIA >= 2) {
         log_printf("[pipe] Pipe constructor called with mode %s\n", 
             mode == OF_READ ? "READ" : "WRITE");
@@ -454,6 +457,7 @@ disk_vnode::disk_vnode(chkfs::inode* ino, int mode): vnode(mode) {
     ino->flags += (1 << 1); // increment the refcount
     ino->entry()->put_write();
     ino->unlock_write();
+    signature_ = vnode::df;
 }
 
 
@@ -736,6 +740,7 @@ special_vnode::special_vnode(sfile_t type, int mode)
     : vnode(mode), type_(type) {
     assert(type == null || type == random || type == zero || type == full );
     srand(ticks);
+    signature_ = vnode::special;
 }
 
 

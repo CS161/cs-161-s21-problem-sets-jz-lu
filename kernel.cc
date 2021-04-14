@@ -22,6 +22,7 @@ std::atomic<int> kdisplay;
 std::atomic<pid_t> cur_tgid = 1;
 
 // Global Stdio vnode on VFS.
+const uint64_t pad = 8;
 vnode* global_cnode = nullptr;
 
 // Global blocking data.
@@ -524,6 +525,24 @@ uintptr_t proc::syscall(regstate* regs) {
         syscall_retval = syscall_tree(regs);
         break;
     
+    case SYSCALL_FDSHOW: {
+        char* buf = reinterpret_cast<char*>(regs->reg_rdi);
+        size_t bufsz = regs->reg_rsi;
+        if (bufsz <= MAX_FD*pad*3 + 4) {
+            return E_NOSPC;
+        }
+        vmiter it(this, regs->reg_rdi);
+        while (it.va() < regs->reg_rdi+bufsz) {
+            if (!it.present() || !it.user()) {
+                return E_FAULT;
+            }
+            it.next();
+        }
+        show_fdtable_(buf);
+        syscall_retval = 0;
+        break;
+    }
+    
     case SYSCALL_CD:
         syscall_retval = syscall_cd(regs);
         break;
@@ -724,7 +743,6 @@ int proc::syscall_fork(regstate* regs) {
     if (FORK_PARANOIA >= 1 || VFS_PARANOIA >= 2) {
         log_printf("[fork] Copied parent's (PID=%d) fdtable to child (PID=%d), new state:\n",
             id_, pid);
-        child->show_fdtable_();
     }
     thgrp_->thgrp_lock_.unlock_noirq();
     child->thgrp_->th_.push_back(child);
@@ -1432,13 +1450,69 @@ int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
 
 // proc::show_fdtable_()
 //   Prints state of the fdtable.
-//   Assumes that thgrp lock is held.
-void proc::show_fdtable_() {
-    log_printf("[show_fdtable_] Process PID=%d fdtable HEAD --> [", id_);
-    for (int fd = 0; fd < MAX_FD-1; ++fd) {
-        log_printf("%d:%s | ", fd, thgrp_->fdtable_[fd] ? "T" : "F"); // T is taken, F is free
+void proc::show_fdtable_(char* buf) {
+    off_t off = 0;
+    memset(buf+off, '-', MAX_FD*pad+1);
+    off += MAX_FD*pad+1;
+    buf[off++] = '\n';
+    buf[off++] = '|';
+    auto irqs = thgrp_->thgrp_lock_.lock();
+    for (int fd = 0; fd < MAX_FD; ++fd) {
+        if (thgrp_->fdtable_[fd]) {
+            buf[off++] = ' ';
+            switch (thgrp_->fdtable_[fd]->mode_) {
+                case OF_READ:
+                    buf[off++] = ' ';
+                    buf[off++] = 'R';
+                    buf[off++] = ' ';
+                    break;
+                case OF_WRITE:
+                    buf[off++] = ' ';
+                    buf[off++] = 'W';
+                    buf[off++] = ' ';
+                    break;
+                default:
+                    buf[off++] = 'R';
+                    buf[off++] = '/';
+                    buf[off++] = 'W';
+                    break;
+            }
+            buf[off++] = '@';
+            switch(thgrp_->fdtable_[fd]->signature_) {
+                case vnode::kbc:
+                    buf[off++] = 'C';
+                    break;
+                case vnode::pipe:
+                    buf[off++] = 'P';
+                    break;
+                case vnode::memf:
+                    buf[off++] = 'M';
+                    break;
+                case vnode::df:
+                    buf[off++] = 'D';
+                    break;
+                case vnode::special:
+                    buf[off++] = 'S';
+                    break;
+                default:
+                    break;
+            }
+            buf[off++] = ' ';
+        } else { // Empty entry
+            memset(buf+off, ' ', 3);
+            off += 3;
+            buf[off++] = '-';
+            memset(buf+off, ' ', 3);
+            off += 3;
+        }
+        buf[off++] = '|';
     }
-    log_printf("%d:%s] <-- TAIL\n", MAX_FD-1, thgrp_->fdtable_[MAX_FD-1] ? "T" : "F");
+    thgrp_->thgrp_lock_.unlock(irqs);
+    buf[off++] = '\n';
+    memset(buf+off, '-', MAX_FD*pad+2);
+    off += MAX_FD*pad+1;
+    buf[off++] = '\n';
+    buf[off++] = '\0';
 }
 
 
@@ -1683,7 +1757,6 @@ int proc::syscall_open(regstate* regs) {
 
     if (VFS_MF_PARANOIA >= 2) {
         log_printf("[syscall_open] Open successful\n");
-        show_fdtable_();
     }
 
     return fd;
@@ -1730,8 +1803,7 @@ int proc::syscall_dup2(regstate* regs) {
     ++thgrp_->fdtable_[newfd]->refcount_;
     }
     if (VFS_PARANOIA >= 2) {
-        log_printf("[syscall_dup2] Dup2 done, showing new fdtable state:\n");
-        show_fdtable_();
+        log_printf("[syscall_dup2] Dup2 done\n");
     }
     return 0;
 }
@@ -1803,8 +1875,7 @@ uintptr_t proc::syscall_pipe(regstate* regs) {
     thgrp_->fdtable_[rfd] = reinterpret_cast<vnode*>(rd_vn);
 
     if (PIPE_PARANOIA >= 2) {
-        log_printf("[syscall_pipe] Successfully made pipe, updated state below\n");
-        show_fdtable_();
+        log_printf("[syscall_pipe] Successfully made pipe\n");
     }
 
     return rfd | (wfd << 32); // concatenated fd, see title comment of function

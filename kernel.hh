@@ -35,6 +35,10 @@ struct elf_program;
 // All declarations of children in k-vfs.hh. This cannot be declared in 
 // because it is used in the strcut proc declaration.
 struct vnode {
+    enum vn_t {
+        kbc, pipe, memf, df, special
+    };
+    int signature_;
     const int mode_ = 0; // Read, write, or both
     std::atomic<off_t> offset_ = 0; // Offset from file, to be incremented on read/writes
     std::atomic<int> active_ = 0; // Is a read/write happening?
@@ -196,7 +200,7 @@ struct __attribute__((aligned(4096))) proc {
     uintptr_t copy_argv(x86_64_pagetable* pt, void* stkpg_kptr, 
         int argc, const char** argv, int total_length);
     int copy_memory_(proc* child);
-    void show_fdtable_();
+    void show_fdtable_(char* buf);
     void free_auto_allocs(proc* p);
     void free_auto_allocs(x86_64_pagetable* pt);
     uint64_t canary = CANARY_EV;

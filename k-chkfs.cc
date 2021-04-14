@@ -1345,21 +1345,21 @@ int chkfsstate::tree_dfs(inode* dirino, char* buf, size_t bufsz, off_t& off,
             for (unsigned i = 0; i * sizeof(*dirent) < bsz; ++i, ++dirent) {
                 if (dirent->inum) {
                     size_t sz = strlen(dirent->name);
-                    if (off + sz + 4*depth + 9 >= bufsz) {
+                    if (off + sz + 5*depth + 9 >= bufsz) {
                         off = bufsz;
                         break;
                     } else { // Add the tree entry into the buffer.
                         for (int j = depth; j; --j) {
                             memset(buf + off, '|', 1);
                             off += 1;
-                            memset(buf + off, ' ', 3);
-                            off += 3;
+                            memset(buf + off, ' ', 4);
+                            off += 4;
                         }
                         memset(buf + off, '|', 1);
                         off += 1;
-                        memset(buf + off, '-', 5);
-                        off += 5;
-                        memset(buf + off, ' ', 1);
+                        memset(buf + off, '-', 3);
+                        off += 3;
+                        memset(buf + off, ' ', 3);
                         off += 1;
                         memcpy(buf + off, dirent->name, sz);
                         off += sz;

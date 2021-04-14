@@ -404,6 +404,13 @@ inline int sys_tree(const char* buf, size_t bufsz) {
     return make_syscall(SYSCALL_TREE, reinterpret_cast<uintptr_t>(buf), bufsz);
 }
 
+// sys_fdshow(buf)
+//    Stores a VFS table representation in buf.
+inline int sys_fdshow(const char* buf, size_t bufsz) {
+    access_memory(buf);
+    return make_syscall(SYSCALL_FDSHOW, reinterpret_cast<uintptr_t>(buf), bufsz);
+}
+
 // sys_cd(path)
 //    Changes current working directory to `path`.
 inline int sys_cd(const char* path) {
