@@ -92,6 +92,7 @@ struct cwd:rwlock {
 
     char* write(char* buf); // requires fstlock (read-only)
     char* read(char* buf);
+    int pull_back(); // goes back one directory
     int len();
     int pass(cwd* newcwd);
     char* cat(char* s, char* buf, bool dir=true);

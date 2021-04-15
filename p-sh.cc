@@ -281,6 +281,10 @@ static pid_t create_child(char** words, char nextch,
         if (int r = sys_cd(words[1])) {
             if (r == E_NOENT) {
                 console_printf(0xc00, "Error: No such directory\n");
+            } else if (r == E_FAULT) {
+                console_printf(0xc00, "Error: Memory fault occurred\n");
+            } else if (r == E_INVAL) {
+                console_printf(0xc00, "Error: Cannot go back further than root\n");
             } else {
                 console_printf(0xc00, "Error: An unknown error has occurred\n");
             }

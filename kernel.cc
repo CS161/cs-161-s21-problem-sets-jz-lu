@@ -2814,18 +2814,44 @@ int proc::syscall_cd(regstate* regs) {
         if (wr) {
             return 0;
         }
-    } else {
-        // Create a buffer to concatenate the string.
-        char buf[chkfs::maxnamelen+1];
-        if (!pwd_->cat(path, buf)) {
-            return E_NAMETOOLONG;
-        } else {
-            fstlock.lock_read();
-            char* wr = pwd_->write(buf);
-            fstlock.unlock_read();
-            if (wr) {
-                return 0;
+    }
+
+    fstlock.lock_read();
+    while (true) {
+        if (strncmp(path, "./", 2) == 0) {
+            path += 2;
+        } else if (strncmp(path, "..", 2) == 0) {
+            int r = pwd_->pull_back();
+            path += 2;
+            if (r) {
+                fstlock.unlock_read();
+                return r;
+            } else if (path[0] == '/') {
+                ++path;
             }
+        } else if (strcmp(path, ".") == 0) {
+            fstlock.unlock_read();
+            return 0;
+        } else {
+            break;
+        }
+    }
+
+    if (!strlen(path)) {
+        fstlock.unlock_read();
+        return 0;
+    }
+
+    // Create a buffer to concatenate the string.
+    char buf[chkfs::maxnamelen+1];
+    if (!pwd_->cat(path, buf)) {
+        fstlock.unlock_read();
+        return E_NAMETOOLONG;
+    } else {
+        char* wr = pwd_->write(buf);
+        fstlock.unlock_read();
+        if (wr) {
+            return 0;
         }
     }
     return E_NOENT;

@@ -118,8 +118,8 @@ struct uds {
         return (client_ != nullptr);
     }
     int close(proc* closer);
-    int write(proc* p, int fd);                  // Client updates the socket fd
-    int read(proc* p);                   // Server grabs socket fd
+    int write(proc* p, int fd);         // Client updates the socket fd
+    int read(proc* p);                  // Server grabs socket fd
     void wake_all();
 };
 

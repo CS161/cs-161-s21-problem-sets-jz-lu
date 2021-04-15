@@ -1587,6 +1587,24 @@ int cwd::pass(cwd* newcwd) {
     return 0;
 }
 
+int cwd::pull_back() {
+    lock_write();
+    if (strcmp(name, "/") == 0) {
+        unlock_write();
+        return E_INVAL;
+    }
+    int second_last_delim = 0;
+    for (off_t off = strlen(name)-2; off; --off) {
+        if (name[off] == '/') {
+            second_last_delim = off;
+            break;
+        }
+    }
+    name[second_last_delim+1] = '\0';
+    unlock_write();
+    return 0;
+}
+
 bool cwd::subset(char* path) {
     bool subset = false;
     int pathlen = strlen(path);
