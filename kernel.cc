@@ -1224,6 +1224,7 @@ int proc::syscall_clone(regstate* regs) {
     return tid;
 }
 
+
 // proc::syscall_texit(regs)
 //    Exits a single thread. Behaves like `syscall_exit()` 
 //    if calling thread is last of its group.
@@ -1251,7 +1252,6 @@ void proc::syscall_texit(regstate* regs) {
 
     yield_noreturn();
 }
-
 
 
 // proc::syscall_msleep(regs)
@@ -1450,11 +1450,15 @@ int proc::find_open_fd(bool exclude_one, int taken_fd=0) {
 
 // proc::show_fdtable_()
 //   Prints state of the fdtable.
-void proc::show_fdtable_(char* buf) {
+void proc::show_fdtable_(char* buf, int center) {
     off_t off = 0;
-    memset(buf+off, '-', MAX_FD*pad+1);
+    memset(buf + off, '-', MAX_FD*pad+1);
     off += MAX_FD*pad+1;
     buf[off++] = '\n';
+    if (center) {
+        memset(buf + off, ' ', center);
+        off += center;
+    }
     buf[off++] = '|';
     auto irqs = thgrp_->thgrp_lock_.lock();
     for (int fd = 0; fd < MAX_FD; ++fd) {
@@ -1509,6 +1513,10 @@ void proc::show_fdtable_(char* buf) {
     }
     thgrp_->thgrp_lock_.unlock(irqs);
     buf[off++] = '\n';
+    if (center) {
+        memset(buf + off, ' ', center);
+        off += center;
+    }
     memset(buf+off, '-', MAX_FD*pad+2);
     off += MAX_FD*pad+1;
     buf[off++] = '\n';
@@ -1745,6 +1753,7 @@ int proc::syscall_open(regstate* regs) {
                 log_printf("[syscall_open] No open fdtable entry: fd=%d\n", fd);
             }
             dvn->close();
+            thgrp_->thgrp_lock_.unlock(irqs);
             delete dvn;
             return E_MFILE;
         } else if (VFS_PARANOIA >= 2) {
@@ -1755,7 +1764,7 @@ int proc::syscall_open(regstate* regs) {
         bufcache::get().prefetch(ino, 0, true);
     }
 
-    if (VFS_MF_PARANOIA >= 2) {
+    if (VFS_PARANOIA >= 2) {
         log_printf("[syscall_open] Open successful\n");
     }
 
@@ -2767,6 +2776,7 @@ int proc::syscall_pwd(regstate* regs) {
     }
 }
 
+
 // proc::syscall_tree(regs)
 //    Build visualization of file system tree.
 int proc::syscall_tree(regstate* regs) {
@@ -2921,6 +2931,50 @@ static void memshow() {
 }
 
 
+static void fdtableshow() {
+    static unsigned long last_redisplay = 0;
+    static unsigned long last_switch = 0;
+    static int showing = 1;
+
+    // redisplay every 0.04 sec
+    if (last_redisplay != 0 && ticks - last_redisplay < HZ / 25) {
+        return;
+    }
+    last_redisplay = ticks;
+
+    // switch to a new process every 0.5 sec
+    if (ticks - last_switch >= HZ / 2) {
+        showing = (showing + 1) % NPROC;
+        last_switch = ticks;
+    }
+
+    spinlock_guard guard(ptable_lock);
+
+    int search = 0;
+    while ((!ptable[showing]
+            || !ptable[showing]->pagetable_
+            || ptable[showing]->pagetable_ == early_pagetable)
+           && search < NPROC) {
+        showing = (showing + 1) % NPROC;
+        ++search;
+    }
+
+    size_t bufsz = 3*8*MAX_FD + 5;
+    char buf[bufsz];
+    if (ptable[showing]) {
+        ptable[showing]->show_fdtable_(buf, UI_CENTER);
+    }
+    
+    console_fdviewer(ptable[showing], buf);
+
+    if (!ptable[showing]) {
+        console_printf(CPOS(10, 29), 0x0F00, "VFS MAP\n"
+            "                          [All threads have exited]\n"
+            "\n\n\n\n\n\n\n\n\n\n\n");
+    }
+}
+
+
 // tick()
 //    Called once every tick (0.01 sec, 1/HZ) by CPU 0. Updates the `ticks`
 //    counter and performs other periodic maintenance tasks.
@@ -2932,5 +2986,7 @@ void tick() {
     // Update memviewer display
     if (kdisplay.load(std::memory_order_relaxed) == KDISPLAY_MEMVIEWER) {
         memshow();
+    } else if (kdisplay.load(std::memory_order_relaxed) == KDISPLAY_FDVIEWER) {
+        fdtableshow();
     }
 }

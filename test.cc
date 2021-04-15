@@ -23,7 +23,18 @@ char* strapp(char* s1, char* s2, char* buf, bool dir=true) {
 }
 
 int main(void) {
-    printf("WORD: ├ ─\n");
+    if (true || false && true) {
+        printf("1\n");
+    }
+    if (true || false && false) {
+        printf("2\n");
+    }
+    if (true || true && false) {
+        printf("3\n");
+    }
+    if (false || true && false) {
+        printf("4\n");
+    }
 
     return 0;
 }

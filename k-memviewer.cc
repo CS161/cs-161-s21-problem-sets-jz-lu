@@ -267,3 +267,41 @@ void console_memviewer(proc* vmp) {
         console_printf(CPOS(10, 0), 0x0F00, "\n\n\n\n\n\n\n\n\n\n");
     }
 }
+
+void console_fdviewer(proc* fdp, const char* buf) {
+    static proc* last_showing = nullptr;
+    if (fdp != last_showing) {
+        console_clear();
+        last_showing = fdp;
+    }
+    // track physical memory
+    static memusage mu;
+    mu.refresh();
+    // must be called with `ptable_lock` held
+
+    // print physical memory
+    console_printf(CPOS(0, 32), 0x0F00,
+                   "PHYSICAL MEMORY                  @%lu\n",
+                   ticks.load());
+
+    for (int pn = 0; pn * PAGESIZE < memusage::max_view_pa; ++pn) {
+        if (pn % 64 == 0) {
+            console_printf(CPOS(1 + pn/64, 3), 0x0F00, "0x%06X", pn << 12);
+        }
+        console[CPOS(1 + pn/64, 12 + pn%64)] = mu.symbol_at(pn * PAGESIZE);
+    }
+
+    // print virtual memory
+    bool need_clear = true;
+    if (fdp) {
+        console_printf(CPOS(10, 33), 0x0F00,
+                   "VFS MAP FOR %d\n", fdp->id_);
+        if (fdp->pagetable_ && fdp->pagetable_ != early_pagetable) {
+            console_printf(CPOS(15, UI_CENTER), 0xF00, buf);
+            need_clear = false;
+        }
+    }
+    if (need_clear) {
+        console_printf(CPOS(10, 0), 0x0F00, "\n\n\n\n\n\n\n\n\n\n");
+    }
+}

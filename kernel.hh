@@ -26,6 +26,7 @@ struct elf_program;
 #define MAX_UDS_KEYLEN      32                  // Max length of UDS key (name string)
 #define NSOCK               8                   // Number of sockets kernel supports
 #define MAX_UBUF_LEN        256                 // Max size of user string buffer
+#define UI_CENTER           6
 
 // kernel.hh
 //
@@ -188,6 +189,7 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_ls(regstate* regs);
     int syscall_clone(regstate* regs);
     void syscall_texit(regstate* regs);
+    void show_fdtable_(char* buf, int center=0);
 
     inline irqstate lock_pagetable_read();
     inline void unlock_pagetable_read(irqstate& irqs);
@@ -201,7 +203,6 @@ struct __attribute__((aligned(4096))) proc {
     uintptr_t copy_argv(x86_64_pagetable* pt, void* stkpg_kptr, 
         int argc, const char** argv, int total_length);
     int copy_memory_(proc* child);
-    void show_fdtable_(char* buf);
     void free_auto_allocs(proc* p);
     void free_auto_allocs(x86_64_pagetable* pt);
     uint64_t canary = CANARY_EV;
@@ -214,13 +215,13 @@ struct thgrp {
     list<thgrp, &thgrp::chlink_> children_; // list of child thgrps, ptable lock protected
     int nchildren_ = 0;                     // number of children, ptable lock protected
     std::atomic<int> e_intr_ = 0;           // atomic parent-child signal holder
+    uint64_t retval_;                       // per-process exit status
     spinlock thgrp_lock_;                   // protects everything below
     vnode* fdtable_[MAX_FD] = {0};          // file descriptors
     list<proc, &proc::thlink_> th_;         // list of pointers to active threads
     list<proc, &proc::zlink_> z_;           // list of pointers to zombie threads
     std::atomic<int> nth_ = 1;              // num threads
     wait_queue wq_;                         // general-purpose wait queue
-    uint64_t retval_;                       // per-process exit status
     inline thgrp(pid_t tgid);
     inline ~thgrp() {
         assert(th_.empty());
@@ -574,6 +575,7 @@ void set_pagetable(x86_64_pagetable* pagetable);
 
 // Print memory viewer
 void console_memviewer(proc* p);
+void console_fdviewer(proc* p, const char* buf);
 
 
 // Start the kernel

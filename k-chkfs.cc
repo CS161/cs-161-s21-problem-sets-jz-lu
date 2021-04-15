@@ -1652,7 +1652,7 @@ void rwlock::unlock_read() {
 }
 
 void rwlock::lock_write() {
-    assert(!has_write_lock());
+    // assert(!has_write_lock());
     chkfs::mlock_t v = 0;
     while (!mlock.compare_exchange_weak(v, chkfs::mlock_t(-1),
                                         std::memory_order_acquire)) {
