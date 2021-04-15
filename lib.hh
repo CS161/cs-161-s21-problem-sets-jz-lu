@@ -347,6 +347,9 @@ inline bool is_error(uintptr_t r) {
 // sys_waitpid() options
 #define W_NOHANG                1
 
+// VFS options
+#define MAX_FD                  8    // Number of fd's in list.
+
 // sys_open() flags
 #define OF_READ                 1
 #define OF_WRITE                2

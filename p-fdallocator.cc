@@ -1,7 +1,8 @@
 #include "u-lib.hh"
-#define ALLOC_SLOWDOWN 124
+#define OPEN_SLOWDOWN 248
 
 extern uint8_t end[];
+const int nfd = MAX_FD-3;
 
 void process_main() {
     sys_kdisplay(KDISPLAY_FDVIEWER);
@@ -10,14 +11,15 @@ void process_main() {
     // Fork three new copies. (But ignore failures.)
     (void) sys_fork();
     (void) sys_fork();
+    int fds[nfd] = {0};
 
     pid_t p = sys_getpid();
     srand(p);
 
     while (true) {
-        int rn = rand(0, ALLOC_SLOWDOWN - 1);
-        if (rn < p) {
-            int rnmod = rn%5;
+        int rn = rand(0, OPEN_SLOWDOWN - 1);
+        if (rn < 6*p) {
+            int rnmod = rn%24;
             int r;
             switch (rnmod) {
                 case 0: // pipe
@@ -37,12 +39,27 @@ void process_main() {
                     r = sys_open("thoreau.txt", OF_RDWR);
                     break;
                 
-                default: // special file
+                case 4: // special file
                     r = sys_open("/dev/null", OF_RDWR);
                     break;
+                
+                default: // close a file
+                    for (int fd = 0; fd < nfd; ++fd) {
+                        if (fds[fd]) {
+                            sys_close(fds[fd]);
+                            break;
+                        }
+                    }
+                    r = 0;
+                    break;
             }
-            if (r == E_MFILE) {
-                break;
+            if (r > 0) {
+                for (int fd = 0; fd < nfd; ++fd) {
+                    if (!fds[fd]) {
+                        fds[fd] = r;
+                        break;
+                    }
+                }
             }
         }
         sys_yield();
