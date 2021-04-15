@@ -296,10 +296,14 @@ void console_fdviewer(proc* fdp, const char* buf) {
     if (fdp) {
         console_printf(CPOS(10, 33), 0x0F00,
                    "VFS MAP FOR %d\n", fdp->id_);
+        console_printf(CPOS(11, UI_DEEPCENTER-3), 0xf00, "Modes = {R: read, W: write}\n");
+        console_printf(CPOS(12, UI_CENTER-1), 0xf00, 
+            "Types = {C: console, P: pipe, M: mfile, D: disk file, S: special dev}\n");
         if (fdp->pagetable_ && fdp->pagetable_ != early_pagetable) {
             console_printf(CPOS(15, UI_CENTER), 0xF00, buf);
             need_clear = false;
         }
+        console_printf(CPOS(18, UI_DEEPCENTER+4), 0xd00, "Key: (mode@type)\n");
     }
     if (need_clear) {
         console_printf(CPOS(10, 0), 0x0F00, "\n\n\n\n\n\n\n\n\n\n");

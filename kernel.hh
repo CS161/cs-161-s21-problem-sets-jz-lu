@@ -27,6 +27,7 @@ struct elf_program;
 #define NSOCK               8                   // Number of sockets kernel supports
 #define MAX_UBUF_LEN        256                 // Max size of user string buffer
 #define UI_CENTER           6
+#define UI_DEEPCENTER       28
 
 // kernel.hh
 //
