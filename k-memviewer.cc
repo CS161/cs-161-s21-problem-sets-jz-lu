@@ -270,13 +270,8 @@ void console_memviewer(proc* vmp) {
 
 void console_fdviewer(proc* fdp, const char* buf) {
     const int DELAY = 100;
-    static proc* last_showing = nullptr;
     static int delay = DELAY;
     --delay;
-    if (fdp != last_showing) {
-        // console_clear();
-        last_showing = fdp;
-    }
     // track physical memory
     static memusage mu;
     mu.refresh();
@@ -311,7 +306,9 @@ void console_fdviewer(proc* fdp, const char* buf) {
     console_printf(CPOS(23, 0), 0xB00, "Words of wisdom, courtesy of Aakash \"Big Ka$h\" Mishra:\n");
     if (delay <= 0) {
         delay = DELAY;
-        int rn = rand(0, 20);
+        // static int rn = -1;
+        // rn = (rn+1) % 21;
+        int rn = rand(0, 21);
         switch (rn) {
         case 0:
             console_printf(CPOS(24, 0), 0xd00, "\"Wait, Anaconda isnt an Eminem song?\"\n");
@@ -326,7 +323,7 @@ void console_fdviewer(proc* fdp, const char* buf) {
             break;
         
         case 3:
-            console_printf(CPOS(24, 0), 0xd00, "\"Yeah I dont use social media I just gain validation through Ed.\"\n");
+            console_printf(CPOS(24, 0), 0xd00, "\"Yeah I dont use social media I just get validation through hearts on Ed.\"\n");
             break;
         
         case 4:
@@ -358,7 +355,7 @@ void console_fdviewer(proc* fdp, const char* buf) {
             break;
         
         case 11:
-            console_printf(CPOS(24, 0), 0xd00, "\"Variance is more apparent in this picture. Its like if you pack the variance into a burrito\"\n");
+            console_printf(CPOS(24, 0), 0xd00, "\"Getting this stack usage flag to notice me is harder than getting a girl's attention\"\n");
             break;
         
         case 12:
