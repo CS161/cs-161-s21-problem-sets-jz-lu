@@ -2942,8 +2942,8 @@ static void fdtableshow() {
     }
     last_redisplay = ticks;
 
-    // switch to a new process every 0.5 sec
-    if (ticks - last_switch >= HZ / 2) {
+    // switch to a new process every sec
+    if (ticks - last_switch >= HZ) {
         showing = (showing + 1) % NPROC;
         last_switch = ticks;
     }

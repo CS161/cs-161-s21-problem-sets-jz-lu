@@ -1,11 +1,13 @@
 #include "u-lib.hh"
 #define OPEN_SLOWDOWN 248
+#define DELAY         5
 
 extern uint8_t end[];
 const int nfd = MAX_FD-3;
 
 void process_main() {
     sys_kdisplay(KDISPLAY_FDVIEWER);
+    int delay = DELAY;
 
     sys_map_console(console); // Map the console to the addr in lib.hh
     // Fork three new copies. (But ignore failures.)
@@ -19,7 +21,8 @@ void process_main() {
     while (true) {
         int rn = rand(0, OPEN_SLOWDOWN - 1);
         if (rn < 6*p) {
-            int rnmod = rn%24;
+            --delay;
+            int rnmod = rn%36;
             int r;
             switch (rnmod) {
                 case 0: // pipe
@@ -47,7 +50,6 @@ void process_main() {
                     for (int fd = 0; fd < nfd; ++fd) {
                         if (fds[fd]) {
                             sys_close(fds[fd]);
-                            break;
                         }
                     }
                     r = 0;
@@ -62,6 +64,7 @@ void process_main() {
                 }
             }
         }
+        
         sys_yield();
         if (rand() < RAND_MAX / 32) {
             sys_pause();
