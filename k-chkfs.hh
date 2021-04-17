@@ -65,6 +65,7 @@ struct bufcache {
 
     static inline bufcache& get();
     bool full();
+    int count();
 
     bcentry* get_disk_entry(blocknum_t bn,
                             bcentry_clean_function cleaner = nullptr);

@@ -310,20 +310,29 @@ void console_bcviewer(bool active) {
     const size_t bufsz = 256;
     char buf[bufsz];
     bufcache& bc = bufcache::get();
-    console_printf(CPOS(0, UI_DEEPCENTER), 0xF00, "Chickadee Buffer Cache\n");
+    console_printf(CPOS(0, UI_DEEPCENTER), 0xF00, "Buffer Cache: %d loaded\n", bc.count());
     int idx = 0;
     int down = 1;
     while (idx < (int) bc.ne) {
         bc.show_line(idx, buf, UI_CENTER);
         console_printf(CPOS(down+1, UI_CENTER), 0xF00, buf);
         idx += CONSOLE_WIDTH;
-        down += 5;
+        down += 4;
     }
-    console_printf(CPOS(++down, 0), 0x0F00, "\n\n");
+    console_printf(CPOS(++down, 0), 0x0F00, "\n\n\n");
     bc.show_evictq(buf);
     console_printf(CPOS(down, UI_CENTER), 0xd00, "[Evict] ");
     console_printf(CPOS(down, UI_CENTER + 8), 0xF00, buf);
     bc.show_dirtyq(buf);
     console_printf(CPOS(++down, UI_CENTER), 0xd00, "[Dirty] ");
     console_printf(CPOS(down, UI_CENTER + 8), 0xF00, buf);
+    ++down;
+    console_printf(CPOS(++down, UI_DEEPCENTER+3), 0xb00, "Key: (status@type)");
+    console_printf(CPOS(++down, 2*UI_CENTER+2), 0xf00, 
+        "Modes = {Alloc, Loading, Prefetching, Dirty, Clean}\n");
+    console_printf(CPOS(++down, 4), 0xf00, 
+        "Types = {S: superblock, B: free block bitmap, D: data or inode block}\n");
+    if (!active) {
+        console_printf(CPOS(++down, UI_CENTER), 0xe00, "All processes have exited");
+    }
 }

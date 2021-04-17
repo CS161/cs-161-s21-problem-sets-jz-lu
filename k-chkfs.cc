@@ -18,10 +18,16 @@ int bufcache::show_dirtyq(char* buf) {
         memcpy(buf+off, c3, 8);
         off += 8;
     } else {
-        for (auto it = dirty_list_.back(); it; it = dirty_list_.prev(it)) {
+        int n = 0;
+        for (auto it = dirty_list_.back(); it; it = dirty_list_.prev(it), ++n) {
             buf[off++] = ((int) it->bn_) / 10 + ASCII_CONVERT;
             buf[off++] = ((int) it->bn_) % 10 + ASCII_CONVERT; // assumes bc.ne <= 100
             buf[off++] = ' '; // will leave extra space at end
+            if (n == 12) {
+                memset(buf+off, '.', 3);
+                off += 3;
+                break;
+            }
         }
     }
     lock_.unlock(irqs);
@@ -45,18 +51,31 @@ int bufcache::show_evictq(char* buf) {
         memcpy(buf+off, c3, 8);
         off += 8;
     } else {
-        for (auto it = evictq_.back(); it; it = evictq_.prev(it)) {
+        int n = 0;
+        for (auto it = evictq_.back(); it; it = evictq_.prev(it), ++n) {
             buf[off++] = (char) (((int) it->bn_) / 10 + ASCII_CONVERT);
             buf[off++] = (char) (((int) it->bn_) % 10 + ASCII_CONVERT); // assumes bc.ne <= 100
             buf[off++] = ' '; // will leave extra space at end
+            if (n == 12) {
+                memset(buf+off, '.', 3);
+                off += 3;
+                break;
+            }
         }
     }
     lock_.unlock(irqs);
     memcpy(buf + off, c2, strlen(c2)+1);
     off += strlen(c2)+1;
     buf[off] = 0;
-    log_printf("%s\n", buf);
     return 0;
+}
+
+int bufcache::count() {
+    int count = 0;
+    for (size_t i = 0; i < ne; ++i) {
+        if (!e_[i].empty()) ++count; // invariant from docs: empty may be checked lock-free
+    }
+    return count;
 }
 
 bufcache::bufcache() {
@@ -142,9 +161,9 @@ int bufcache::show_line(int idx, char* buf, int center) {
                     buf[off++] = 'P';
                     buf[off++] = '/';
                     if (e_[i].pfstatus_.load() == E_AGAIN) {
-                        buf[off++] = ' ';
-                    } else {
                         buf[off++] = 'W';
+                    } else {
+                        buf[off++] = 'R';
                     }
                     break;
                 default:
