@@ -6,6 +6,8 @@ Leave your name out of this file. Put collaboration notes and credit in
 Answers to written questions
 ----------------------------
 
+# Threads
+
 ## New Design of Thread Architecture
 When implementing threads it becomes apparent that certain metadata are shared among a group of threads, while others are per-thread. Group-shared data include file descriptors, thread group ID (process ID), linked list of thread pointers, and a per-process lock. It is thus convenient to combine them all into one struct and pass pointers to it into new threads when cloning. Note that we generally want each thread to be able to traverse directories independently, so we give each thread its own `cwd`.
 ```c++
@@ -37,6 +39,12 @@ p->tgid_ = curpid++;
 1. `ptable_lock` must precede per-process thread group locks `thgrp::thgrp_lock_`; however, in almost all cases, except for 1-2 lines on occasion, the two locks will not be simultaneously held. 
 2. The thread group `fdtable_, th_` must be protected by `thgrp::thgrp_lock_` after the process has become runnable, i.e. after `boot_process_start() / syscall_fork()`. `nth_` is atomic and may be changed or read (or `compare_exchange_strong()`) atomically by the scheduler and kernel tasks without holding a lock, if it is the only thing being changed and can be done in a single operation. However, the elements of `thgrp_` need not be locked if there is only one thread remaining. In particular, `syscall_exit()` need not do any per-`thgrp` locking after it has woken up from waiting for all threads except for the calling thread to stop running.
 3. To synchronize the exiting of all threads at once via `syscall_exit()`, we add a new state `proc::ps_exiting` and decree that once a process state has become `ps_exiting`, it may no longer become runnable again; `cpustate::schedule()` is endowed with the privilege of changing exit-signaled processes to have `pstate_ = ps_exiting`, which will be checked by `syscall_exit()`. Otherwise, the process state of `proc p` may only be changed by the kernel task for `p`, or by an atomic compare and exchange process, such as that given in `proc::wake()` which is not necessarily called by the kernel task `p`.
+
+# Final Project
+
+
+## Changes to Synchronization Invariants
+There is now a buffer cache visualizer. Since it is not particularly important if the state of an entry is off for half a second in the visualizer, we do not require that the `bcentry` lock be held when copying an entry state to buffer. 
 
 
 Grading notes

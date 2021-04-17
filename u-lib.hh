@@ -456,4 +456,133 @@ int dprintf(int fd, const char* format, ...);
 //    Like `dprintf(1, format, ...)`.
 int printf(const char* format, ...);
 
+
+inline void get_advice(int n) {
+    switch (n) {
+        case 0:
+            console_printf(0xd00, "Wait, Anaconda isnt an Eminem song?\n");
+            break;
+
+        case 1:
+            console_printf(0xd00, "There are more dollar signs in my LaTeX file than in my income.\n");
+            break;
+        
+        case 2:
+            console_printf(0xd00, "I mean, my mind is like a treasure\n");
+            break;
+        
+        case 3:
+            console_printf(0xd00, "Yeah I dont use social media I just get validation through hearts on Ed.\n");
+            break;
+        
+        case 4:
+            console_printf(0xd00, "PEOPLE FALL IN LOVE IN MYSTERIOUS WAYYYYSS, MAYBE ITS ALL PART OF A PLANNNNNNNNNN\n");
+            break;
+        
+        case 5:
+            console_printf(0xd00, "You know how when you put your finger in and you expect it to be firm but then it’s all soft and squishy and you’re just like *ugh*…\n");
+            break;
+        
+        case 6:
+            console_printf(0xd00, "I just want you to know...that I have 100%% credibility! At all times!\n");
+            break;
+        
+        case 7:
+            console_printf(0xd00, "My doctor thinks Im an anti-vaxxer.\n");
+            break;
+        
+        case 8:
+            console_printf(0xd00, "No, YOURE a category error!\n");
+            break;
+
+        case 9:
+            console_printf(0xd00, "Sometimes my genius even manages to amaze me.\n");
+            break;
+        
+        case 10:
+            console_printf(0xd00, "Oh you said sick? I thought you said thicc and I was like yeahhhh\n");
+            break;
+        
+        case 11:
+            console_printf(0xd00, "Getting this stack usage flag to notice me is harder than getting a girl's attention\n");
+            break;
+        
+        case 12:
+            console_printf(0xd00, "If I were a superhero, my name would be P-A-C man!...wait thats pac man.\n");
+            break;
+        
+        case 13:
+            console_printf(0xd00, "*Humming softly* kill em with sadness, kill em with pity\n");
+            break;
+        
+        case 14:
+            console_printf(0xd00, "Its not really networking if most of my network is family right\n");
+            break;
+        
+        case 15:
+            console_printf(0xd00, "I pity those in finals clubs, but maybe its just my extreme antisocial abilities\n");
+            break;
+        
+        case 16:
+            console_printf(0xd00, "I have never been a nerd. I am ultimate non-nerd.\n");
+            break;
+        
+        case 17:
+            console_printf(0xd00, "My next meeting? My next meeting is with FOOD...when Im HUNGRY\n");
+            break;
+        
+        case 18:
+            console_printf(0xd00, "I dont talk like you! I talk more like whats hangin bro yeee yeee\n");
+            break;
+
+        case 19:
+            console_printf(0xd00, "This is just...the perfect banana. I feel kind of like a monkey right now.\n");
+            break;
+
+        case 20:
+            console_printf(0xd00, "Criticizing me?? Everyone should be apologizing to me!\n");
+            break;
+
+        case 21:
+            console_printf(0xd00, "My grandmother said it seems that my genes should have been killed off by natural selection.\n");
+            break;
+        
+        case 22:
+            console_printf(0xd00, "No, YOURE a race condition!\n");
+            break;
+        
+        case 23:
+            console_printf(0xd00, "I can’t even spell eigenvector dude, lower the bar\n");
+            break;
+        
+        case 24:
+            console_printf(0xd00, "*demonic screeching*\n");
+            break;
+        
+        default:
+            break;
+        }
+}
+
+inline int hash(const char* buf, int BUFSZ, int NQUOTE) {
+    int sum = 0, off = 0;
+    while (buf[off] && buf[off] != '\n' && off < BUFSZ) {
+        sum = (sum + (int) buf[off++]) % NQUOTE;
+    }
+    return sum;
+}
+
+inline int nlstrcmp(const char* a, const char* b) {
+    while (true) {
+        unsigned char ac = *a, bc = *b;
+        if (ac == '\n') {
+            ac = '\0';
+        }
+        if (ac == 0 || bc == 0 || ac != bc) {
+            return (ac > bc) - (ac < bc);
+        }
+        ++a, ++b;
+    }
+}
+
 #endif

@@ -343,6 +343,7 @@ inline bool is_error(uintptr_t r) {
 #define KDISPLAY_CONSOLE        0
 #define KDISPLAY_MEMVIEWER      1
 #define KDISPLAY_FDVIEWER       2
+#define KDISPLAY_BUFCACHE       3
 
 // sys_waitpid() options
 #define W_NOHANG                1

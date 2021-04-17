@@ -2974,6 +2974,25 @@ static void fdtableshow() {
     }
 }
 
+static void bcshow() {
+    static unsigned long last_redisplay = 0;
+
+    // redisplay every 0.04 sec
+    if (last_redisplay != 0 && ticks - last_redisplay < HZ / 25) {
+        return;
+    }
+    last_redisplay = ticks;
+    bool going = false;
+
+    spinlock_guard guard(ptable_lock);
+    for (int id = 2; id < NPROC; ++id) {
+        if (ptable[id]) {
+            going = true;
+        }
+    }
+    console_bcviewer(going);    
+}
+
 
 // tick()
 //    Called once every tick (0.01 sec, 1/HZ) by CPU 0. Updates the `ticks`

@@ -208,8 +208,8 @@ uint16_t memusage::symbol_at(uintptr_t pa) const {
 }
 
 
-static void console_memviewer_virtual(memusage& mu, proc* vmp) {
-    console_printf(CPOS(10, 26), 0x0F00,
+static void console_memviewer_virtual(memusage& mu, proc* vmp, int down=10) {
+    console_printf(CPOS(down, 26), 0x0F00,
                    "VIRTUAL ADDRESS SPACE FOR %d\n", vmp->id_);
 
     for (vmiter it(vmp);
@@ -217,7 +217,7 @@ static void console_memviewer_virtual(memusage& mu, proc* vmp) {
          it += PAGESIZE) {
         unsigned long pn = it.va() / PAGESIZE;
         if (pn % 64 == 0) {
-            console_printf(CPOS(11 + pn / 64, 3), 0x0F00,
+            console_printf(CPOS(down+1 + pn / 64, 3), 0x0F00,
                            "0x%06X ", it.va());
         }
         uint16_t ch;
@@ -230,7 +230,7 @@ static void console_memviewer_virtual(memusage& mu, proc* vmp) {
                 ch ^= z | (z << 4);
             }
         }
-        console[CPOS(11 + pn/64, 12 + pn%64)] = ch;
+        console[CPOS(down+1 + pn/64, 12 + pn%64)] = ch;
     }
 }
 
@@ -269,136 +269,54 @@ void console_memviewer(proc* vmp) {
 }
 
 void console_fdviewer(proc* fdp, const char* buf) {
-    const int DELAY = 100;
-    static int delay = DELAY;
-    --delay;
     // track physical memory
     static memusage mu;
     mu.refresh();
     // must be called with `ptable_lock` held
 
-    // print physical memory
-    console_printf(CPOS(0, 32), 0x0F00,
-                   "PHYSICAL MEMORY                  @%lu\n",
-                   ticks.load());
-
-    for (int pn = 0; pn * PAGESIZE < memusage::max_view_pa; ++pn) {
-        if (pn % 64 == 0) {
-            console_printf(CPOS(1 + pn/64, 3), 0x0F00, "0x%06X", pn << 12);
+    // print virtual memory
+    bool need_vm_clear = true;
+    if (fdp) {
+        if (fdp->pagetable_ && fdp->pagetable_ != early_pagetable) {
+            console_memviewer_virtual(mu, fdp, 0);
+            need_vm_clear = false;
         }
-        console[CPOS(1 + pn/64, 12 + pn%64)] = mu.symbol_at(pn * PAGESIZE);
+    }
+    if (need_vm_clear) {
+        console_printf(CPOS(10, 0), 0x0F00, "\n\n\n\n\n\n\n\n\n\n");
     }
 
-    // print virtual memory
+    // print file descriptor table
     bool need_clear = true;
+    const int down = 15;
     if (fdp) {
-        console_printf(CPOS(10, 33), 0x0F00,
+        console_printf(CPOS(down, 33), 0x0F00,
                    "VFS MAP FOR %d\n", fdp->id_);
-        console_printf(CPOS(11, UI_DEEPCENTER-3), 0xf00, "Modes = {R: read, W: write}\n");
-        console_printf(CPOS(12, UI_CENTER-1), 0xf00, 
+        console_printf(CPOS(down+1, UI_DEEPCENTER-3), 0xf00, "Modes = {R: read, W: write}\n");
+        console_printf(CPOS(down+2, UI_CENTER-1), 0xf00, 
             "Types = {C: console, P: pipe, M: mfile, D: disk file, S: special dev}\n");
         if (fdp->pagetable_ && fdp->pagetable_ != early_pagetable) {
-            console_printf(CPOS(15, UI_CENTER), 0xF00, buf);
+            console_printf(CPOS(down+5, UI_CENTER), 0xF00, buf);
             need_clear = false;
         }
-        console_printf(CPOS(18, UI_DEEPCENTER+4), 0xd00, "Key: (mode@type)\n");
-    }
-    console_printf(CPOS(23, 0), 0xB00, "Words of wisdom, courtesy of Aakash \"Big Ka$h\" Mishra:\n");
-    if (delay <= 0) {
-        delay = DELAY;
-        // static int rn = -1;
-        // rn = (rn+1) % 21;
-        int rn = rand(0, 21);
-        switch (rn) {
-        case 0:
-            console_printf(CPOS(24, 0), 0xd00, "\"Wait, Anaconda isnt an Eminem song?\"\n");
-            break;
-
-        case 1:
-            console_printf(CPOS(24, 0), 0xd00, "\"There are more dollar signs in my LaTeX file than in my income.\"\n");
-            break;
-        
-        case 2:
-            console_printf(CPOS(24, 0), 0xd00, "\"I mean, my mind is like a treasure\"\n");
-            break;
-        
-        case 3:
-            console_printf(CPOS(24, 0), 0xd00, "\"Yeah I dont use social media I just get validation through hearts on Ed.\"\n");
-            break;
-        
-        case 4:
-            console_printf(CPOS(24, 0), 0xd00, "\"PEOPLE FALL IN LOVE IN MYSTERIOUS WAYYYYSS, MAYBE ITS ALL PART OF A PLANNNNNNNNNN\"\n");
-            break;
-        
-        case 5:
-            console_printf(CPOS(24, 0), 0xd00, "\"You know how when you put your finger in and you expect it to be firm but then it’s all soft and squishy and you’re just like *ugh*…\"\n");
-            break;
-        
-        case 6:
-            console_printf(CPOS(24, 0), 0xd00, "\"I just want you to know...that I have 100%% credibility! At all times!\"\n");
-            break;
-        
-        case 7:
-            console_printf(CPOS(24, 0), 0xd00, "\"My doctor thinks Im an anti-vaxxer.\"\n");
-            break;
-        
-        case 8:
-            console_printf(CPOS(24, 0), 0xd00, "\"No, YOURE a category error!\"\n");
-            break;
-
-        case 9:
-            console_printf(CPOS(24, 0), 0xd00, "\"Sometimes my genius even manages to amaze me.\"\n");
-            break;
-        
-        case 10:
-            console_printf(CPOS(24, 0), 0xd00, "\"Oh you said sick? I thought you said thicc and I was like yeahhhh\"\n");
-            break;
-        
-        case 11:
-            console_printf(CPOS(24, 0), 0xd00, "\"Getting this stack usage flag to notice me is harder than getting a girl's attention\"\n");
-            break;
-        
-        case 12:
-            console_printf(CPOS(24, 0), 0xd00, "\"If I were a superhero, my name would be P-A-C man!...wait thats pac man.\"\n");
-            break;
-        
-        case 13:
-            console_printf(CPOS(24, 0), 0xd00, "*Humming softly* \"kill em with sadness, kill em with pity\"\n");
-            break;
-        
-        case 14:
-            console_printf(CPOS(24, 0), 0xd00, "\"Its not really networking if most of my network is family right\"\n");
-            break;
-        
-        case 15:
-            console_printf(CPOS(24, 0), 0xd00, "\"I pity those in finals clubs, but maybe its just my extreme antisocial abilities\"\n");
-            break;
-        
-        case 16:
-            console_printf(CPOS(24, 0), 0xd00, "\"I have never been a nerd. I am ultimate non-nerd.\"\n");
-            break;
-        
-        case 17:
-            console_printf(CPOS(24, 0), 0xd00, "\"My next meeting? My next meeting is with FOOD...when Im HUNGRY\"\n");
-            break;
-        
-        case 18:
-            console_printf(CPOS(24, 0), 0xd00, "\"I dont talk like you! I talk more like whats hangin bro yeee yeee\"\n");
-            break;
-
-        case 19:
-            console_printf(CPOS(24, 0), 0xd00, "\"This is just...the perfect banana. I feel kind of like a monkey right now.\"\n");
-            break;
-
-        case 20:
-            console_printf(CPOS(24, 0), 0xd00, "\"Criticizing me?? Everyone should be apologizing to me!\"\n");
-            break;
-        
-        default:
-            break;
-        }
+        console_printf(CPOS(down+8, UI_DEEPCENTER+4), 0xd00, "Key: (mode@type)\n");
     }
     if (need_clear) {
-        console_printf(CPOS(10, 0), 0x0F00, "\n\n\n\n\n\n\n\n\n\n");
+        console_printf(CPOS(down, 0), 0x0F00, "\n\n\n\n\n\n\n\n\n\n");
+    }
+}
+
+void console_bcviewer(bool active) {
+    const size_t bufsz = 256;
+    char buf[bufsz];
+    bufcache& bc = bufcache::get();
+    console_printf(CPOS(0, UI_DEEPCENTER), 0xF00, "Chickadee Buffer Cache\n");
+    int idx = 0;
+    int down = 1;
+    while (idx < bc.ne) {
+        bc.show_line(idx, buf, UI_CENTER);
+        console_printf(CPOS(down+1, UI_CENTER), 0xF00, buf);
+        idx += CONSOLE_WIDTH;
+        down += 5;
     }
 }

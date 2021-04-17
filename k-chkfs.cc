@@ -4,26 +4,41 @@
 
 bufcache bufcache::bc;
 
-// Debugging helper function: visualize dirty list block numbers.
-[[maybe_unused]] static void print_dirty_list() {
-    bufcache& bc = bufcache::get();
-    log_printf("Dirty --> [ ");
-    for (auto it = bc.dirty_list_.front(); it; it = bc.dirty_list_.next(it)) {
-        log_printf("%d ", it->bn_);
+int bufcache::show_dirtyq(char* buf) {
+    const uint64_t ASCII_CONVERT = 48; // takes int(0) to char(0)
+    char c1[12] = "BACK --> ";
+    char c2[13] = "--> FRONT";
+    off_t off = 0;
+    memcpy(buf + off, c1, 11);
+    off += 11;
+    auto irqs = lock_.lock();
+    for (auto it = dirty_list_.back(); it; it = dirty_list_.prev(it)) {
+        buf[off++] = ((int) it->bn_) / 10 + ASCII_CONVERT;
+        buf[off++] = ((int) it->bn_) % 10 + ASCII_CONVERT; // assumes bc.ne <= 100
+        buf[off++] = ' '; // will leave extra space at end
     }
-    log_printf("]\n");
+    lock_.unlock(irqs);
+    memcpy(buf + off - 1, c2, 12); // -1 for the extra space at the end
+    off += 12 - 1;
 }
 
-// Debugging helper function: visualize evict q list block numbers.
-// Use for light single-process debugging only--violates state read invariants for multiple cores.
-[[maybe_unused]] static void print_evict_queue() {
-    bufcache& bc = bufcache::get();
-    log_printf("Evictq (es@bn) --> [ ");
-    for (auto it = bc.evictq_.front(); it; it = bc.evictq_.next(it)) {
-        int localstate = it->estate_;
-        log_printf("%d@%d ", localstate, it->bn_);
+
+int bufcache::show_evictq(char* buf) {
+    const uint64_t ASCII_CONVERT = 48; // takes int(0) to char(0)
+    char c1[12] = "BACK --> ";
+    char c2[13] = "--> FRONT";
+    off_t off = 0;
+    memcpy(buf + off, c1, 11);
+    off += 11;
+    auto irqs = lock_.lock();
+    for (auto it = evictq_.back(); it; it = evictq_.prev(it)) {
+        buf[off++] = ((int) it->bn_) / 10 + ASCII_CONVERT;
+        buf[off++] = ((int) it->bn_) % 10 + ASCII_CONVERT; // assumes bc.ne <= 100
+        buf[off++] = ' '; // will leave extra space at end
     }
-    log_printf("]\n");
+    lock_.unlock(irqs);
+    memcpy(buf + off - 1, c2, 12); // -1 for the extra space at the end
+    off += 12 - 1;
 }
 
 bufcache::bufcache() {
@@ -66,6 +81,96 @@ size_t bufcache::evict() {
     }
 }
 
+int bufcache::show_line(int idx, char* buf, int center) {
+    if (idx % CONSOLE_WIDTH) {
+        return -1;
+    }
+    auto superblock_entry = get_disk_entry(0);
+    assert(superblock_entry);
+    auto& sb = *reinterpret_cast<chkfs::superblock*>
+        (&superblock_entry->buf_[chkfs::superblock_offset]);
+    superblock_entry->put();
+
+    off_t off = 0;
+    memset(buf + off, '-', MAX_FD*pad+1);
+    off += MAX_FD*pad+1;
+    buf[off++] = '\n';
+    if (center) {
+        memset(buf + off, ' ', center);
+        off += center;
+    }
+    buf[off++] = '|';
+    auto irqs = lock_.lock();
+    for (int i = 0; i < CONSOLE_WIDTH; ++i) {
+        if (!e_[idx+i].empty()) {
+            buf[off++] = ' ';
+            switch (e_[i].estate_) {
+                case bcentry::es_allocated:
+                    buf[off++] = ' ';
+                    buf[off++] = 'A';
+                    buf[off++] = ' ';
+                    break;
+                case bcentry::es_loading:
+                    buf[off++] = ' ';
+                    buf[off++] = 'L';
+                    buf[off++] = ' ';
+                    break;
+                case bcentry::es_clean:
+                    buf[off++] = ' ';
+                    buf[off++] = 'C';
+                    buf[off++] = ' ';
+                    break;
+                case bcentry::es_dirty:
+                    buf[off++] = ' ';
+                    buf[off++] = 'D';
+                    buf[off++] = ' ';
+                    break;
+                case bcentry::es_prefetching:
+                    buf[off++] = 'P';
+                    buf[off++] = '/';
+                    if (e_[i].pfstatus_.load() == E_AGAIN) {
+                        buf[off++] = ' ';
+                    } else {
+                        buf[off++] = 'W';
+                    }
+                    break;
+                default:
+                    buf[off++] = '#';
+                    buf[off++] = '#';
+                    buf[off++] = '#';
+                    break;
+            }
+            buf[off++] = '@';
+            if (e_[idx+i].bn_ == 0) {
+                buf[off++] = 'S';
+            } else if (e_[idx+i].bn_ == sb.fbb_bn) {
+                buf[off++] = 'B';
+            } else if (e_[idx+i].bn_ >= sb.inode_bn && e_[idx+i].bn_ < sb.inode_bn + sb.ninodes) {
+                buf[off++] = 'I';
+            } else { // data block
+                buf[off++] = 'D';
+            }
+            buf[off++] = ' ';
+        } else { // Empty entry
+            memset(buf+off, ' ', 3);
+            off += 3;
+            buf[off++] = '-';
+            memset(buf+off, ' ', 3);
+            off += 3;
+        }
+        buf[off++] = '|';
+    }
+    lock_.unlock(irqs);
+    buf[off++] = '\n';
+    if (center) {
+        memset(buf + off, ' ', center);
+        off += center;
+    }
+    memset(buf+off, '-', MAX_FD*pad+2);
+    off += MAX_FD*pad+1;
+    buf[off++] = '\n';
+    buf[off++] = '\0';
+}
 
 // bufcache::full()
 //    Returns true if all entries taken.

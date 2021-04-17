@@ -27,6 +27,7 @@ struct elf_program;
 #define MAX_UBUF_LEN        256                 // Max size of user string buffer
 #define UI_CENTER           6
 #define UI_DEEPCENTER       28
+#define CONSOLE_WIDTH       8
 
 // kernel.hh
 //
@@ -304,6 +305,7 @@ extern wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 extern wait_heap time_heap; // Wait heap
 extern wait_queue ewq; // exit wait queue
 extern rwlock fstlock; // File system tree lock
+extern const uint64_t pad;
 
 // Debugging and testing flags
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
@@ -576,7 +578,7 @@ void set_pagetable(x86_64_pagetable* pagetable);
 // Print memory viewer
 void console_memviewer(proc* p);
 void console_fdviewer(proc* p, const char* buf);
-
+void console_bcviewer(bool active);
 
 // Start the kernel
 [[noreturn]] void kernel_start(const char* command);

@@ -71,6 +71,9 @@ struct bufcache {
     int prefetch(chkfs::inode* ino, off_t off, bool inclusive=false, int nfetch=8);
 
     int sync(int drop);
+    int show_line(int idx, char* buf, int center=0);
+    int show_evictq(char* buf);
+    int show_dirtyq(char* buf);
     
  private:
     static bufcache bc;
