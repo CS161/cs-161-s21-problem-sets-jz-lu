@@ -319,11 +319,11 @@ void console_bcviewer(bool active) {
         idx += CONSOLE_WIDTH;
         down += 5;
     }
+    console_printf(CPOS(++down, 0), 0x0F00, "\n\n");
     bc.show_evictq(buf);
-    console_printf(CPOS(++down, UI_CENTER), 0xd00, "[Evict] ");
+    console_printf(CPOS(down, UI_CENTER), 0xd00, "[Evict] ");
     console_printf(CPOS(down, UI_CENTER + 8), 0xF00, buf);
     bc.show_dirtyq(buf);
     console_printf(CPOS(++down, UI_CENTER), 0xd00, "[Dirty] ");
     console_printf(CPOS(down, UI_CENTER + 8), 0xF00, buf);
-    // TODO
 }

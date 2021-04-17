@@ -7,11 +7,11 @@ bufcache bufcache::bc;
 // The next 3 functions assume the buffer is sufficiently large.
 int bufcache::show_dirtyq(char* buf) {
     const uint64_t ASCII_CONVERT = 48; // takes int(0) to char(0)
-    char c1[10] = "BACK --> ";
-    char c2[10] = "--> FRONT";
+    char c1[] = "IN --> ";
+    char c2[] = "--> OUT\0";
     off_t off = 0;
-    memcpy(buf + off, c1, 9);
-    off += 9;
+    memcpy(buf + off, c1, strlen(c1));
+    off += strlen(c1);
     auto irqs = lock_.lock();
     if (!dirty_list_.front()) {
         char c3[9] = "(empty) ";
@@ -25,19 +25,20 @@ int bufcache::show_dirtyq(char* buf) {
         }
     }
     lock_.unlock(irqs);
-    memcpy(buf + off, c2, 10);
-    off += 10;
+    memcpy(buf + off, c2, strlen(c2));
+    off += strlen(c2);
+    buf[off] = 0;
     return 0;
 }
 
 
 int bufcache::show_evictq(char* buf) {
     const uint64_t ASCII_CONVERT = 48; // takes int(0) to char(0)
-    char c1[10] = "BACK --> ";
-    char c2[10] = "--> FRONT";
+    char c1[] = "IN --> ";
+    char c2[] = "--> OUT";
     off_t off = 0;
-    memcpy(buf + off, c1, 9);
-    off += 9;
+    memcpy(buf + off, c1, strlen(c1));
+    off += strlen(c1);
     auto irqs = lock_.lock();
     if (!evictq_.front()) {
         char c3[9] = "(empty) ";
@@ -51,8 +52,10 @@ int bufcache::show_evictq(char* buf) {
         }
     }
     lock_.unlock(irqs);
-    memcpy(buf + off, c2, 10);
-    off += 10;
+    memcpy(buf + off, c2, strlen(c2)+1);
+    off += strlen(c2)+1;
+    buf[off] = 0;
+    log_printf("%s\n", buf);
     return 0;
 }
 
@@ -100,11 +103,6 @@ int bufcache::show_line(int idx, char* buf, int center) {
     if (idx % CONSOLE_WIDTH) {
         return -1;
     }
-    auto superblock_entry = get_disk_entry(0);
-    assert(superblock_entry);
-    auto& sb = *reinterpret_cast<chkfs::superblock*>
-        (&superblock_entry->buf_[chkfs::superblock_offset]);
-    superblock_entry->put();
 
     off_t off = 0;
     memset(buf + off, '-', MAX_FD*pad+1);
@@ -158,10 +156,8 @@ int bufcache::show_line(int idx, char* buf, int center) {
             buf[off++] = '@';
             if (e_[idx+i].bn_ == 0) {
                 buf[off++] = 'S';
-            } else if (e_[idx+i].bn_ == sb.fbb_bn) {
-                buf[off++] = 'B';
-            } else if (e_[idx+i].bn_ >= sb.inode_bn && e_[idx+i].bn_ < sb.inode_bn + sb.ninodes) {
-                buf[off++] = 'I';
+            } else if (e_[idx+i].bn_ == 1) {
+                buf[off++] = 'M';
             } else { // data block
                 buf[off++] = 'D';
             }

@@ -66,8 +66,6 @@ void cpustate::disable_irq(int irqno) {
 void cpustate::enqueue(proc* p) {
     spinlock_guard guard(runq_lock_);
     if (current_ != p && !p->runq_links_.is_linked()) {
-        log_printf("[cpu::enqueue] Is proc %p, PID=%d runnable? %s\n",
-            p, p->id_, p->pstate_ == proc::ps_runnable ? "YUHH" : "Naww");
         assert(p->resumable() || p->pstate_ != proc::ps_runnable);
         runq_.push_back(p);
     }
@@ -154,6 +152,4 @@ void cpustate::init_idle_task() {
     assert(!idle_task_);
     idle_task_ = knew<proc>(nullptr, nullptr);
     idle_task_->init_kernel(-1, idle);
-    log_printf("idle task initialized\n");
-    assert(idle_task_->resumable());
 }

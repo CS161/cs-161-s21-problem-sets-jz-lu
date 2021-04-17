@@ -689,7 +689,6 @@ inline bool proc::resumable() const {
     assert(!(regs_ && yields_));            // at most one at a time
     assert(!regs_ || contains(regs_));      // `regs_` points within this
     assert(!yields_ || contains(yields_));  // same for `yields_`
-    log_printf("[resumable-id=%d] regs_=%p, yields_=%p\n", id_, regs_, yields_);
     return regs_ || yields_;
 }
 
