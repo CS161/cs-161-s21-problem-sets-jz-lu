@@ -66,10 +66,8 @@ void cpustate::disable_irq(int irqno) {
 void cpustate::enqueue(proc* p) {
     spinlock_guard guard(runq_lock_);
     if (current_ != p && !p->runq_links_.is_linked()) {
-        if (WAITQ_PARANOIA >= 2) {
-            log_printf("[cpu::enqueue] Is proc %p, PID=%d runnable? %s\n",
-                p, p->id_, p->pstate_ == proc::ps_runnable ? "YUHH" : "Naww");
-        }
+        log_printf("[cpu::enqueue] Is proc %p, PID=%d runnable? %s\n",
+            p, p->id_, p->pstate_ == proc::ps_runnable ? "YUHH" : "Naww");
         assert(p->resumable() || p->pstate_ != proc::ps_runnable);
         runq_.push_back(p);
     }
@@ -84,10 +82,6 @@ void cpustate::enqueue(proc* p) {
 void cpustate::schedule(proc* yielding_from) {
     assert(contains(rdrsp()));     // running on CPU stack
     assert(is_cli());              // interrupts are currently disabled
-    if (spinlock_depth_) {
-        log_printf("[schedule] Current process tid=%d, tgid=%d\n", 
-        current_->id_, current_->thgrp_->tgid_);
-    }
     assert(spinlock_depth_ == 0);  // no spinlocks are held
 
     // initialize idle task
@@ -160,4 +154,6 @@ void cpustate::init_idle_task() {
     assert(!idle_task_);
     idle_task_ = knew<proc>(nullptr, nullptr);
     idle_task_->init_kernel(-1, idle);
+    log_printf("idle task initialized\n");
+    assert(idle_task_->resumable());
 }

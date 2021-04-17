@@ -4,41 +4,56 @@
 
 bufcache bufcache::bc;
 
+// The next 3 functions assume the buffer is sufficiently large.
 int bufcache::show_dirtyq(char* buf) {
     const uint64_t ASCII_CONVERT = 48; // takes int(0) to char(0)
-    char c1[12] = "BACK --> ";
-    char c2[13] = "--> FRONT";
+    char c1[10] = "BACK --> ";
+    char c2[10] = "--> FRONT";
     off_t off = 0;
-    memcpy(buf + off, c1, 11);
-    off += 11;
+    memcpy(buf + off, c1, 9);
+    off += 9;
     auto irqs = lock_.lock();
-    for (auto it = dirty_list_.back(); it; it = dirty_list_.prev(it)) {
-        buf[off++] = ((int) it->bn_) / 10 + ASCII_CONVERT;
-        buf[off++] = ((int) it->bn_) % 10 + ASCII_CONVERT; // assumes bc.ne <= 100
-        buf[off++] = ' '; // will leave extra space at end
+    if (!dirty_list_.front()) {
+        char c3[9] = "(empty) ";
+        memcpy(buf+off, c3, 8);
+        off += 8;
+    } else {
+        for (auto it = dirty_list_.back(); it; it = dirty_list_.prev(it)) {
+            buf[off++] = ((int) it->bn_) / 10 + ASCII_CONVERT;
+            buf[off++] = ((int) it->bn_) % 10 + ASCII_CONVERT; // assumes bc.ne <= 100
+            buf[off++] = ' '; // will leave extra space at end
+        }
     }
     lock_.unlock(irqs);
-    memcpy(buf + off - 1, c2, 12); // -1 for the extra space at the end
-    off += 12 - 1;
+    memcpy(buf + off, c2, 10);
+    off += 10;
+    return 0;
 }
 
 
 int bufcache::show_evictq(char* buf) {
     const uint64_t ASCII_CONVERT = 48; // takes int(0) to char(0)
-    char c1[12] = "BACK --> ";
-    char c2[13] = "--> FRONT";
+    char c1[10] = "BACK --> ";
+    char c2[10] = "--> FRONT";
     off_t off = 0;
-    memcpy(buf + off, c1, 11);
-    off += 11;
+    memcpy(buf + off, c1, 9);
+    off += 9;
     auto irqs = lock_.lock();
-    for (auto it = evictq_.back(); it; it = evictq_.prev(it)) {
-        buf[off++] = ((int) it->bn_) / 10 + ASCII_CONVERT;
-        buf[off++] = ((int) it->bn_) % 10 + ASCII_CONVERT; // assumes bc.ne <= 100
-        buf[off++] = ' '; // will leave extra space at end
+    if (!evictq_.front()) {
+        char c3[9] = "(empty) ";
+        memcpy(buf+off, c3, 8);
+        off += 8;
+    } else {
+        for (auto it = evictq_.back(); it; it = evictq_.prev(it)) {
+            buf[off++] = (char) (((int) it->bn_) / 10 + ASCII_CONVERT);
+            buf[off++] = (char) (((int) it->bn_) % 10 + ASCII_CONVERT); // assumes bc.ne <= 100
+            buf[off++] = ' '; // will leave extra space at end
+        }
     }
     lock_.unlock(irqs);
-    memcpy(buf + off - 1, c2, 12); // -1 for the extra space at the end
-    off += 12 - 1;
+    memcpy(buf + off, c2, 10);
+    off += 10;
+    return 0;
 }
 
 bufcache::bufcache() {
@@ -170,6 +185,7 @@ int bufcache::show_line(int idx, char* buf, int center) {
     off += MAX_FD*pad+1;
     buf[off++] = '\n';
     buf[off++] = '\0';
+    return 0;
 }
 
 // bufcache::full()
@@ -302,7 +318,6 @@ bcentry* bufcache::get_disk_entry(chkfs::blocknum_t bn,
 
     // load block
     bool ok = e_[i].load(irqs, cleaner);
-
 
     // unlock and return entry
     if (!ok) {

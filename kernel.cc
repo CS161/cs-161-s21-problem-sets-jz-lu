@@ -2976,20 +2976,27 @@ static void fdtableshow() {
 
 static void bcshow() {
     static unsigned long last_redisplay = 0;
+    static bool first = true;
+    if (first) {
+        first = false;
+        return;
+    }
 
     // redisplay every 0.04 sec
     if (last_redisplay != 0 && ticks - last_redisplay < HZ / 25) {
         return;
     }
+
     last_redisplay = ticks;
     bool going = false;
 
-    spinlock_guard guard(ptable_lock);
+    auto irqs = ptable_lock.lock();
     for (int id = 2; id < NPROC; ++id) {
         if (ptable[id]) {
             going = true;
         }
     }
+    ptable_lock.unlock(irqs);
     console_bcviewer(going);    
 }
 
@@ -3007,5 +3014,7 @@ void tick() {
         memshow();
     } else if (kdisplay.load(std::memory_order_relaxed) == KDISPLAY_FDVIEWER) {
         fdtableshow();
+    } else if (kdisplay.load(std::memory_order_relaxed) == KDISPLAY_BUFCACHE) {
+        bcshow();
     }
 }

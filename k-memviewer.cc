@@ -313,10 +313,17 @@ void console_bcviewer(bool active) {
     console_printf(CPOS(0, UI_DEEPCENTER), 0xF00, "Chickadee Buffer Cache\n");
     int idx = 0;
     int down = 1;
-    while (idx < bc.ne) {
+    while (idx < (int) bc.ne) {
         bc.show_line(idx, buf, UI_CENTER);
         console_printf(CPOS(down+1, UI_CENTER), 0xF00, buf);
         idx += CONSOLE_WIDTH;
         down += 5;
     }
+    bc.show_evictq(buf);
+    console_printf(CPOS(++down, UI_CENTER), 0xd00, "[Evict] ");
+    console_printf(CPOS(down, UI_CENTER + 8), 0xF00, buf);
+    bc.show_dirtyq(buf);
+    console_printf(CPOS(++down, UI_CENTER), 0xd00, "[Dirty] ");
+    console_printf(CPOS(down, UI_CENTER + 8), 0xF00, buf);
+    // TODO
 }

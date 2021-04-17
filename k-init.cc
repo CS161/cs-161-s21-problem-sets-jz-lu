@@ -208,7 +208,7 @@ void init_constructors() {
 memrangeset<16> physical_ranges(0x100000000UL);
 
 void init_physical_ranges() {
-    log_printf("Initializing physical ranges\n");
+    log_printf("Initializing physical memory\n");
     if (USING_SLAB_ALLOCATOR) {
         log_printf("Slab allocator status: ON\n");
     } else {
