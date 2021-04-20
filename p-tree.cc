@@ -3,9 +3,6 @@ extern uint8_t end[];
 
 // print file system directory tree.
 void process_main(int argc, char** argv) {
-    if (argv[1]) {
-        console_printf(0xe00, "Warning: tree arguments are ignored\n");
-    }
     char* buf = reinterpret_cast<char*>(
         round_up(reinterpret_cast<uintptr_t>(end), PAGESIZE) + 16 * PAGESIZE
     );

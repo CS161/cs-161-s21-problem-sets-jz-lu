@@ -20,8 +20,9 @@ int bufcache::show_dirtyq(char* buf) {
     } else {
         int n = 0;
         for (auto it = dirty_list_.back(); it; it = dirty_list_.prev(it), ++n) {
-            buf[off++] = ((int) it->bn_) / 10 + ASCII_CONVERT;
-            buf[off++] = ((int) it->bn_) % 10 + ASCII_CONVERT; // assumes bc.ne <= 100
+            int idx = it->index();
+            buf[off++] = (char) (idx/10 + ASCII_CONVERT);
+            buf[off++] = (char) (idx%10 + ASCII_CONVERT); // assumes bc.ne <= 100
             buf[off++] = ' '; // will leave extra space at end
             if (n == 12) {
                 memset(buf+off, '.', 3);
@@ -53,8 +54,9 @@ int bufcache::show_evictq(char* buf) {
     } else {
         int n = 0;
         for (auto it = evictq_.back(); it; it = evictq_.prev(it), ++n) {
-            buf[off++] = (char) (((int) it->bn_) / 10 + ASCII_CONVERT);
-            buf[off++] = (char) (((int) it->bn_) % 10 + ASCII_CONVERT); // assumes bc.ne <= 100
+            int idx = (int) it->index();
+            buf[off++] = (char) (idx/10 + ASCII_CONVERT);
+            buf[off++] = (char) (idx%10 + ASCII_CONVERT); // assumes bc.ne <= 100
             buf[off++] = ' '; // will leave extra space at end
             if (n == 12) {
                 memset(buf+off, '.', 3);

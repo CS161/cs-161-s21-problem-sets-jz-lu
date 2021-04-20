@@ -49,3 +49,6 @@ There is now a buffer cache visualizer. Since it is not particularly important i
 
 Grading notes
 -------------
+Extra, extra, extrac, extra, ...., extra credit
+Introducing...Aakash-bot!
+Type `make run-oracle` then try asking a question. To get the best response of all, type `nice`.

@@ -564,11 +564,13 @@ inline void get_advice(int n) {
         }
 }
 
+// Basic hash function for strings, returns num modulo NQUOTE.
 inline int hash(const char* buf, int BUFSZ, int NQUOTE) {
     int sum = 0, off = 0;
     while (buf[off] && buf[off] != '\n' && off < BUFSZ) {
         sum = (sum + (int) buf[off++]) % NQUOTE;
     }
+    sum = (sum + off) % NQUOTE;
     return sum;
 }
 

@@ -7,7 +7,7 @@ void process_main(int argc, char** argv) {
 
     for (int i = 1; i == 1 || i < argc; ++i) {
         console_printf(0xB00, "Big Ka$h: ");
-        console_printf(0xd00, "Yo yo! Im Aakash-bot, PACare.io CTO and future Citadel software engineer. Ask me for advice!\n");
+        console_printf(0xd00, "Yo yo! Im Aakash-bot, the guy who finished implementing networking before everyone else even started on threading. Ask me for advice!\n");
         int f = 0;
         if (i < argc && strcmp(argv[i], "-") != 0) {
             f = sys_open(argv[i], OF_READ);
