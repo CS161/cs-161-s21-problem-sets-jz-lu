@@ -444,6 +444,15 @@ pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top);
 }
 
 
+// sys_futex(word, futex_op, val)
+//    Futex system call method on address given by word.
+inline int sys_futex(std::atomic<int>* word, int futex_op, uint32_t val, long timeout_msec) {
+    access_memory(word);
+    return make_syscall(SYSCALL_FUTEX, 
+        reinterpret_cast<uintptr_t>(word), futex_op, val, timeout_msec);
+}
+
+
 // dprintf(fd, format, ...)
 //    Construct a string from `format` and pass it to `sys_write(fd)`.
 //    Returns the number of characters printed, or E_2BIG if the string
@@ -585,6 +594,7 @@ inline int nlstrcmp(const char* a, const char* b) {
         ++a, ++b;
     }
 }
+
 
 // User-space mutexes.
 struct mutex {

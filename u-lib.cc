@@ -106,10 +106,30 @@ pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top) {
 }
 
 void mutex::lock() {
-    
+    // phase 1: spin briefly
+    for (int i = 0; i < 30; ++i) {
+        int expected = 0;
+        if (word_.compare_exchange_weak(expected, 1)) {
+            return;
+        }
+        sys_yield();
+    }
+
+    // phase 2: switch to kernel mode and sleep via futex
+    int prev = word_.load(std::memory_order_relaxed);
+    if (prev != 2) {
+        prev = word_.exchange(2); // alert others that we are sleeping on lock
+    }
+    while (prev) {
+        sys_futex(&word_, FUTEX_WAIT, 2, NULL);
+        prev = word_.exchange(2);
+    }
 }
 
 void mutex::unlock() {
-
+    if (--word_) { // branch executes only if there are threads sleeping on lock
+        word_ = 0; // set to unlocked
+        sys_futex(&word_, FUTEX_WAKE, NULL, NULL);
+    }
 }
 

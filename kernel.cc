@@ -2926,7 +2926,7 @@ int proc::syscall_futex(regstate* regs) {
         bool timed_out = false;
         spinlock_guard guard(ftstate->lock_);
         waiter().block_until(ftstate->wq_, [&] () {
-            if (long(timeout_wakeup - ticks) <= 0) {
+            if (timeout_msec && long(timeout_wakeup - ticks) <= 0) {
                 timed_out = true;
                 return true;
             }
