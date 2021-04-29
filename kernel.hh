@@ -125,7 +125,7 @@ struct __attribute__((aligned(4096))) proc {
     int sanitizer_status_ = 0;
 #endif
 
-    list_links runq_links_, thlink_, zlink_;
+    list_links runq_links_, thlink_, zlink_, futexlink_;
 
     proc(thgrp* grp, cwd* pwd);
     NO_COPY_OR_ASSIGN(proc);
@@ -191,6 +191,7 @@ struct __attribute__((aligned(4096))) proc {
     int syscall_clone(regstate* regs);
     void syscall_texit(regstate* regs);
     void show_fdtable_(char* buf, int center=0);
+    int syscall_futex(regstate* regs);
 
     inline irqstate lock_pagetable_read();
     inline void unlock_pagetable_read(irqstate& irqs);

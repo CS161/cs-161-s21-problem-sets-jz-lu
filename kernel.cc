@@ -5,6 +5,7 @@
 #include "k-chkfsiter.hh"
 #include "k-devices.hh"
 #include "k-vfs.hh"
+#include "k-futex.hh"
 #include "k-vmiter.hh"
 #include "obj/k-firstprocess.h"
 
@@ -2886,6 +2887,23 @@ int proc::syscall_ls(regstate* regs) {
     int r = chkfsstate::get().ls(path, buf, bufsz);
     fstlock.unlock_read();
     return r;
+}
+
+
+// proc::syscall_futex(regs)
+//    Kernel-side management of fast userspace mutexes.
+int proc::syscall_futex(regstate* regs) {
+    uint32_t* uaddr = reinterpret_cast<uint32_t*>(regs->reg_rdi);
+    int futex_op = regs->reg_rsi;
+    uint32_t val = regs->reg_rdx;
+    unsigned long timeout = regs->reg_r10;
+
+    // Grab the futex metadata.
+    futexwaiters& ftwaiters = futexwaiters::get();
+
+    
+
+    return 0;
 }
 
 

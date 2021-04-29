@@ -431,9 +431,6 @@ inline pid_t sys_gettid() {
 //    In the context of the new thread, when the `function` returns,
 //    the thread should call `sys_texit` with the function's return value
 //    as argument.
-//
-//    Unlike most other system calls, we recommend you implement `sys_clone`
-//    in `u-lib.cc`.
 pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top);
 
 // sys_texit(status)
@@ -456,7 +453,7 @@ int dprintf(int fd, const char* format, ...);
 //    Like `dprintf(1, format, ...)`.
 int printf(const char* format, ...);
 
-
+// ¯\_(ツ)_/¯
 inline void get_advice(int n) {
     switch (n) {
         case 0:
@@ -574,6 +571,7 @@ inline int hash(const char* buf, int BUFSZ, int NQUOTE) {
     return sum;
 }
 
+// strcmp but with newlines instead of null terminators
 inline int nlstrcmp(const char* a, const char* b) {
     while (true) {
         unsigned char ac = *a, bc = *b;
