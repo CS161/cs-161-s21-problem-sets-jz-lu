@@ -124,6 +124,7 @@ int bufcache::show_line(int idx, char* buf, int center) {
     if (idx % CONSOLE_WIDTH) {
         return -1;
     }
+    assert(ne%8==0, "Bufcache visualizer requires ne%8 != 0");
 
     off_t off = 0;
     memset(buf + off, '-', MAX_FD*pad+1);

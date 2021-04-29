@@ -296,6 +296,7 @@ struct bitset_view {
 #define SYSCALL_LS              149            // List entries in directory
 #define SYSCALL_TREE            150            // Build visualization of file system
 #define SYSCALL_FDSHOW          151            // Show file descriptor table for current process
+#define STSCALL_FUTEX           152            // Fast userspace mutex
 
 // System call error return values
 #define E_AGAIN         -11        // Try again
@@ -365,6 +366,9 @@ inline bool is_error(uintptr_t r) {
 #define LSEEK_END               2    // Seek from end of file
 #define LSEEK_SIZE              3    // Do not seek; return file size
 
+// sys_futex() options
+#define FUTEX_WAIT              1    // Put process to sleep
+#define FUTEX_WAKE              2    // Wake up process
 
 // CGA console printing
 
