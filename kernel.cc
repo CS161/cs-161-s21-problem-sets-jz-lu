@@ -551,6 +551,10 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_LS:
         syscall_retval = syscall_ls(regs);
         break;
+    
+    case SYSCALL_FUTEX:
+        syscall_retval = syscall_futex(regs);
+        break;
 
     default:
         // no such system call
@@ -2895,13 +2899,45 @@ int proc::syscall_ls(regstate* regs) {
 int proc::syscall_futex(regstate* regs) {
     uint32_t* uaddr = reinterpret_cast<uint32_t*>(regs->reg_rdi);
     int futex_op = regs->reg_rsi;
+    if (!uaddr || !(futex_op == FUTEX_WAIT || futex_op == FUTEX_WAKE)) {
+        return E_INVAL;
+    }
+    for (vmiter it(this, (uintptr_t) uaddr); // validate memory permissions
+         it.va() < ((uintptr_t) uaddr) + sizeof(uint32_t); it.next()) {
+        if (!(it.user() && it.writable())) {
+            return E_FAULT;
+        }
+    }
     uint32_t val = regs->reg_rdx;
-    unsigned long timeout = regs->reg_r10;
+    unsigned long timeout_msec = regs->reg_r10;
 
     // Grab the futex metadata.
     futexwaiters& ftwaiters = futexwaiters::get();
 
-    
+    if (futex_op == FUTEX_WAIT) {
+        if (*uaddr != val) {
+            return E_AGAIN;
+        }
+        futexstate* ftstate = ftwaiters.add(uaddr);
+        if (!ftstate) {
+            return E_NOMEM;
+        }
+        unsigned long timeout_wakeup = ticks + (timeout_msec + 9)/10;
+        bool timed_out = false;
+        spinlock_guard guard(ftstate->lock_);
+        waiter().block_until(ftstate->wq_, [&] () {
+            if (long(timeout_wakeup - ticks) <= 0) {
+                timed_out = true;
+                return true;
+            }
+            return *uaddr == val;
+        }, guard);
+        if (timed_out) {
+            return E_TIMEDOUT;
+        }
+    } else {
+        ftwaiters.wake_all(uaddr);
+    }
 
     return 0;
 }

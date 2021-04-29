@@ -68,27 +68,31 @@ void assert_fail(const char* file, int line, const char* msg,
 
 // sys_clone
 //    Create a new thread.
-
 pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top) {
+    // save function and args in callee-saved registers for child thread
     asm volatile("mov %%rdi, %%r12 \n" : : : "%r12"); // function
     asm volatile("mov %%rsi, %%r13 \n" : : : "%r13"); // arg
 
+    // context switch into kernel, upon return 2 threads are running
     make_syscall(SYSCALL_CLONE, reinterpret_cast<uintptr_t>(function), 
         reinterpret_cast<uintptr_t>(arg), reinterpret_cast<uintptr_t>(stack_top));
         
     long r;
     asm volatile("movq %%rax, %0\n" : "=r"(r) : :);
 
+    // nonzero return value indicates thread is parent thread
     if (r) {
         return r;
     }
 
+    // child thread executes `function(arg)` saved earlier
     asm volatile (
         "mov %%r13, %%rdi \n"
         "call *%%r12 \n"
         : : : "%rdi"
     );
     
+    // child thread calls sys_texit with return status given from return of `function(arg)`
     asm volatile(
         "mov %%rax, %%rdi\n"
         : : : "%rdi" // put return value in args
@@ -99,5 +103,13 @@ pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top) {
             : /* all input registers are also output registers */
             : "cc", "rcx", "rdx", "rsi", "rdi", "r8", "r9", "r10", "r11");
     return rax; // will never be reached
+}
+
+void mutex::lock() {
+    
+}
+
+void mutex::unlock() {
+
 }
 

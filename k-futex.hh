@@ -2,6 +2,7 @@
 #include "k-lock.hh"
 
 struct futexstate {
+    spinlock lock_; // serializes checks to word_
     std::atomic<int> ref_ = 1; // state freed when ref_ == 0
     list_links link_; // linker in list of futexstates
     const uint32_t *word_;
@@ -14,7 +15,7 @@ struct futexstate {
 struct futexwaiters {
     spinlock lock_; // protects accesses to states_
     list<futexstate, &futexstate::link_> states_;
-    int add(uint32_t* word);
+    futexstate* add(uint32_t* word);
     void remove(futexstate* state);
     void wake_all(futexstate* ftstate);
     void wake_all(uint32_t *word);
@@ -23,6 +24,7 @@ struct futexwaiters {
  private:
     static futexwaiters ftwaiters;
     futexstate* find(uint32_t *word);
+    futexwaiters();
     NO_COPY_OR_ASSIGN(futexwaiters);
 };
 
@@ -30,3 +32,4 @@ struct futexwaiters {
 inline futexwaiters& futexwaiters::get() {
     return ftwaiters;
 }
+

@@ -2,6 +2,7 @@
 #define CHICKADEE_U_LIB_HH
 #include "lib.hh"
 #include "x86-64.h"
+#include <atomic>
 #if CHICKADEE_KERNEL
 #error "u-lib.hh should not be used by kernel code."
 #endif
@@ -584,5 +585,16 @@ inline int nlstrcmp(const char* a, const char* b) {
         ++a, ++b;
     }
 }
+
+// User-space mutexes.
+struct mutex {
+    mutex() : word_(0) {} // start off mutex as unlocked
+    void lock();
+    void unlock();
+ private:
+    // 0 == unlocked, 1 == locked with no contention, 2 == locked with contention
+    std::atomic<int> word_;
+};
+
 
 #endif

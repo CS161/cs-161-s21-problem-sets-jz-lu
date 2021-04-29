@@ -296,7 +296,7 @@ struct bitset_view {
 #define SYSCALL_LS              149            // List entries in directory
 #define SYSCALL_TREE            150            // Build visualization of file system
 #define SYSCALL_FDSHOW          151            // Show file descriptor table for current process
-#define STSCALL_FUTEX           152            // Fast userspace mutex
+#define SYSCALL_FUTEX           152            // Fast userspace mutex
 
 // System call error return values
 #define E_AGAIN         -11        // Try again
@@ -330,6 +330,7 @@ struct bitset_view {
 #define E_SOCKTAKEN     -37        // Socket already taken
 #define E_NONEMPTY      -39        // Directory is nonempty
 #define E_GETOUT        -40        // Cannot remove directory containing CWD
+#define E_TIMEDOUT      -41        // General timeout error code
 
 #define E_MINERROR      -100
 

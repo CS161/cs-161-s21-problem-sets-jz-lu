@@ -1,26 +1,33 @@
 #include "k-futex.hh"
 #include "kernel.hh"
 
+futexwaiters futexwaiters::ftwaiters;
+
 void futexstate::wake_all() {
     wq_.wake_all();
 }
 
 
-int futexwaiters::add(uint32_t* word) {
+futexwaiters::futexwaiters() {
+}
+
+
+futexstate* futexwaiters::add(uint32_t* word) {
     if (!word) {
-        return -1;
+        return nullptr;
     }
     spinlock_guard guard(lock_);
-    if (futexstate* state = find(word)) {
+    futexstate* state = find(word);
+    if (state) {
         ++state->ref_;
     } else {
-        futexstate* newstate = knew<futexstate>(word); // ref_ starts at 1
-        if (!newstate) {
-            return E_NOMEM;
+        state = knew<futexstate>(word); // ref_ starts at 1
+        if (!state) {
+            return nullptr;
         }
-        states_.push_back(newstate);
+        states_.push_back(state);
     }
-    return 0;
+    return state;
 }
 
 
@@ -67,3 +74,4 @@ void futexwaiters::remove(futexstate* state) {
         delete state;
     }
 }
+
