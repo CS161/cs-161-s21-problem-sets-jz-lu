@@ -9,7 +9,7 @@ struct futexstate {
     wait_queue wq_;
 
     inline futexstate(uint32_t* word) : word_(word) {};
-    void wake_all();
+    void wake_some(int nwake);
 };
 
 struct futexwaiters {
@@ -17,8 +17,8 @@ struct futexwaiters {
     list<futexstate, &futexstate::link_> states_;
     futexstate* add(uint32_t* word);
     void remove(futexstate* state);
-    void wake_all(futexstate* ftstate);
-    void wake_all(uint32_t *word);
+    void wake_some(futexstate* ftstate, int nwake);
+    void wake_some(uint32_t *word, int nwake);
     static inline futexwaiters& get();
 
  private:

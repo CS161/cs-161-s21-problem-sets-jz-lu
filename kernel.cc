@@ -2899,7 +2899,9 @@ int proc::syscall_ls(regstate* regs) {
 int proc::syscall_futex(regstate* regs) {
     uint32_t* uaddr = reinterpret_cast<uint32_t*>(regs->reg_rdi);
     int futex_op = regs->reg_rsi;
-    if (!uaddr || !(futex_op == FUTEX_WAIT || futex_op == FUTEX_WAKE)) {
+    uint32_t val = regs->reg_rdx;
+    if (!uaddr || !(futex_op == FUTEX_WAIT 
+        || futex_op == FUTEX_WAKE) || (!val && futex_op == FUTEX_WAKE)) {
         return E_INVAL;
     }
     for (vmiter it(this, (uintptr_t) uaddr); // validate memory permissions
@@ -2908,7 +2910,6 @@ int proc::syscall_futex(regstate* regs) {
             return E_FAULT;
         }
     }
-    uint32_t val = regs->reg_rdx;
     unsigned long timeout_msec = regs->reg_r10;
 
     // Grab the futex metadata.
@@ -2936,7 +2937,8 @@ int proc::syscall_futex(regstate* regs) {
             return E_TIMEDOUT;
         }
     } else {
-        ftwaiters.wake_all(uaddr);
+        assert(val); // val is num to wake in this case
+        ftwaiters.wake_some(uaddr, val);
     }
 
     return 0;

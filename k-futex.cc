@@ -3,8 +3,8 @@
 
 futexwaiters futexwaiters::ftwaiters;
 
-void futexstate::wake_all() {
-    wq_.wake_all();
+void futexstate::wake_some(int nwake) {
+    wq_.wake_some(nwake);
 }
 
 
@@ -45,19 +45,19 @@ futexstate* futexwaiters::find(uint32_t *word) {
 }
 
 
-void futexwaiters::wake_all(futexstate* ftstate) {
+void futexwaiters::wake_some(futexstate* ftstate, int nwake) {
     if (ftstate) {
-        ftstate->wake_all();
+        ftstate->wake_some(nwake);
     }
 }
 
 
-void futexwaiters::wake_all(uint32_t* word) {
+void futexwaiters::wake_some(uint32_t* word, int nwake) {
     if (!word) {
         return;
     }
     if (futexstate* state = find(word)) {
-        state->wake_all();
+        state->wake_some(nwake);
     }
 }
 

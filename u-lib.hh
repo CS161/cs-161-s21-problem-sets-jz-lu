@@ -606,5 +606,37 @@ struct mutex {
     std::atomic<int> word_;
 };
 
+// Scoped mutex.
+struct mutex_guard {
+    explicit mutex_guard(mutex& lock)
+        : lock_(lock), locked_(true) {
+    }
+    ~mutex_guard() {
+        if (locked_) {
+            lock_.unlock();
+        }
+    }
+    NO_COPY_OR_ASSIGN(mutex_guard);
+
+    inline void unlock() {
+        assert(locked_);
+        lock_.unlock();
+        locked_ = false;
+    }
+    inline void lock() {
+        assert(!locked_);
+        lock_.lock();
+        locked_ = true;
+    }
+
+    inline constexpr bool is_locked() {
+        return locked_;
+    }
+
+ private:
+    mutex& lock_;
+    bool locked_;
+};
+
 
 #endif

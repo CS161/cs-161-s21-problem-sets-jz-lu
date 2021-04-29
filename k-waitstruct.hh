@@ -42,7 +42,7 @@ struct wait_queue {
     mutable spinlock lock_;
 
     inline void wake_all();
-    inline void wake_one(proc* p);
+    inline void wake_some(int nwake);
     inline void show();
 };
 
