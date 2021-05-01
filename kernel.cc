@@ -149,8 +149,8 @@ void boot_process_start(pid_t pid, const char* name) {
     p->regs_->reg_rip = ld.entry_rip_;
     void* stkpg = kalloc(PAGESIZE);
     assert(stkpg);
-    vmiter(p, MEMSIZE_VIRTUAL - PAGESIZE).map(stkpg, PTE_PWU);
-    vmiter(p, CONSOLE_ADDR).map(CONSOLE_ADDR, PTE_PWU); 
+    vmiter(p, MEMSIZE_VIRTUAL - PAGESIZE).map(stkpg, PTE_PWU); // no sync for thgrp--no threads yet!
+    vmiter(p, CONSOLE_ADDR).map(CONSOLE_ADDR, PTE_PWU);
     p->regs_->reg_rsp = MEMSIZE_VIRTUAL;
 
     // add to process table (requires lock in case another CPU is already
@@ -326,6 +326,7 @@ uintptr_t proc::syscall(regstate* regs) {
             return -1;
         }
         void* pg = kalloc(PAGESIZE);
+        spinlock_guard guard(thgrp_->thgrp_lock_);
         if (!pg || vmiter(this, addr).try_map(ka2pa(pg), PTE_PWU) < 0) {
             return -1;
         }
@@ -340,6 +341,7 @@ uintptr_t proc::syscall(regstate* regs) {
         }
         void* ptr = kalloc(sz); // KERNEL VIRTUAL ADDR
         if (!ptr) return -1;
+        spinlock_guard guard(thgrp_->thgrp_lock_);
         vmiter it(this, addr);
         for (uint64_t off = 0; 
             off < (1UL << order(sz, true)); off += PAGESIZE, it += PAGESIZE) {
@@ -352,6 +354,7 @@ uintptr_t proc::syscall(regstate* regs) {
 
     case SYSCALL_FREE: { // Free dat mem (without exiting like a n00b)
         // Use vmiter to get the physical address to pass into kfree
+        spinlock_guard guard(thgrp_->thgrp_lock_);
         vmiter it(this, regs->reg_rdi); // %rdi holds UVA
         uint64_t blk_sz = 1UL << blk_order(it.pa());
         for (uint64_t off = 0; off < blk_sz; off += PAGESIZE, it += PAGESIZE) {
@@ -459,6 +462,7 @@ uintptr_t proc::syscall(regstate* regs) {
         if (addr > VA_LOWMAX || addr & 0xFFF) {
             return E_INVAL;
         }
+        spinlock_guard guard(thgrp_->thgrp_lock_);
         syscall_retval = vmiter(this, addr).try_map(CONSOLE_ADDR, PTE_PWU); // Map the given addr to the console addr
         break;
     }
@@ -1166,6 +1170,8 @@ int proc::syscall_clone(regstate* regs) {
     uintptr_t stack_bottom = reinterpret_cast<uintptr_t>(regs->reg_rdx) - PAGESIZE;
 
     // Memory validation.
+    {
+    spinlock_guard guard(thgrp_->thgrp_lock_);
     if (!function ||
         !(vmiter(this, function).present() || 
          vmiter(this, function).user())) {
@@ -1187,6 +1193,8 @@ int proc::syscall_clone(regstate* regs) {
         }
         it.next();
     }
+    }
+    
 
     // Allocate a new `struct proc` and initialize it.
     spinlock_guard guard(ptable_lock);

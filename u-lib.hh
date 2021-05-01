@@ -463,6 +463,7 @@ int dprintf(int fd, const char* format, ...);
 //    Like `dprintf(1, format, ...)`.
 int printf(const char* format, ...);
 
+
 // ¯\_(ツ)_/¯
 inline void get_advice(int n) {
     switch (n) {
