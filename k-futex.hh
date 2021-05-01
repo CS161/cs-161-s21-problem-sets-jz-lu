@@ -1,10 +1,9 @@
-#include "k-wait.hh"
+#include "k-wait.hh" // imports "kernel.hh" so this file cannot be imported in "kernel.hh"
 #include "k-lock.hh"
 
 struct futexstate {
-    spinlock lock_; // serializes checks to word_
     std::atomic<int> ref_ = 1; // state freed when ref_ == 0
-    list_links link_; // linker in list of futexstates
+    list_links link_; // for list in `struct futexwaiters`
     const uint32_t *word_;
     wait_queue wq_;
 

@@ -2926,14 +2926,13 @@ int proc::syscall_futex(regstate* regs) {
         }
         unsigned long timeout_wakeup = ticks + (timeout_msec + 9)/10;
         bool timed_out = false;
-        spinlock_guard guard(ftstate->lock_);
         waiter().block_until(ftstate->wq_, [&] () {
             if (timeout_msec && long(timeout_wakeup - ticks) <= 0) {
                 timed_out = true;
                 return true;
             }
             return *uaddr != val;
-        }, guard);
+        });
 
         // Put the futexstate reference back.
         ftwaiters.remove(ftstate);
