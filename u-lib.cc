@@ -128,7 +128,7 @@ void mutex::lock() {
     while (prev) {
         int w = word_.load(std::memory_order_release);
         console_printf("sleeping, word=%d\n", w);
-        sys_futex(&word_, FUTEX_WAIT, 2, 0); // no timeout
+        sys_futex((uint32_t*) &word_, FUTEX_WAIT, 2, 0); // no timeout
         prev = word_.exchange(2);
     }
 }
@@ -139,7 +139,7 @@ void mutex::unlock() {
     console_printf("FREE word=%d\n", w);
     if (--word_) { // branch executes only if there are threads sleeping on lock
         word_ = 0; // set to unlocked
-        sys_futex(&word_, FUTEX_WAKE, 1, 0); // no timeout
+        sys_futex((uint32_t*) &word_, FUTEX_WAKE, 1, 0); // no timeout
     }
 }
 

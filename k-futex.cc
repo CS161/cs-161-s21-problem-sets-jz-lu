@@ -7,6 +7,10 @@ void futexstate::wake_some(int nwake) {
     wq_.wake_some(nwake);
 }
 
+void futexstate::wake_all() {
+    wq_.wake_all();
+}
+
 
 futexwaiters::futexwaiters() {
 }
@@ -72,6 +76,14 @@ void futexwaiters::remove(futexstate* state) {
             states_.erase(state);
         }
         delete state;
+    }
+}
+
+
+void futexwaiters::check_timeout() {
+    spinlock_guard guard(lock_);
+    for (auto it = states_.front(); it; it = states_.next(it)) {
+        it->wake_all();
     }
 }
 

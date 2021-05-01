@@ -19,7 +19,10 @@ std::atomic<unsigned long> ticks;
 // Display type; initially KDISPLAY_CONSOLE.
 std::atomic<int> kdisplay;
 
-// Group ID allocator.
+// Shared memory allocation table, indexed by identifier.
+
+
+// Group ID allocation tracker, incrementing upon `fork()`.
 std::atomic<pid_t> cur_tgid = 1;
 
 // Global Stdio vnode on VFS.
@@ -40,6 +43,7 @@ spinlock socktable_lock; // Guards all accesses to socktable
 
 // Global file system tree lock (all creates/deletes/lookups of files and directories by name)
 rwlock fstlock;
+
 
 static void tick();
 static void boot_process_start(pid_t pid, const char* program_name);
@@ -205,6 +209,7 @@ void proc::exception(regstate* regs) {
                 (uint64_t) ticks);
         }
         bufcache::get().read_wq_.wake_all();
+        futexwaiters::get().check_timeout();
         // Wake up all the relevant processes in case any need to stop sleeping.
         {
         spinlock_guard guard(socktable_lock);
@@ -327,6 +332,11 @@ uintptr_t proc::syscall(regstate* regs) {
         break;
     }
 
+    case SYSCALL_SHMGET: {
+        // vmiter(this).try_map(0, PTE_PWU);
+        break;
+    }
+
     case SYSCALL_VARALLOC: { // Variable allocations for buddy allocator
         uintptr_t addr = regs->reg_rdi; // USER VIRTUAL ADDR
         uint64_t sz = regs->reg_rsi;
@@ -350,8 +360,6 @@ uintptr_t proc::syscall(regstate* regs) {
     case SYSCALL_FREE: { // Free dat mem (without exiting like a n00b)
         // Use vmiter to get the physical address to pass into kfree
         vmiter it(this, regs->reg_rdi); // %rdi holds UVA
-        log_printf("[SYSCALL_FREE] NEW free request for alloc at UVA 0x%x, PA 0x%x\n", 
-            regs->reg_rdi, it.pa() /* , 1UL << blk_order(it.pa()) */);
         uint64_t blk_sz = 1UL << blk_order(it.pa());
         for (uint64_t off = 0; off < blk_sz; off += PAGESIZE, it += PAGESIZE) {
             it.kfree_page();
@@ -2931,8 +2939,12 @@ int proc::syscall_futex(regstate* regs) {
                 timed_out = true;
                 return true;
             }
-            return *uaddr == val;
+            return *uaddr != val;
         }, guard);
+
+        // Put the futexstate reference back.
+        ftwaiters.remove(ftstate);
+
         if (timed_out) {
             return E_TIMEDOUT;
         }

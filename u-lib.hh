@@ -446,7 +446,7 @@ pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top);
 
 // sys_futex(word, futex_op, val)
 //    Futex system call method on address given by word.
-inline int sys_futex(std::atomic<int>* word, int futex_op, uint32_t val, long timeout_msec) {
+inline int sys_futex(uint32_t* word, int futex_op, uint32_t val, long timeout_msec) {
     access_memory(word);
     return make_syscall(SYSCALL_FUTEX, 
         reinterpret_cast<uintptr_t>(word), futex_op, val, timeout_msec);

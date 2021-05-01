@@ -10,6 +10,7 @@ struct futexstate {
 
     inline futexstate(uint32_t* word) : word_(word) {};
     void wake_some(int nwake);
+    void wake_all();
 };
 
 struct futexwaiters {
@@ -19,6 +20,7 @@ struct futexwaiters {
     void remove(futexstate* state);
     void wake_some(futexstate* ftstate, int nwake);
     void wake_some(uint32_t *word, int nwake);
+    void check_timeout();
     static inline futexwaiters& get();
 
  private:
