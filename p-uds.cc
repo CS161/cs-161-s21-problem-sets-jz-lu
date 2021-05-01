@@ -17,7 +17,7 @@ void process_main() {
         assert_eq(r, 0);
         sys_exit(0);
     } else if (!p1 && p2) { // Process 2: test 1 client
-        sys_msleep(50); // Give server some time to write
+        sys_msleep(100); // Give server some time to write
         const char* args[] = {
             "client", "sock1", "good", nullptr
         };

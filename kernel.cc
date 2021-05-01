@@ -332,22 +332,15 @@ uintptr_t proc::syscall(regstate* regs) {
         break;
     }
 
-    case SYSCALL_SHMGET: {
-        // vmiter(this).try_map(0, PTE_PWU);
-        break;
-    }
-
     case SYSCALL_VARALLOC: { // Variable allocations for buddy allocator
         uintptr_t addr = regs->reg_rdi; // USER VIRTUAL ADDR
         uint64_t sz = regs->reg_rsi;
-        log_printf("[SYSCALL_VARALLOC] NEW request for alloc at UVA 0x%x of size 0x%x\n", addr, sz);
         if (addr >= VA_LOWEND || addr & 0xFFF) {
             return -1;
         }
         void* ptr = kalloc(sz); // KERNEL VIRTUAL ADDR
         if (!ptr) return -1;
         vmiter it(this, addr);
-        log_printf("[SYSCALL_VARALLOC] MAPPING successful alloc\n");
         for (uint64_t off = 0; 
             off < (1UL << order(sz, true)); off += PAGESIZE, it += PAGESIZE) {
             if (it.try_map(ka2pa(ptr), PTE_PWU) < 0) {

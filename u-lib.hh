@@ -571,6 +571,7 @@ inline void get_advice(int n) {
         }
 }
 
+
 // Basic hash function for strings, returns num modulo NQUOTE.
 inline int hash(const char* buf, int BUFSZ, int NQUOTE) {
     int sum = 0, off = 0;
@@ -580,6 +581,7 @@ inline int hash(const char* buf, int BUFSZ, int NQUOTE) {
     sum = (sum + off) % NQUOTE;
     return sum;
 }
+
 
 // strcmp but with newlines instead of null terminators
 inline int nlstrcmp(const char* a, const char* b) {
@@ -606,10 +608,12 @@ struct mutex {
     std::atomic<int> word_;
 };
 
-// Scoped mutex.
+
+// Scoped mutex with automatic lock/unlock in constructor/destructor.
 struct mutex_guard {
     explicit mutex_guard(mutex& lock)
         : lock_(lock), locked_(true) {
+        lock.lock();
     }
     ~mutex_guard() {
         if (locked_) {

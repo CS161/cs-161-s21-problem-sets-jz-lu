@@ -6,9 +6,8 @@
 extern uint8_t end[];
 
 std::atomic_flag message_lock;
-std::atomic<int> phase = 0;
-int pfd[2] = {-1, -1};
 uint32_t shared_int = VAL;
+int nonsense;
 
 static void message(const char* x) {
     while (message_lock.test_and_set()) {
@@ -40,17 +39,18 @@ static void run_cloner() {
     int r = sys_page_alloc(stack1);
     assert_eq(r, 0);
 
-    pid_t t = sys_clone(thfunc, pfd, stack1 + PAGESIZE);
+    pid_t t = sys_clone(thfunc, &nonsense, stack1 + PAGESIZE); // we don't need an arg here
     assert_gt(t, 0);
     
     message("waiting to change value");
-    for (int counter = 0; counter < 10; ++counter) {
+    for (int counter = 0; counter < 10; ++counter) { // yield a bit to let first thread run
         sys_yield();
         assert_eq((int) shared_int, VAL);
     }
     message("changed value and waking");
     shared_int = NEWVAL;
     r = sys_futex(&shared_int, FUTEX_WAKE, 1, 0);
+    assert_eq(r, 0);
     message("thread done");
     sys_texit(0);
 }
@@ -63,7 +63,8 @@ void process_main() {
         // test normal wait-on-value
         run_cloner();
     } else { // parent
-        sys_waitpid(p);
+        p = sys_waitpid(p);
+        assert_ge(p, 0);
     }
 
     // ensure that futex returns E_AGAIN if value not set before

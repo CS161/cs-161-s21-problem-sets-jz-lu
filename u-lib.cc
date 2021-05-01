@@ -107,18 +107,13 @@ pid_t sys_clone(int (*function)(void*), void* arg, char* stack_top) {
 
 void mutex::lock() {
     // phase 1: spin briefly
-    for (int i = 0; i < 1; ++i) {
+    for (int i = 0; i < 40; ++i) {
         int expected = 0;
-        int w = word_.load(std::memory_order_release);
-        console_printf("word=%d\n", w);
         if (word_.compare_exchange_weak(expected, 1)) {
-            w = word_.load(std::memory_order_release);
-            console_printf("grabbed lock in spin, word=%d\n", w);
             return;
         }
         sys_yield();
     }
-    console_printf("phase 2\n");
 
     // phase 2: switch to kernel mode and sleep via futex
     int prev = word_.load(std::memory_order_relaxed);
@@ -126,8 +121,6 @@ void mutex::lock() {
         prev = word_.exchange(2); // alert others that we are sleeping on lock
     }
     while (prev) {
-        int w = word_.load(std::memory_order_release);
-        console_printf("sleeping, word=%d\n", w);
         sys_futex((uint32_t*) &word_, FUTEX_WAIT, 2, 0); // no timeout
         prev = word_.exchange(2);
     }
@@ -135,8 +128,6 @@ void mutex::lock() {
 
 
 void mutex::unlock() {
-    int w = word_.load(std::memory_order_release);
-    console_printf("FREE word=%d\n", w);
     if (--word_) { // branch executes only if there are threads sleeping on lock
         word_ = 0; // set to unlocked
         sys_futex((uint32_t*) &word_, FUTEX_WAKE, 1, 0); // no timeout

@@ -297,8 +297,6 @@ struct bitset_view {
 #define SYSCALL_TREE            150            // Build visualization of file system
 #define SYSCALL_FDSHOW          151            // Show file descriptor table for current process
 #define SYSCALL_FUTEX           152            // Fast userspace mutex
-#define SYSCALL_SHMGET          153            // Get shared memory
-#define SYSCALL_SHMAT           154            // Attach shared memory
 
 // System call error return values
 #define E_AGAIN         -11        // Try again

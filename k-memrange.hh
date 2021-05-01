@@ -1,8 +1,6 @@
 #ifndef CHICKADEE_K_MEMRANGE_HH
 #define CHICKADEE_K_MEMRANGE_HH
 #include "types.h"
-#include "k-lock.hh"
-struct proc;
 template <unsigned maxsize> class memrangeset;
 
 // Slab allocator constants
@@ -175,55 +173,6 @@ struct bigslab {
         return;
     }
 };
-
-
-// Support for shared memory paging
-struct sharedmemorytable {
-    inline int add_ptr(void* ptr);
-    inline int remove_ptr(int identifier);
-    inline int ref(int identifier);
-    static inline sharedmemorytable& get();
- private:
-    static constexpr int SHMTABSZ = 16;
-    spinlock lock_;
-    void* table_[SHMTABSZ] = {0};
-    int refs_[SHMTABSZ] = {0};
-    proc* owners_[SHMTABSZ];
-    static sharedmemorytable shmtab;
-    sharedmemorytable();
-    NO_COPY_OR_ASSIGN(sharedmemorytable);
-};
-
-
-inline sharedmemorytable& sharedmemorytable::get() {
-    return shmtab;
-}
-
-inline int sharedmemorytable::add_ptr(void* ptr) {
-    if (!ptr) {
-        return E_FAULT;
-    }
-    spinlock_guard guard(lock_);
-    for (int identifier = 0; identifier < SHMTABSZ; ++identifier) {
-        assert(refs_[identifier] >= 0);
-        if (!refs_[identifier]) {
-            ++refs_[identifier];
-            table_[identifier] = ptr;
-            return identifier;
-        }
-    }
-    return E_NOSPC;
-}
-
-inline int sharedmemorytable::remove_ptr(int identifier) {
-    if (identifier < 0 || identifier >= SHMTABSZ) {
-        return E_INVAL;
-    }
-    spinlock_guard guard(lock_);
-    assert(!refs_[identifier]);
-    assert(table_[identifier]);
-    table_[identifier] = nullptr;
-}
 
 
 // `memrangeset` stores type information for a range of memory addresses.
