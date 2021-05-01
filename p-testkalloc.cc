@@ -74,8 +74,6 @@ void process_main() {
         sys_wildkalloc(WILDNO);
     }
 
-    // After tests are complete, do nothing.
-    while (true) {
-        sys_yield();
-    }
+    // After tests are complete, exit.
+    sys_exit(0);
 }
