@@ -4,6 +4,7 @@
 #include "k-apic.hh"
 #include "k-devices.hh"
 #include "elf.h"
+#include "k-netdriver.hh"
 
 // symtab: reference to kernel symbol table; useful for debugging.
 // The `mkchickadeesymtab` function fills this structure in.
@@ -13,7 +14,8 @@ elf_symtabref symtab = {
 
 // sata_disk: pointer to the first SATA disk found
 ahcistate* sata_disk;
-// BUDDY ALLOCATOR MOD: this guy needs to be marked now!
+e1000state* nic;
+// TODO BUDDY ALLOCATOR MOD: this guy needs to be marked now!
 
 
 // init_hardware
@@ -66,6 +68,9 @@ void init_hardware() {
     if (sata_disk && sata_disk->irq_ > 0) {
         cpus[ncpu - 1].enable_irq(sata_disk->irq_);
     }
+
+    // initialize e1000 NIC
+    nic = e1000state::find();
 }
 
 

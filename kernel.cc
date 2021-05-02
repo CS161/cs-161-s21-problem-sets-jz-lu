@@ -2913,6 +2913,7 @@ int proc::syscall_futex(regstate* regs) {
         || futex_op == FUTEX_WAKE) || (!val && futex_op == FUTEX_WAKE)) {
         return E_INVAL;
     }
+    
     for (vmiter it(this, (uintptr_t) uaddr); // validate memory permissions
          it.va() < ((uintptr_t) uaddr) + sizeof(uint32_t); it.next()) {
         if (!(it.user() && it.writable())) {
@@ -2949,7 +2950,9 @@ int proc::syscall_futex(regstate* regs) {
             return E_TIMEDOUT;
         }
     } else {
-        assert(val); // val is num to wake in this case
+        if (!val) {
+            return E_INVAL;
+        }
         ftwaiters.wake_some(uaddr, val);
     }
 

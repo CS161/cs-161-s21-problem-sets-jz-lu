@@ -30,7 +30,9 @@ endif
 # `$(NCPU)` controls the number of CPUs QEMU should use. It defaults to 2.
 NCPU = 2
 LOG ?= file:log.txt
-QEMUOPT = -net none -parallel $(LOG) -smp $(NCPU)
+QEMUNET = -netdev user,id=n1,hostfwd=udp::10007-:7,hostfwd=tcp::10007-:7 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
+-netdev tap,id=n2,ifname=tap0 -device e1000,netdev=n2 -object filter-dump,id=f2,netdev=n2,file=n2.pcap
+QEMUOPT = $(QEMUNET) -parallel $(LOG) -smp $(NCPU)
 ifeq ($(D),1)
 QEMUOPT += -d int,cpu_reset,guest_errors -no-reboot
 endif
@@ -50,7 +52,7 @@ KERNEL_OBJS = $(OBJDIR)/k-exception.ko \
 	$(OBJDIR)/crc32c.ko \
 	$(OBJDIR)/k-ahci.ko $(OBJDIR)/k-chkfs.ko $(OBJDIR)/k-chkfsiter.ko \
 	$(OBJDIR)/k-memviewer.ko $(OBJDIR)/lib.ko $(OBJDIR)/k-initfs.ko \
-	$(OBJDIR)/k-vfs.ko $(OBJDIR)/k-futex.ko
+	$(OBJDIR)/k-vfs.ko $(OBJDIR)/k-futex.ko $(OBJDIR)/k-netdriver.ko 
 
 PROCESSES ?= $(patsubst %.cc,%,$(wildcard p-*.cc))
 

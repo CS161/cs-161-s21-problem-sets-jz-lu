@@ -68,7 +68,7 @@ elif test -x /bin/netstat; then
 fi
 
 if test -n "$maindir"; then
-    exec docker run -it --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined -v "$maindir":/home/cs61-user/$destdir -w "/home/cs61-user/$destdir$subdir" $netarg cs61:latest
+    exec docker run -it --rm --cap-add=SYS_PTRACE --cap-add=NET_ADMIN --device /dev/net/tun:/dev/net/tun --security-opt seccomp=unconfined -v "$maindir":/home/cs61-user/$destdir -w "/home/cs61-user/$destdir$subdir" $netarg cs61:latest
 else
-    exec docker run -it --rm --cap-add=SYS_PTRACE --security-opt seccomp=unconfined $netarg cs61:latest
+    exec docker run -it --rm --cap-add=SYS_PTRACE --cap-add=NET_ADMIN --device /dev/net/tun:/dev/net/tun --security-opt seccomp=unconfined $netarg cs61:latest
 fi

@@ -64,12 +64,13 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get -y install \
 
 # install programs used for networking
 RUN DEBIAN_FRONTEND=noninteractive apt-get -y install \
-        dnsutils \
         inetutils-ping \
         net-tools \
         netcat \
         telnet \
-        traceroute
+        traceroute \
+        iproute2 \
+        bridge-utils
 
 # set up default locale
 RUN locale-gen en_US.UTF-8
