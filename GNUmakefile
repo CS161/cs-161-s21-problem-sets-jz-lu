@@ -31,7 +31,7 @@ endif
 NCPU = 2
 LOG ?= file:log.txt
 QEMUNET = -netdev user,id=n1,hostfwd=udp::10007-:7,hostfwd=tcp::10007-:7 -device e1000,netdev=n1 -object filter-dump,id=f1,netdev=n1,file=n1.pcap \
--netdev tap,id=n2,ifname=tap0 -device e1000,netdev=n2 -object filter-dump,id=f2,netdev=n2,file=n2.pcap
+-netdev tap,id=n2,ifname=tap0,script=no,downscript=no -device e1000,netdev=n2 -object filter-dump,id=f2,netdev=n2,file=n2.pcap
 QEMUOPT = $(QEMUNET) -parallel $(LOG) -smp $(NCPU)
 ifeq ($(D),1)
 QEMUOPT += -d int,cpu_reset,guest_errors -no-reboot

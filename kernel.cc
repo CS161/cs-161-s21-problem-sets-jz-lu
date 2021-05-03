@@ -149,7 +149,7 @@ void boot_process_start(pid_t pid, const char* name) {
     p->regs_->reg_rip = ld.entry_rip_;
     void* stkpg = kalloc(PAGESIZE);
     assert(stkpg);
-    vmiter(p, MEMSIZE_VIRTUAL - PAGESIZE).map(stkpg, PTE_PWU); // no sync for thgrp--no threads yet!
+    vmiter(p, MEMSIZE_VIRTUAL - PAGESIZE).map(stkpg, PTE_PWU); // no lock for thgrp--no threads yet!
     vmiter(p, CONSOLE_ADDR).map(CONSOLE_ADDR, PTE_PWU);
     p->regs_->reg_rsp = MEMSIZE_VIRTUAL;
 
@@ -1169,7 +1169,7 @@ int proc::syscall_clone(regstate* regs) {
     uintptr_t args = reinterpret_cast<uintptr_t>(regs->reg_rsi);
     uintptr_t stack_bottom = reinterpret_cast<uintptr_t>(regs->reg_rdx) - PAGESIZE;
 
-    // Memory validation.
+    // Memory validation. // TODO locking necessary?
     {
     spinlock_guard guard(thgrp_->thgrp_lock_);
     if (!function ||
