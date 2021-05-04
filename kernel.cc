@@ -1169,9 +1169,7 @@ int proc::syscall_clone(regstate* regs) {
     uintptr_t args = reinterpret_cast<uintptr_t>(regs->reg_rsi);
     uintptr_t stack_bottom = reinterpret_cast<uintptr_t>(regs->reg_rdx) - PAGESIZE;
 
-    // Memory validation. // TODO locking necessary?
-    {
-    spinlock_guard guard(thgrp_->thgrp_lock_);
+    // Memory validation.
     if (!function ||
         !(vmiter(this, function).present() || 
          vmiter(this, function).user())) {
@@ -1192,7 +1190,6 @@ int proc::syscall_clone(regstate* regs) {
             return E_FAULT;
         }
         it.next();
-    }
     }
     
 

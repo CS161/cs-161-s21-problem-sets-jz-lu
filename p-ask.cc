@@ -1,5 +1,5 @@
 #include "u-lib.hh"
-#define NQUOTE      25
+#define NQUOTE      26
 #define BUFSZ       256
 
 void process_main(int argc, char** argv) {

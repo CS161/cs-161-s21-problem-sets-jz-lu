@@ -566,6 +566,9 @@ inline void get_advice(int n) {
         case 24:
             console_printf(0xd00, "*demonic screeching*\n");
             break;
+
+        case 25:
+            console_printf(0xd00, "I AM A GOD!!! DO YOU HEAR ME??? I AM A TRUE GOD!!!\n");
         
         default:
             break;
