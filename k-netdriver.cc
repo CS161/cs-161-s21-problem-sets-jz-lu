@@ -1,7 +1,7 @@
 #include "k-ahci.hh"
 #include "k-apic.hh"
 #include "k-pci.hh"
-#include "k-e1000.hh"
+#include "k-netdriver.hh"
 #include "k-arp.hh"
 #include "k-ip.hh"
 
@@ -393,7 +393,7 @@ void e1000state::rx_ethernet_formatter(protocol_metadata* meta, uint8_t *frame, 
     // Forward the packet to handler.
     switch (byteswap16(header->type_)) {
         case ETHERNET_TYPE_ARP: {
-            return arp_functions::arp_rx(payload, plen, meta_);
+            return arp_func::arp_rx(payload, plen, meta_);
         }
         case ETHERNET_TYPE_IP: {
             return ip_rx(payload, plen, meta_);

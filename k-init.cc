@@ -4,6 +4,7 @@
 #include "k-apic.hh"
 #include "k-devices.hh"
 #include "elf.h"
+#include "k-arp.hh"
 #include "k-netdriver.hh"
 
 // symtab: reference to kernel symbol table; useful for debugging.
@@ -71,6 +72,12 @@ void init_hardware() {
 
     // initialize e1000 NIC
     nic = e1000state::find();
+    if (nic && nic->irq_ > 0) {
+        log_printf("[init] e1000: interrupts enabled\n");
+        cpus[ncpu-1].enable_irq(nic->irq_);
+    }
+
+    nic->bootup();
 }
 
 

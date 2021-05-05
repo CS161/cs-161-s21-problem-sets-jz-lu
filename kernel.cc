@@ -7,6 +7,8 @@
 #include "k-vfs.hh"
 #include "k-futex.hh"
 #include "k-vmiter.hh"
+#include "k-arp.hh"
+#include "k-netdriver.hh"
 #include "obj/k-firstprocess.h"
 
 // kernel.cc

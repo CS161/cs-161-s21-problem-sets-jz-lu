@@ -306,7 +306,9 @@ extern wait_queue parent_child_queue; // Waitpid queue (nondeterministic time)
 extern wait_heap time_heap; // Wait heap
 extern wait_queue ewq; // exit wait queue
 extern rwlock fstlock; // File system tree lock
-extern const uint64_t pad;
+extern const uint64_t pad; // visualization paddings
+struct e1000state;
+extern e1000state* nic;
 
 // Debugging and testing flags
 // Buddy allocator flag. 0 = no checking, 1 = checking and basis printing, 2 (if available) = dump all stats.
@@ -339,7 +341,12 @@ const uint64_t USING_PSEUDO_BLOCKING = 0;
 extern uint64_t BLOCK_NUM_RESUMES; // Testing number of calls to resume
 const uint64_t USING_TIME_HEAP = 0; // Turn on to use heap, off to use time wheel
 
-// Buddy allocator orders.
+// Networking flags
+static uint32_t chickadee_addr[4] = {172, 17, 0, 15};
+static uint32_t default_addr[4] = {172, 17, 0, 1};
+static uint32_t tap_addr[4] = {172, 17, 0, 3};
+
+// Buddy allocator orders
 #define MIN_ORDER 12
 #define MAX_ORDER 21
 
