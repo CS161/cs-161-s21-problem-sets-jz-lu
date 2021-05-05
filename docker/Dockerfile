@@ -73,7 +73,10 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get -y install \
         iproute2 \
         bridge-utils \
         libvirt-daemon-system \
-        libvirt-clients
+        libvirt-clients \
+        wireguard-dkms \
+        wireguard-tools \
+        linux-headers-$(uname -r)
 
 # set up default locale
 RUN locale-gen en_US.UTF-8

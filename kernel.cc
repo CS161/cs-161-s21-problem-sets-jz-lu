@@ -333,36 +333,6 @@ uintptr_t proc::syscall(regstate* regs) {
         break;
     }
 
-    case SYSCALL_VARALLOC: { // Variable allocations for buddy allocator
-        uintptr_t addr = regs->reg_rdi; // USER VIRTUAL ADDR
-        uint64_t sz = regs->reg_rsi;
-        if (addr >= VA_LOWEND || addr & 0xFFF) {
-            return -1;
-        }
-        void* ptr = kalloc(sz); // KERNEL VIRTUAL ADDR
-        if (!ptr) return -1;
-        spinlock_guard guard(thgrp_->thgrp_lock_);
-        vmiter it(this, addr);
-        for (uint64_t off = 0; 
-            off < (1UL << order(sz, true)); off += PAGESIZE, it += PAGESIZE) {
-            if (it.try_map(ka2pa(ptr), PTE_PWU) < 0) {
-                return -1;
-            } // If there is no contiguous block available then it won't allocate anything.
-        }
-        break;
-    }
-
-    case SYSCALL_FREE: { // Free dat mem (without exiting like a n00b)
-        // Use vmiter to get the physical address to pass into kfree
-        spinlock_guard guard(thgrp_->thgrp_lock_);
-        vmiter it(this, regs->reg_rdi); // %rdi holds UVA
-        uint64_t blk_sz = 1UL << blk_order(it.pa());
-        for (uint64_t off = 0; off < blk_sz; off += PAGESIZE, it += PAGESIZE) {
-            it.kfree_page();
-        }
-        break;
-    }
-
     case SYSCALL_TESTKALLOC: 
         syscall_retval = syscall_testkalloc(regs);
         break;

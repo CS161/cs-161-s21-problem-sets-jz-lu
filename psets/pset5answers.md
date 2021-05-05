@@ -31,7 +31,7 @@ p->tgid_ = curpid++;
 
 
 ### Thread Exit
-To exit a thread, decrement `thgrp::nth_`, add thread to list of zombies, and pop it off the list of active threads. If the calling thread is the only thread in the group, then texit just calls `syscall_exit()`; otherwise, just delete the current working directory `pwd_` and yield.
+To exit a thread, add thread to list of zombies, and pop it off the list of active threads. If the calling thread is the only thread in the group, then texit just calls `syscall_exit()`; otherwise, just delete the current working directory `pwd_` and yield. In the scheduler, threads that are in `ps_transition` state will have `nth_` decremented. This ensures that thread exit correctly decrements the thread count while also ensuring that when the final thread exits via `syscall_exit()`, the thread count will go to zero. `syscall_waitpid()` relies on the thread count being 0 to free the process.
 
 
 ### Changes to Process Exit
