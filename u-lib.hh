@@ -260,36 +260,42 @@ inline int sys_execv(const char* program_name, const char* const* argv) {
 // sys_socket(sockname)
 //    Open a Unix Domain Socket with the user process as the server.
 inline int sys_socket(const char* sockname) {
+    access_memory(sockname);
     return make_syscall(SYSCALL_SOCKET, reinterpret_cast<uintptr_t>(sockname));
 }
 
 // sys_listen(sockname)
 //    Server marks UDS as listening.
 inline int sys_listen(const char* sockname) {
+    access_memory(sockname);
     return make_syscall(SYSCALL_LISTEN, reinterpret_cast<uintptr_t>(sockname));
 }
 
 // sys_accept(sockname)
 //    Server marks UDS as accepting.
 inline int sys_accept(const char* sockname) {
+    access_memory(sockname);
     return make_syscall(SYSCALL_ACCEPT, reinterpret_cast<uintptr_t>(sockname));
 }
 
 // sys_connect(sockname)
 //    Establish client connection to an open socket.
 inline int sys_connect(const char* sockname) {
+    access_memory(sockname);
     return make_syscall(SYSCALL_CONNECT, reinterpret_cast<uintptr_t>(sockname));
 }
 
 // sys_disconnect(sockname)
 //    Close connection to a socket, for both a client and server to call.
 inline int sys_disconnect(const char* sockname) {
+    access_memory(sockname);
     return make_syscall(SYSCALL_DISCONNECT, reinterpret_cast<uintptr_t>(sockname));
 }
 
 // sys_sendfd(sockname, fd)
 //    Client sends a file descriptor to a socket.
 inline int sys_sendfd(const char* sockname, int fd) {
+    access_memory(sockname);
     return make_syscall(SYSCALL_SENDFD, 
                         reinterpret_cast<uintptr_t>(sockname), fd);
 }
@@ -298,6 +304,7 @@ inline int sys_sendfd(const char* sockname, int fd) {
 //    Server reads a file descriptor from a socket and opens it.
 //    Returns the file descriptor to the file opened on the server proc::fdtable.
 inline int sys_receivefd(const char* sockname) {
+    access_memory(sockname);
     return make_syscall(SYSCALL_RECEIVEFD, 
                         reinterpret_cast<uintptr_t>(sockname));
 }

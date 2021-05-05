@@ -295,6 +295,11 @@ struct bitset_view {
 #define SYSCALL_TREE            150            // Build visualization of file system
 #define SYSCALL_FDSHOW          151            // Show file descriptor table for current process
 #define SYSCALL_FUTEX           152            // Fast userspace mutex
+#define SYSCALL_TRANSMIT        153            // Send packet
+#define SYSCALL_ARP             154            // Specify MAC address for transmitting
+#define SYSCALL_ICMP            155            // Kernel-side ping protocol
+#define SYSCALL_RESARP          156            // Resolve ARP
+#define SYSCALL_GETARP          157            // Get ARP if not resolved
 
 // System call error return values
 #define E_AGAIN         -11        // Try again
