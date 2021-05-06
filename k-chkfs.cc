@@ -1506,7 +1506,7 @@ int chkfsstate::tree_dfs(inode* dirino, char* buf, size_t bufsz, off_t& off,
                     }
                     chkfs::inode* ino = get_inode(dirent->inum);
                     if (ino->type == chkfs::type_directory) {
-                        tree_dfs(ino, buf, bufsz, off, nfile, ++ndir, ++depth);
+                        tree_dfs(ino, buf, bufsz, off, nfile, ++ndir, depth+1);
                     } else {
                         ++nfile;
                     }

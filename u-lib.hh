@@ -471,11 +471,11 @@ inline int sys_getarp() {
 
 // sys_icmp(fd, buf, sz)
 //    Reads bytes from `fd` into `buf`, then transmits buffer and pings via ICMP.
-inline ssize_t sys_icmp(uint32_t* buf, uint8_t* buf2, size_t sz, uint32_t values) {
-    clobber_memory(buf);
-    clobber_memory(buf2);
-    return make_syscall(SYSCALL_ICMP, reinterpret_cast<uintptr_t>(buf), 
-        reinterpret_cast<uintptr_t>(buf2), sz, values);
+inline ssize_t sys_icmp(uint32_t* addr, uint8_t* payload, size_t sz, uint32_t values) {
+    clobber_memory(addr);
+    clobber_memory(payload);
+    return make_syscall(SYSCALL_ICMP, reinterpret_cast<uintptr_t>(addr), 
+        reinterpret_cast<uintptr_t>(payload), sz, values);
 }
 
 
