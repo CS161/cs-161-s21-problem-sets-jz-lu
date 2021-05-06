@@ -38,7 +38,7 @@ if test -z "$maindir" && expr "${BASH_SOURCE[0]}" : / >/dev/null 2>&1; then
 fi
 
 if test -n "$maindir" -a -z "$fresh"; then
-    existing_image="`docker ps -f status=running -f ancestor=cs61:latest -f volume=/host_mnt"$maindir" --no-trunc --format "{{.CreatedAt}},{{.ID}}" | sort -r | head -n 1`"
+    existing_image="`docker ps -f status=running -f ancestor=cs161:latest -f volume=/host_mnt"$maindir" --no-trunc --format "{{.CreatedAt}},{{.ID}}" | sort -r | head -n 1`"
     if test -n "$existing_image"; then
         created_at="`echo $existing_image | sed 's/,.*//'`"
         image="`echo $existing_image | sed 's/^.*,//'`"
@@ -52,23 +52,23 @@ fi
 
 netarg=
 if test `uname` = Darwin; then
-    if ! netstat -n -a -p tcp | grep '\.6169[  ].*LISTEN' >/dev/null; then
-        netarg="$netarg "'--expose=6169/tcp -p 6169:6169/tcp'
+    if ! netstat -n -a -p tcp | grep '\.6168[  ].*LISTEN' >/dev/null; then
+        netarg="$netarg "'--expose=6168/tcp -p 6168:6168/tcp'
     fi
     if ! netstat -n -a -p tcp | grep '\.12949[ 	].*LISTEN' >/dev/null; then
-        netarg="$netarg "'--expose=12949/tcp -p 12949:12949/tcp'
+        netarg="$netarg "'--expose=12948/tcp -p 12948:12948/tcp'
     fi
 elif test -x /bin/netstat; then
-    if ! netstat -n -a -p tcp | grep '\.6169[  ].*LISTEN' >/dev/null; then
-        netarg="$netarg "'--expose=6169/tcp -p 6169:6169/tcp'
+    if ! netstat -n -a -p tcp | grep '\.6168[  ].*LISTEN' >/dev/null; then
+        netarg="$netarg "'--expose=6168/tcp -p 6168:6168/tcp'
     fi
     if ! netstat -n -l -t | grep ':12949[ 	]' >/dev/null; then
-        netarg="$netarg "'--expose=12949/tcp -p 12949:12949/tcp'
+        netarg="$netarg "'--expose=12948/tcp -p 12948:12948/tcp'
     fi
 fi
 
 if test -n "$maindir"; then
-    exec docker run -it --rm --cap-add=SYS_PTRACE --cap-add=NET_ADMIN --device /dev/net/tun:/dev/net/tun --security-opt seccomp=unconfined -v "$maindir":/home/cs61-user/$destdir -w "/home/cs61-user/$destdir$subdir" $netarg cs61:latest
+    exec docker run -it --rm --cap-add=SYS_PTRACE --cap-add=NET_ADMIN --device /dev/net/tun:/dev/net/tun --security-opt seccomp=unconfined -v "$maindir":/home/cs161-user/$destdir -w "/home/cs161-user/$destdir$subdir" $netarg cs161:latest
 else
-    exec docker run -it --rm --cap-add=SYS_PTRACE --cap-add=NET_ADMIN --device /dev/net/tun:/dev/net/tun --security-opt seccomp=unconfined $netarg cs61:latest
+    exec docker run -it --rm --cap-add=SYS_PTRACE --cap-add=NET_ADMIN --device /dev/net/tun:/dev/net/tun --security-opt seccomp=unconfined $netarg cs161:latest
 fi
