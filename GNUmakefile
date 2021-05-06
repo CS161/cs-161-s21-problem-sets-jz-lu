@@ -53,7 +53,7 @@ KERNEL_OBJS = $(OBJDIR)/k-exception.ko \
 	$(OBJDIR)/k-ahci.ko $(OBJDIR)/k-chkfs.ko $(OBJDIR)/k-chkfsiter.ko \
 	$(OBJDIR)/k-memviewer.ko $(OBJDIR)/lib.ko $(OBJDIR)/k-initfs.ko \
 	$(OBJDIR)/k-vfs.ko $(OBJDIR)/k-futex.ko $(OBJDIR)/k-netdriver.ko \
-	$(OBJDIR)/k-arp.ko $(OBJDIR)/k-ip.ko 
+	$(OBJDIR)/k-arp.ko $(OBJDIR)/k-ip.ko $(OBJDIR)/k-icmp.ko 
 
 PROCESSES ?= $(patsubst %.cc,%,$(wildcard p-*.cc))
 

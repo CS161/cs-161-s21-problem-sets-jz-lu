@@ -1,5 +1,9 @@
 #include "k-arp.hh"
 
+static uint32_t chickadee_addr[4] = {172, 17, 0, 15}; // Chickadee IP
+static uint32_t default_addr[4] = {172, 17, 0, 1}; // Docker exit point "docker0"
+static uint32_t tap_addr[4] = {172, 17, 0, 3}; // Tap
+
 // arp_func::inet_pton(ip_vals)
 //    Converts array-formatted ip address with uint32_t values
 //    into a single uint32_t. Used to format send/recieve addrs of ARP packets.

@@ -3,6 +3,9 @@
 #include "k-icmp.hh"
 #include <atomic>
 
+static uint32_t chickadee_addr[4] = {172, 17, 0, 15};
+static uint32_t default_addr[4] = {172, 17, 0, 1};
+
 #define IP_ADDR_BROADCAST 0xffffffff
 #define IP_ADDR_ANY 0x00000000
 
@@ -40,7 +43,7 @@ static int ip_tx_eth(protocol_metadata* meta, uint8_t *packet,
     size_t plen, const ipaddr_t *dst) {
     uint8_t opt[128] = {};
 
-    ip_hdr* hdr = (ip_hdr *)packet;
+    ip_hdr* hdr = (ip_hdr*) packet;
 
     if (hdr->dst_ <= arp_func::inet_pton(default_addr) &&
         hdr->dst_ >= arp_func::inet_pton(chickadee_addr)) {

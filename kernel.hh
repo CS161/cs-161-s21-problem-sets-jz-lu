@@ -192,6 +192,11 @@ struct __attribute__((aligned(4096))) proc {
     void syscall_texit(regstate* regs);
     void show_fdtable_(char* buf, int center=0);
     int syscall_futex(regstate* regs);
+    int syscall_transmit(regstate* regs);
+    int syscall_arp(regstate* regs);
+    int syscall_checkarp(regstate* regs);
+    int syscall_getarp(regstate* regs);
+    int syscall_icmp(regstate* regs);
 
     inline irqstate lock_pagetable_read();
     inline void unlock_pagetable_read(irqstate& irqs);
@@ -341,10 +346,6 @@ const uint64_t USING_PSEUDO_BLOCKING = 0;
 extern uint64_t BLOCK_NUM_RESUMES; // Testing number of calls to resume
 const uint64_t USING_TIME_HEAP = 0; // Turn on to use heap, off to use time wheel
 
-// Networking flags
-static uint32_t chickadee_addr[4] = {172, 17, 0, 15};
-static uint32_t default_addr[4] = {172, 17, 0, 1};
-static uint32_t tap_addr[4] = {172, 17, 0, 3};
 
 // Buddy allocator orders
 #define MIN_ORDER 12

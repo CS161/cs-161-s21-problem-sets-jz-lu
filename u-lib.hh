@@ -447,6 +447,38 @@ inline int sys_futex(uint32_t* word, int futex_op, uint32_t val, long timeout_ms
 }
 
 
+// sys_arp(fd, buf, sz)
+//    Read bytes from `fd` into `buf`. transmits buffer and executes ARP call
+inline ssize_t sys_arp(uint32_t* buf) {
+    clobber_memory(buf);
+    return make_syscall(SYSCALL_ARP, reinterpret_cast<uintptr_t>(buf));
+}
+
+
+// sys_checkarp(fd, buf, sz)
+//    Checks if ARP table is correctly filled.
+inline int sys_checkarp() {
+    return make_syscall(SYSCALL_RESARP);
+}
+
+
+// sys_getarp(fd, buf, sz)
+//    Request ARP
+inline int sys_getarp() {
+    return make_syscall(SYSCALL_GETARP);
+}
+
+
+// sys_icmp(fd, buf, sz)
+//    Reads bytes from `fd` into `buf`, then transmits buffer and pings via ICMP.
+inline ssize_t sys_icmp(uint32_t* buf, uint8_t* buf2, size_t sz, uint32_t values) {
+    clobber_memory(buf);
+    clobber_memory(buf2);
+    return make_syscall(SYSCALL_ICMP, reinterpret_cast<uintptr_t>(buf), 
+        reinterpret_cast<uintptr_t>(buf2), sz, values);
+}
+
+
 // dprintf(fd, format, ...)
 //    Construct a string from `format` and pass it to `sys_write(fd)`.
 //    Returns the number of characters printed, or E_2BIG if the string
@@ -563,6 +595,9 @@ inline void get_advice(int n) {
 
         case 25:
             console_printf(0xd00, "I AM A GOD!!! DO YOU HEAR ME??? I AM A TRUE GOD!!!\n");
+
+        case 26:
+            console_printf(0xd00, "I told you, Im demented, did you not get the memo??\n");
         
         default:
             break;

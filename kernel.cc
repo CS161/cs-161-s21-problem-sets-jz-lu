@@ -8,6 +8,7 @@
 #include "k-futex.hh"
 #include "k-vmiter.hh"
 #include "k-arp.hh"
+#include "k-icmp.hh"
 #include "k-netdriver.hh"
 #include "obj/k-firstprocess.h"
 
@@ -20,9 +21,6 @@ std::atomic<unsigned long> ticks;
 
 // Display type; initially KDISPLAY_CONSOLE.
 std::atomic<int> kdisplay;
-
-// Shared memory allocation table, indexed by identifier.
-
 
 // Group ID allocation tracker, incrementing upon `fork()`.
 std::atomic<pid_t> cur_tgid = 1;
@@ -42,6 +40,10 @@ uint64_t BLOCK_NUM_RESUMES = 0;
 // Unix Domain Socket.
 uds* socktable[NSOCK] = {0};
 spinlock socktable_lock; // Guards all accesses to socktable
+
+// Network.
+static uint32_t default_addr[4] = {172, 17, 0, 1};
+arp_entry arp_table[4];
 
 // Global file system tree lock (all creates/deletes/lookups of files and directories by name)
 rwlock fstlock;
@@ -261,12 +263,17 @@ void proc::exception(regstate* regs) {
     default:
         if (sata_disk && regs->reg_intno == INT_IRQ + sata_disk->irq_) {
             sata_disk->handle_interrupt();
+        } else if (nic && regs->reg_intno == INT_IRQ + nic->irq_) {
+            if (NET_PARANOIA) {
+                log_printf("[k-exception] network card interrupt detected\n");
+            }
+            spinlock_guard guard(nic->lock_);
+            nic->intr();
         } else {
             panic_at(regs->reg_rsp, regs->reg_rbp, regs->reg_rip,
                      "Unexpected exception %d!\n", regs->reg_intno);
         }
         break;                  /* will not be reached */
-
     }
 
     // return to interrupted context
@@ -531,6 +538,22 @@ uintptr_t proc::syscall(regstate* regs) {
     
     case SYSCALL_FUTEX:
         syscall_retval = syscall_futex(regs);
+        break;
+    
+    case SYSCALL_ARP:
+        syscall_retval = syscall_arp(regs);
+        break;
+
+    case SYSCALL_RESARP:
+        syscall_retval = syscall_checkarp(regs);
+        break;
+    
+    case SYSCALL_GETARP:
+        syscall_retval = syscall_getarp(regs);
+        break;
+
+    case SYSCALL_ICMP:
+        syscall_retval = syscall_icmp(regs);
         break;
 
     default:
@@ -1052,7 +1075,7 @@ void proc::free_auto_allocs(x86_64_pagetable* pt) {
 // proc::syscall_exit(regs)
 //    Transcend this process.
 void proc::syscall_exit(regstate* regs) {
-    // Signal all processes to DIE, then wait for them to obey.
+    // Issue deathcall, then wait for threads to die.
     auto irqs = thgrp_->thgrp_lock_.lock();
     for (auto it = thgrp_->th_.front(); it; it = thgrp_->th_.next(it)) {
         if (this != it) {
@@ -1060,6 +1083,7 @@ void proc::syscall_exit(regstate* regs) {
         }
     }
 
+    thgrp_->wq_.wake_all(); // wake up any threads that are sleeping
     // Block until all threads are ready to exit, cleaning threads as we go.
     waiter().block_until(thgrp_->wq_, [&] () {
         assert(thgrp_->nth_ >= 1);
@@ -2928,6 +2952,59 @@ int proc::syscall_futex(regstate* regs) {
     return 0;
 }
 
+
+// proc::syscall_arp(regs)
+//    Send an ARP request (via IPv4 protocol) to a target address.
+int proc::syscall_arp(regstate* regs) {
+    uint32_t* kaddr = pa2kptr<uint32_t*>(vmiter(this, regs->reg_rdi).pa());
+    ipaddr_t ip = arp_func::inet_pton(kaddr); // convert IP to single int
+
+    spinlock_guard guard(nic->lock_);
+    arp_func::arp_send_request(ip);
+    return 0;
+}
+
+
+// proc::syscall_resarp(regs)
+//    Check whether the ARP table has been set or not.
+//    ICMP can run once this function returns true.
+int proc::syscall_checkarp(regstate* regs) {
+    (void) regs;
+    int ret = 0;
+    spinlock_guard guard(nic->lock_);
+    if (arp_table[0].pa != 0xffffffff) {
+        ret = 1;
+    }
+    return ret;
+}
+
+
+// proc::syscall_getarp(regs)
+//    Send ARP request to the default hardware address to fill the ARP table.
+int proc::syscall_getarp(regstate* regs) {
+    (void) regs;
+    ipaddr_t ip = arp_func::inet_pton(default_addr);
+
+    spinlock_guard guard(nic->lock_);
+    arp_func::arp_send_request(ip);
+    return 0;
+}
+
+
+// proc::syscall_icmp(regs)
+//    Transmit a packet by ICMP.
+int proc::syscall_icmp(regstate* regs) {
+    uint32_t* kva = pa2kptr<uint32_t*>(vmiter(this, regs->reg_rdi).pa());
+    uint8_t* payload = pa2kptr<uint8_t*>(vmiter(this, regs->reg_rsi).pa());
+    size_t sz = regs->reg_rdx;
+    uint32_t values = regs->reg_r10;
+
+    ipaddr_t ret = arp_func::inet_pton(kva);
+    auto irqs = nic->lock_.lock();
+    icmp_tx(ICMP_TYPE_ECHO, 0, values, payload, sz, &ret);
+    nic->lock_.unlock(irqs);
+    return 0;
+}
 
 // memshow()
 //    Draw a picture of memory (physical and virtual) on the CGA console.

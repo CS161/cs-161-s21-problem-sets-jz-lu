@@ -19,14 +19,15 @@ struct arp_hdr {
     uint16_t op;    // ARP operation type
 };
 
-
+#pragma pack(push, 1) // magic that packs the struct under compiler's nose
 struct arp_eth {
     struct arp_hdr hdr;     // ARP header
     uint8_t sha[ADDR_LEN];  // source hardware address
     ipaddr_t spa;           // sender protocol address
     uint8_t tha[ADDR_LEN];  // target hardware address
     ipaddr_t tpa;           // target protocol address
-} __attribute__ ((packed)); // no padding is allowed
+}; // no padding is allowed
+#pragma pack(pop)
 
 
 struct arp_func {
