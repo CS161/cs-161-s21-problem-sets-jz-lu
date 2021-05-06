@@ -51,7 +51,7 @@ void process_main(int argc, char** argv) {
     console_printf(0xf00, "PING %s (%s) 4(15) bytes of data.\n", ipaddr_cpy, ipaddr_cpy);
 
     // Wait until ARP table is filled before pinging.
-    while (!sys_checkarp()) {
+    if (!sys_checkarp()) {
         sys_getarp();
         sys_msleep(2000);
     }
