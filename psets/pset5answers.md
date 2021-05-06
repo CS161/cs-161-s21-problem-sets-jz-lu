@@ -47,6 +47,4 @@ To exit, the thread `t0` first locks and issues a "death call", which alerts all
 
 Grading notes
 -------------
-Extra, extra, extra, extra, ...., extra credit?
-Introducing...Aakash-bot!
-Type `make run-oracle` then try asking a question.
+Type `sudo make run-oracle` then try asking a question.

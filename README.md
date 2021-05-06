@@ -2,7 +2,8 @@ Chickadee OS
 ============
 
 This is Chickadee, a teaching operating system built for Harvard’s
-[CS 161].
+[CS 161]. The driver code is listed below, and the rest of the OS was created 
+as part of my project work in the Spring 2021 course offering.
 
 Quickstart: `make run` or `make run-PROGRAM`
 
@@ -144,3 +145,16 @@ produces other files that can be useful to examine.
 
 [CS 161]: https://read.seas.harvard.edu/cs161/2021/
 [triple fault]: https://en.wikipedia.org/wiki/Triple_fault
+
+New Features
+-----------
+New additions to the kernel include:
+* Networking support: device driver support for E1000 network card, and a simplified version of ethernet + ARP layer and IP + ICMP layer. Must be run in Docker.
+* Robust file system, with subdirectories and current working directory. Support for basic versions of common shell functions like `mkdir`, `cd`, `ls`, `pwd`, `rm` and a visualization via `tree`.
+* Dynamic visualizations of the buffer cache and VFS like the memory viewer. `sudo make run-fview` and `sudo make run-bcview`.
+* User-level locking support with `mutex` and `mutex_guard` based on an implementation of futexes. Futex handshakes and other applications.
+* Alternative interprocess communication via Unix Domain Sockets, which allow processes to send each other open file descriptors.
+* Code support for (but not currently used) a heap data structure for process sleeping. See `const USING_TIME_HEAP` in `kernel.hh`. Current data structure is a time wheel.
+* Efficient small-memory allocation for kernel tasks with slab allocation built independently of page allocation given by buddy allocators.
+
+

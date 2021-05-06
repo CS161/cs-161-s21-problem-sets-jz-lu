@@ -2,7 +2,7 @@ CS 61/161 Docker
 ================
 
 > **tl;dr**:
-> * `docker build -t cs61:latest -f Dockerfile .` to build a Docker image
+> * `docker build -t cs161:latest -f Dockerfile .` to build a Docker image
 > * `docker system prune -a` to remove old Docker images
 
 The [Docker][] container-based virtualization service lets you run a
@@ -47,7 +47,7 @@ changes, but later runs should be much faster since they’ll take advantage of
 your previous work.
 
 ```shellsession
-$ docker build -t cs61:latest -f Dockerfile .
+$ docker build -t cs161:latest -f Dockerfile .
 ```
 
 ## Running Docker by script
@@ -61,19 +61,19 @@ For example:
 ```shellsession
 $ cd ~/chickadee
 $ ./run-docker
-cs61-user@a47f05ea5085:~/chickadee$ echo Hello, Linux
+cs161-user@a47f05ea5085:~/chickadee$ echo Hello, Linux
 Hello, Linux
-cs61-user@a47f05ea5085:~/chickadee$ exit
+cs161-user@a47f05ea5085:~/chickadee$ exit
 exit
 $ 
 ```
 
 The script plonks you into a virtual machine! A prompt like
-`cs61-user@a47f05ea5085:~$` means that your terminal is connected to the VM.
+`cs161-user@a47f05ea5085:~$` means that your terminal is connected to the VM.
 You can execute any commands you want. To escape from the VM, type Control-D
 or run the `exit` command.
 
-The script assumes your Docker container is named `cs61:latest`, as it
+The script assumes your Docker container is named `cs161:latest`, as it
 was above.
 
 
@@ -82,7 +82,7 @@ was above.
 If you don’t want to use the script, use a command like the following.
 
 ```shellsession
-$ docker run -it --rm -v ~/chickadee:/home/cs61-user/chickadee cs61:latest
+$ docker run -it --rm -v ~/chickadee:/home/cs161-user/chickadee cs161:latest
 ```
 
 Explanation:
@@ -93,21 +93,21 @@ Explanation:
 * `-v LOCALDIR:LINUXDUR` says Docker should share a directory between your
   host and the Docker virtual machine. Here, I’ve asked for the host’s
   `~/chickadee` directory to be mapped inside the virtual machine onto the
-  `/home/cs61-user/chickadee` directory, which is the virtual machine
+  `/home/cs161-user/chickadee` directory, which is the virtual machine
   user’s `~/chickadee` directory.
-* `cs61:latest` names the Docker image to run (namely, the one you built).
+* `cs161:latest` names the Docker image to run (namely, the one you built).
 
 Here’s an example session:
 
 ```shellsession
-$ docker run -it --rm -v ~/chickadee:/home/cs61-user/chickadee cs61:latest
-cs61-user@a15e6c4c8dbe:~$ ls
-cs61-lectures
-cs61-user@a15e6c4c8dbe:~$ echo "Hello, world"
+$ docker run -it --rm -v ~/chickadee:/home/cs161-user/chickadee cs161:latest
+cs161-user@a15e6c4c8dbe:~$ ls
+cs161-lectures
+cs161-user@a15e6c4c8dbe:~$ echo "Hello, world"
 Hello, world
-cs61-user@a15e6c4c8dbe:~$ cs61-docker-version
+cs161-user@a15e6c4c8dbe:~$ cs161-docker-version
 3
-cs61-user@a15e6c4c8dbe:~$ exit
+cs161-user@a15e6c4c8dbe:~$ exit
 exit
 $ 
 ```

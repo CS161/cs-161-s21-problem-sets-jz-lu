@@ -3,7 +3,9 @@ CS 161 Final Project
 
 Documentation
 ----------------------------
-Due to some minor problems relating to indecisiveness, my final project combines 3 of the topics suggested in the instructions. If you have time and would like it to be wasted in the most humorous way possible, I also have an extra secret project that in no way has anything to do with systems (see below, but don't tell my partner!*).
+Due to some minor problems relating to indecisiveness, I ended up doing 3 of the topics suggested in the final project instructions. I am unsure as to how this will be graded--see "Grading Notes".
+
+If you have time and would like it to be wasted in the most humorous way possible, I also have an extra secret project that in no way has anything to do with systems (see below, but don't tell my partner!*).
 
 *Just kidding. Of course I got their permission.
 
@@ -85,4 +87,8 @@ Have a burning question that you just need some advice on? Have a lot of spare t
 
 Grading notes
 -------------
+With Prof. Mickens' permission, I am adding a new commit with some cleaned up comments and notes the day after the due date. No code has been changed.
+
 Please see the **Important** and **Even more important** notes at the top of the page.
+
+Since I ended up doing 3 of the topics suggested, I am not sure what the grading format will be. I personally would appreciate if my "best" project (whatever the grader might decide that to be) were to be graded as my project grade, and the remaining two were considered as extra credit. But I leave this to the discretion of the grader.
