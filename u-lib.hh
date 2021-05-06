@@ -595,9 +595,11 @@ inline void get_advice(int n) {
 
         case 25:
             console_printf(0xd00, "I AM A GOD!!! DO YOU HEAR ME??? I AM A TRUE GOD!!!\n");
+            break;
 
         case 26:
             console_printf(0xd00, "I told you, Im demented, did you not get the memo??\n");
+            break;
         
         default:
             break;
