@@ -77,7 +77,7 @@ void init_hardware() {
         cpus[ncpu-1].enable_irq(nic->irq_);
     }
 
-    nic->bootup();
+    nic->boot();
 }
 
 

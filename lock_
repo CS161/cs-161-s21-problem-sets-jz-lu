@@ -1,0 +1,20 @@
+k-arp.cc:33:    memcpy(request.sha, nic->addr_, ADDR_LEN);
+k-arp.cc:40:    nic->tx_ethernet_formatter(nic->meta_, ETHERNET_TYPE_ARP, 
+k-arp.cc:62:    memcpy(reply.sha, nic->meta_->addr_, ADDR_LEN);
+k-arp.cc:68:    nic->tx_ethernet_formatter(nic->meta_, ETHERNET_TYPE_ARP, (uint8_t *)&reply, sizeof(reply), dst);
+kernel.cc:266:        } else if (nic && regs->reg_intno == INT_IRQ + nic->irq_) {
+kernel.cc:267:            spinlock_guard guard(nic->lock_);
+kernel.cc:268:            nic->intr();
+kernel.cc:2959:    spinlock_guard guard(nic->lock_);
+kernel.cc:2971:    spinlock_guard guard(nic->lock_);
+kernel.cc:2985:    spinlock_guard guard(nic->lock_);
+kernel.cc:3000:    auto irqs = nic->lock_.lock();
+kernel.cc:3002:    nic->lock_.unlock(irqs);
+k-icmp.cc:32:    ip_tx(nic->meta_, IP_PROTOCOL_ICMP, (uint8_t*) hdr, msg_len, dst);
+k-init.cc:75:    if (nic && nic->irq_ > 0) {
+k-init.cc:77:        cpus[ncpu-1].enable_irq(nic->irq_);
+k-init.cc:80:    nic->boot();
+k-ip.cc:60:    nic->tx_ethernet_formatter(meta, ETHERNET_TYPE_IP, packet, plen, (void*) opt);
+k-ip.cc:93:    int ret = ip_tx_eth(nic->meta_, (uint8_t*) packet, hlen + len, nexthop);
+k-ip.cc:116:        slen = min((len - done), (size_t)(nic->meta_->mtu_ - IP_HDR_SIZE_MIN));
+k-ip.cc:119:        int ret = ip_tx_helper(nic->meta_, protocol, buf + done, slen, src, dst, nexthop, id, offset);

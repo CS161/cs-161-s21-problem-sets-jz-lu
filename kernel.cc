@@ -264,9 +264,6 @@ void proc::exception(regstate* regs) {
         if (sata_disk && regs->reg_intno == INT_IRQ + sata_disk->irq_) {
             sata_disk->handle_interrupt();
         } else if (nic && regs->reg_intno == INT_IRQ + nic->irq_) {
-            if (NET_PARANOIA) {
-                log_printf("[k-exception] network card interrupt detected\n");
-            }
             spinlock_guard guard(nic->lock_);
             nic->intr();
         } else {

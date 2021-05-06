@@ -197,7 +197,7 @@ struct e1000state {
     __attribute__((aligned(16))) tx_desc txring_[TX_RING_SIZE];
 
     e1000state(int pci_addr);
-    static e1000state* find(int pci_addr = 0);
+    static e1000state* find(int pci_addr=0);
     NO_COPY_OR_ASSIGN(e1000state);
 
     uint32_t get_io_base();
@@ -207,10 +207,10 @@ struct e1000state {
     static uint16_t byteswap16(uint16_t vc);
     uint16_t eeprom_read(uint8_t addr);
     void get_eeprom_addr();
-    char* eth_addr_extractor(char* buf);
+    char* ethaddr_bufdump(char* buf);
     void rx_init();
     void tx_init();
-    int bootup();
+    int boot();
     ssize_t tx_package(uint8_t *data, size_t len);
     void rx_package() ;
     void intr(void);

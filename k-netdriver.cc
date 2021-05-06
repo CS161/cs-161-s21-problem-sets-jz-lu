@@ -14,9 +14,9 @@ uint16_t e1000state::byteswap16(uint16_t vc) {
 }
 
 
-// e1000state::eth_addr_extractor()
+// e1000state::ethaddr_bufdump()
 //    Dump e1000 MAC address in a formatted way into the buffer.
-char* e1000state::eth_addr_extractor(char* buf) {
+char* e1000state::ethaddr_bufdump(char* buf) {
     if (!buf) {
         return nullptr;
     }
@@ -62,12 +62,10 @@ e1000state::e1000state(int pci_addr) {
     // Get MAC address.
     get_eeprom_addr();
 
+    // Find the correct interrupt pin, then use the same method as ahcistate 
+    // to configure interrupts with the APIC.
     int intr_pin = ((pci.readl(pci_addr_ + 0x3C) >> 8) & 0xFF) - 1;
     irq_ = machine_pci_irq(pci_addr_, intr_pin);
-    // here we make sure to figure out what the interrupt pin is going to be
-    // because that will be used by my exception handler to figure out when
-    // an exeception is being triggered by a network packet
-    // we also register the irq_ with the APIC here too.
 
     // Setup at least 128 receive descriptors in rx ring (See Section B.10 of Ref above).
     for (int n = 0; n < 128; n++) {
@@ -204,9 +202,9 @@ void e1000state::tx_init() {
 }
 
 
-// e1000state::bootup()
+// e1000state::boot()
 //    Activate ring buffers and enable interrupts.
-int e1000state::bootup() {
+int e1000state::boot() {
     // First write to the interrupt mask setter the value
     // of a timer interrupt (will be raised for incoming packets)
     reg_write(E1000_IMS, E1000_IMS_RXT0);
@@ -228,16 +226,7 @@ int e1000state::bootup() {
 ssize_t e1000state::tx_package(uint8_t *data, size_t len) {
     // Grab location of tail.
     uint32_t tail = reg_read(E1000_TDT);
-
-    if (NET_PARANOIA > 4) {
-        log_printf("[e1000state-tx_package] tail (0): %lu\n", tail);
-    }
-
     tx_desc *desc = &txring_[tail];
-    if (NET_PARANOIA > 4) {
-        log_printf("[e1000state-tx_package] current device status: 0x%x\n", 
-            reg_read(E1000_TXD_CMD_RS));
-    }
 
     // Prepare the buffer entry and indicate a send.
     desc->addr = kptr2pa(data); 
@@ -245,24 +234,12 @@ ssize_t e1000state::tx_package(uint8_t *data, size_t len) {
     desc->status = 0;
     desc->cmd = (E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS | E1000_TXD_CMD_IFCS);
 
-    if (NET_PARANOIA > 3) {
-        log_printf("[e1000state-tx_package] %u bytes data transmit\n", desc->length);
-    }
-
     // After we write to a packet, move that tail.
     reg_write(E1000_TDT, (tail + 1) % TX_RING_SIZE);
     tail = reg_read(E1000_TDT);
 
-    if (NET_PARANOIA > 4) {
-        log_printf("[e1000state-tx_package] tail (1): %lu\n", tail);
-    }
-
     // Wait for the entry to be transmitted.
     while(!(desc->status & 0x0f)) {
-        if (NET_PARANOIA > 4) {
-            log_printf("[e1000state-tx_package] status: %lu, masked: %lu\n", 
-                desc->status, desc->status & 0x0f);
-        }
         microdelay(1);
     }
 
@@ -274,10 +251,6 @@ ssize_t e1000state::tx_package(uint8_t *data, size_t len) {
 //    Handles all of the packets that trigger interrupts upon arrival.
 //    Ref: Based off instructions from https://github.com/mit-pdos/xv6-public
 void e1000state::rx_package() {
-    if (NET_PARANOIA > 4) {
-        log_printf("[e1000state-rx_package] rx package handler called\n");
-    }
-
     int short_package_sz = 60;
     while (true) {
         uint32_t tail = (reg_read(E1000_RDT)+1) % RX_RING_SIZE; // tx tail index
@@ -336,10 +309,6 @@ ssize_t e1000state::tx_ethernet_formatter(protocol_metadata* meta, uint16_t type
     eth_header* header;
     size_t flen; // file length
 
-    if (NET_PARANOIA > 1) {
-        log_printf("[e1000state-tx-eth] function formatter called\n");
-    }
-
     if (!(payload && dst) || plen > MAX_PAYLOAD_SIZE) {
         return -1;
     }
@@ -373,18 +342,10 @@ void e1000state::rx_ethernet_formatter(protocol_metadata* meta, uint8_t *frame, 
     size_t plen;
 
     if (flen < sizeof(eth_header)) {
-        if (NET_PARANOIA) {
-            log_printf("[e1000state-rx-eth] frame is smaller than a header?\n");
-        }
         return;
     }
 
     header = pa2kptr<eth_header*>((uintptr_t) frame); // frame is physical address ptr, make it kptr
-    if (memcmp(addr_, header->dst_addr_, ADDR_LEN) != 0) {
-        if (NET_PARANOIA) {
-            log_printf("[e1000state-rx-eth] destination is different than intended?\n");
-        }
-    }
 
     // Set plen to the correct size.
     payload = (uint8_t *)(header + 1);

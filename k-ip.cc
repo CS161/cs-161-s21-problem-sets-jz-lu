@@ -47,21 +47,17 @@ static int ip_tx_eth(protocol_metadata* meta, uint8_t *packet,
 
     if (hdr->dst_ <= arp_func::inet_pton(default_addr) &&
         hdr->dst_ >= arp_func::inet_pton(chickadee_addr)) {
-        log_printf("on link\n");
         uint64_t broadcast = -1;
         memcpy(opt, &broadcast, meta->alen_);
     } else {
         if (arp_table[0].pa != IP_ADDR_BROADCAST) {
-            log_printf("off link\n");
             memcpy(opt, arp_table[0].ha, meta->alen_);
         } else {
-            log_printf("on link but should be off link\n");
             uint64_t broadcast = -1;
             memcpy(opt, &broadcast, meta->alen_);
         }
     }
-    // here we set the MAC address to the opt buffer and send that in as the dst MAC addr
-    nic->tx_ethernet_formatter(meta, ETHERNET_TYPE_IP, packet, plen, (void *)opt);
+    nic->tx_ethernet_formatter(meta, ETHERNET_TYPE_IP, packet, plen, (void*) opt);
     return 1;
 }
 
@@ -111,10 +107,6 @@ ssize_t ip_tx (protocol_metadata* meta, uint8_t protocol,
     size_t done, slen;
     ipaddr_t src_data;
 
-    if (NET_PARANOIA > 4) {
-        log_printf("[ip-tx] ip tx called\n");
-    }
-
 	src_data = arp_func::inet_pton(chickadee_addr);
     src = &src_data;
     nexthop = nullptr;
@@ -150,28 +142,16 @@ void ip_rx(uint8_t *packet, size_t dlen, protocol_metadata* meta) {
 
     // Validate packet time to live (ttl_), version, lengths, and checksum.
     if (!hdr->ttl_) {
-        if (NET_PARANOIA) {
-            log_printf("[ip_rx] the time to live expired\n");
-        }
         return;
     }
     if ((hdr->vhl_ >> 4) != IP_VERSION_IPV4) {
-        if (NET_PARANOIA) {
-            log_printf("[ip_rx] only ipv4 packets are supported\n");
-        }
         return;
     }
     hlen = (hdr->vhl_ & 0x0f) << 2;
     if (dlen < hlen || dlen < e1000state::byteswap16(hdr->len_)) {
-        if (NET_PARANOIA) {
-            log_printf("[ip_rx] ip packet field lengths are incorrect\n");
-        }
         return;
     }
     if (cksum16((uint16_t *)hdr, hlen, 0) != 0) {
-        if (NET_PARANOIA) {
-            log_printf("[ip_rx] the packet's checksum is invalid\n");
-        }
         return;
     }
 
@@ -181,15 +161,7 @@ void ip_rx(uint8_t *packet, size_t dlen, protocol_metadata* meta) {
 
     // Ensure there is no fragmentation-based discrepancy.
     if (offset & 0x2000 || offset & 0x1fff) {
-        if (NET_PARANOIA) {
-            log_printf("[ip_rx] the packet is fragmented (no support)\n");
-        }
         return;
-    }
-
-    if (NET_PARANOIA > 3) {
-        log_printf("[ip_rx] all checks have passed\n");
-        log_printf("[ip_rx] ip protocol type: %x\n", hdr->protocol_);
     }
 
     switch (hdr->protocol_) {

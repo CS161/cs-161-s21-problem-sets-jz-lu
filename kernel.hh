@@ -331,7 +331,6 @@ const uint64_t PROC_PARANOIA = 0;           // Struct proc constructor/destructo
 const uint64_t PIPE_PARANOIA = 0;
 const uint64_t VFS_PARANOIA = 0;            // General VFS, set to max of others usually
 const uint64_t UDS_PARANOIA = 0;            // Unix Domain Sockets
-const uint64_t NET_PARANOIA = 3;            // Networking
 
 // 0: no testing, 1: fails with probability 1/2 on struct proc alloc, 
 // 2: same but on ptable alloc, 3: same but on page allocations in proc::copy_memory_

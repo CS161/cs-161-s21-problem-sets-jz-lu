@@ -88,14 +88,11 @@ void init_kalloc() {
         if (range->type() == mem_available) {
             uintptr_t curr_addr = range->first();
             uint64_t remaining_size = range->last() - curr_addr;
-            //[DEBUG] log_printf("NEW mem init at pa 0x%x with raw size 0x%x\n", curr_addr, remaining_size);
 
             while (remaining_size != 0) {
                 unsigned int ord = largest_fitting_ord(remaining_size);
                 assert(ord >= MIN_ORDER && ord <= MAX_ORDER);
                 uint64_t current_size = 1 << ord;
-                //[DEBUG] log_printf("Current addr: 0x%x, remaining size to cut: 0x%x\n", curr_addr, remaining_size);
-                //[DEBUG] log_printf("Current largest order = %lu, size: 0x%x\n", ord, current_size);
 
                 for (uint64_t i = curr_addr / PAGESIZE;  
                     i < (curr_addr + current_size) / PAGESIZE;
@@ -112,7 +109,6 @@ void init_kalloc() {
                 if (BALLOC_PARANOIA >= 1) {
                     assert(!free_blocks[ord - MIN_ORDER].empty());  
                 }
-                //[DEBUG] log_printf("PUSHED block of order %lu onto free list\n", ord);
 
                 curr_addr += current_size;
                 remaining_size -= current_size;

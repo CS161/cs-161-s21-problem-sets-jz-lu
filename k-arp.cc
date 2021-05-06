@@ -48,9 +48,6 @@ int arp_func::arp_send_request(ipaddr_t tpa) {
 int arp_func::arp_send_reply(const uint8_t *tha, const ipaddr_t *tpa, const uint8_t *dst) {
     if (!tha || !tpa) {
         // Note that dst can be null.
-        if (NET_PARANOIA) {
-            log_printf("[arp_send_reply] invalid ptrs\n");
-        }
         return -1;
     }
     arp_eth reply;
@@ -79,51 +76,29 @@ int arp_func::arp_send_reply(const uint8_t *tha, const ipaddr_t *tpa, const uint
 void arp_func::arp_rx(uint8_t *packet, size_t plen, protocol_metadata* meta) {
     // Packet length should not be smaller than the struct sz.
     if (plen < sizeof(arp_eth)) {
-        if (NET_PARANOIA) {
-            log_printf("[arp_rx] packet length is invalid\n");
-        }
         return;
     }
     arp_eth* message = (arp_eth*) packet;
 
     // Ensure other lengths, type, protocols are valid.
     if (message->hdr.hln != ADDR_LEN || message->hdr.pln != IP_ADDR_LEN) {
-        if (NET_PARANOIA) {
-            log_printf("[arp_rx] packet header field lengths are invalid\n");
-        }
         return;
     }
     if (e1000state::byteswap16(message->hdr.hrd) != ARP_HRD_ETHERNET || 
         e1000state::byteswap16(message->hdr.pro) != ETHERNET_TYPE_IP) {
-        if (NET_PARANOIA) {
-            log_printf("[arp_rx] packet types are invalid\n");
-        }
         return;
-    }
-
-    if (NET_PARANOIA > 2) {
-        log_printf("[arp_rx] All ARP checks have passed\n");
     }
     
     // Reply to ARP requests; otherwise update the ARP table.
     if (e1000state::byteswap16(message->hdr.op) == ARP_OP_REQUEST) {
-        if (NET_PARANOIA > 2) {
-            log_printf("[arp_rx] sending back an ARP reply\n");
-        }
         arp_send_reply(message->sha, &message->spa, message->sha);
     } else {
         if (inet_pton(default_addr) == message->spa) { // update default
             arp_table[0].pa = message->spa;
             memcpy(arp_table[0].ha, &message->sha, ADDR_LEN);
-            if (NET_PARANOIA > 1) {
-                log_printf("[arp_rx] default arp table updated\n");
-            }
         } else if (inet_pton(tap_addr) == message->spa) { // update tap
             arp_table[1].pa = message->spa;
             memcpy(arp_table[1].ha, &message->sha, ADDR_LEN);
-            if (NET_PARANOIA > 1) {
-                log_printf("[arp_rx] tap0 arp table updated\n");
-            }
         }
     }
 }
