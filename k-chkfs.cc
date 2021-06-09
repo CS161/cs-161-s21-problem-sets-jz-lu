@@ -1610,6 +1610,9 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
         (&superblock_entry->buf_[chkfs::superblock_offset]);
     superblock_entry->put();
     auto fbb = bc.get_disk_entry(sb.fbb_bn);
+    if (!fbb) {
+	return E_NOSPC;
+    }
 
     // 2. Lock that entry and walk through it, attempting to find a contiguous range
     // of `count` blocks. Keep track of the first one. If one is found, walk from the first 
@@ -1617,6 +1620,8 @@ auto chkfsstate::allocate_extent(unsigned count) -> blocknum_t {
     fbb->get_write();
     blocknum_t first = find_free_range(reinterpret_cast<void*>(fbb->buf_), count, 0);
     if (first == (blocknum_t) -1) {
+	fbb->put_write();
+	fbb->put();
         return E_NOSPC;
     }
     unsigned i = 0;
